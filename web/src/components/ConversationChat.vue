@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
 import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue'
+import {
+  ArrowDown,
   CheckCircle2,
   LockKeyhole,
   MessageCircle,
@@ -41,6 +49,7 @@ const emit = defineEmits<{
     done: (accepted: boolean) => void,
   ]
   retry: [messageId: string]
+  read: [conversationId: string, throughMessageId: string]
   showContact: []
   refreshContact: []
 }>()
@@ -48,7 +57,15 @@ const messageList = ref<HTMLElement | null>(null)
 const contactPanelOpen = ref(false)
 const replyingTo = ref<Message | null>(null)
 const highlightedMessageId = ref<string | null>(null)
-let activeConversationId: string | null = null
+const isNearBottom = ref(true)
+const newMessagesBelow = ref(0)
+const scrollPositions = new Map<
+  string,
+  { top: number; nearBottom: boolean }
+>()
+const knownMessageIds = new Map<string, Set<string>>()
+let scrollReadyConversationId: string | null = null
+const BOTTOM_THRESHOLD = 96
 
 const contactDisplayName = computed(
   () => props.contact?.display_name || props.conversation?.contact_name || props.conversation?.contact_phone || '',
@@ -98,6 +115,11 @@ const composerDisabledReason = computed(() => {
   }
   return null
 })
+const draftStorageKey = computed(() =>
+  props.currentUserId && props.conversation
+    ? `fluvius_draft:${props.currentUserId}:${props.conversation.id}`
+    : null,
+)
 
 function dayKey(value: string) {
   const date = new Date(value)
@@ -124,27 +146,159 @@ function dateLabel(value: string) {
   }).format(date)
 }
 
+function distanceFromBottom(element: HTMLElement) {
+  return element.scrollHeight - element.scrollTop - element.clientHeight
+}
+
+function maybeMarkRead() {
+  const conversation = props.conversation
+  if (
+    !conversation ||
+    scrollReadyConversationId !== conversation.id ||
+    document.visibilityState !== 'visible' ||
+    !isNearBottom.value ||
+    !conversation.unread_count ||
+    !props.messages.length
+  ) {
+    return
+  }
+  const lastVisibleIncoming = props.messages
+    .slice()
+    .reverse()
+    .find((message) => message.direction === 'incoming')
+  if (lastVisibleIncoming) {
+    emit('read', conversation.id, lastVisibleIncoming.id)
+  }
+}
+
+function updateScrollState() {
+  const element = messageList.value
+  const conversationId = props.conversation?.id
+  if (!element || !conversationId) return
+  isNearBottom.value =
+    distanceFromBottom(element) <= BOTTOM_THRESHOLD
+  scrollPositions.set(conversationId, {
+    top: element.scrollTop,
+    nearBottom: isNearBottom.value,
+  })
+  if (isNearBottom.value) {
+    newMessagesBelow.value = 0
+    maybeMarkRead()
+  }
+}
+
+function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+  const element = messageList.value
+  if (!element) return
+  element.scrollTo({ top: element.scrollHeight, behavior })
+  if (behavior === 'auto') updateScrollState()
+}
+
 watch(
-  [() => props.conversation?.id, () => props.messages.length],
-  async ([conversationId]) => {
-    const changedConversation = conversationId !== activeConversationId
-    activeConversationId = conversationId || null
+  () => props.conversation?.id,
+  async (conversationId) => {
+    scrollReadyConversationId = null
+    newMessagesBelow.value = 0
+    replyingTo.value = null
+    if (contactPanelOpen.value) emit('showContact')
+    if (!conversationId) return
+    const previousIds = knownMessageIds.get(conversationId)
+    const added = previousIds
+      ? props.messages.filter((message) => !previousIds.has(message.id))
+      : []
+    knownMessageIds.set(
+      conversationId,
+      new Set(props.messages.map((message) => message.id)),
+    )
     await nextTick()
-    messageList.value?.scrollTo({
-      top: messageList.value.scrollHeight,
-      behavior: changedConversation ? 'auto' : 'smooth',
-    })
+    const element = messageList.value
+    if (!element) return
+    const savedPosition = scrollPositions.get(conversationId)
+    if (savedPosition === undefined || savedPosition.nearBottom) {
+      element.scrollTop = element.scrollHeight
+    } else {
+      element.scrollTop = Math.min(
+        savedPosition.top,
+        Math.max(0, element.scrollHeight - element.clientHeight),
+      )
+    }
+    updateScrollState()
+    scrollReadyConversationId = conversationId
+    if (!isNearBottom.value) {
+      newMessagesBelow.value = added.filter(
+        (message) => message.direction === 'incoming',
+      ).length
+    }
+    maybeMarkRead()
   },
   { flush: 'post', immediate: true },
 )
 
 watch(
-  () => props.conversation?.id,
-  () => {
-    replyingTo.value = null
-    if (contactPanelOpen.value) emit('showContact')
+  () => props.messages.map((message) => message.id).join('|'),
+  async () => {
+    const conversationId = props.conversation?.id
+    if (
+      !conversationId ||
+      scrollReadyConversationId !== conversationId
+    ) {
+      return
+    }
+    const previousIds =
+      knownMessageIds.get(conversationId) || new Set<string>()
+    const added = props.messages.filter(
+      (message) => !previousIds.has(message.id),
+    )
+    knownMessageIds.set(
+      conversationId,
+      new Set(props.messages.map((message) => message.id)),
+    )
+    if (!added.length) return
+    const shouldFollow =
+      isNearBottom.value ||
+      added.some((message) => message.direction === 'outgoing')
+    await nextTick()
+    if (props.conversation?.id !== conversationId) return
+    if (shouldFollow) {
+      const behavior = added.some(
+        (message) => message.direction === 'outgoing',
+      )
+        ? 'smooth'
+        : 'auto'
+      scrollToBottom(behavior)
+      maybeMarkRead()
+      return
+    }
+    newMessagesBelow.value += added.filter(
+      (message) => message.direction === 'incoming',
+    ).length
   },
+  { flush: 'pre' },
 )
+
+watch(
+  [
+    () => props.conversation?.id,
+    () => props.conversation?.unread_count,
+  ],
+  async () => {
+    await nextTick()
+    maybeMarkRead()
+  },
+  { flush: 'post' },
+)
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') maybeMarkRead()
+}
+
+onMounted(() => {
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 
 function toggleContactPanel() {
   contactPanelOpen.value = !contactPanelOpen.value
@@ -255,38 +409,54 @@ function jumpToMessage(messageId: string) {
       >
         {{ operationError }}
       </p>
-      <div ref="messageList" class="chat-wallpaper soft-scrollbar flex-1 overflow-y-auto px-5 py-4 sm:px-8">
-        <div class="mx-auto w-full max-w-5xl space-y-2">
-          <template v-for="(message, index) in messages" :key="message.id">
-            <div v-if="showDateSeparator(index)" class="flex justify-center py-2.5">
-              <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03]">
-                {{ dateLabel(message.created_at) }}
-              </span>
+      <div class="relative min-h-0 flex-1">
+        <div
+          ref="messageList"
+          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-5 py-4 sm:px-8"
+          @scroll.passive="updateScrollState"
+        >
+          <div class="mx-auto w-full max-w-5xl space-y-2">
+            <template v-for="(message, index) in messages" :key="message.id">
+              <div v-if="showDateSeparator(index)" class="flex justify-center py-2.5">
+                <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03]">
+                  {{ dateLabel(message.created_at) }}
+                </span>
+              </div>
+              <div
+                :id="`message-${message.id}`"
+                class="rounded-lg transition-colors duration-500"
+                :class="highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : ''"
+              >
+                <MessageBubble
+                  :message="message"
+                  :retrying="retryingMessageIds.includes(message.id)"
+                  @reply="replyingTo = $event"
+                  @jump-to="jumpToMessage"
+                  @retry="emit('retry', $event)"
+                />
+              </div>
+            </template>
+            <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-[#667781]">
+              <div class="grid h-14 w-14 place-items-center rounded-full bg-white/70 shadow-sm">
+                <MessageCircle class="h-6 w-6 text-fluvius-700" />
+              </div>
+              <p class="mt-3 text-sm font-medium text-[#3b4a54]">Comece este atendimento</p>
+              <p class="mt-1 max-w-xs text-xs">Envie uma mensagem para iniciar a conversa com este contato.</p>
             </div>
-            <div
-              :id="`message-${message.id}`"
-              class="rounded-lg transition-colors duration-500"
-              :class="highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : ''"
-            >
-              <MessageBubble
-                :message="message"
-                :retrying="retryingMessageIds.includes(message.id)"
-                @reply="replyingTo = $event"
-                @jump-to="jumpToMessage"
-                @retry="emit('retry', $event)"
-              />
-            </div>
-          </template>
-          <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-[#667781]">
-            <div class="grid h-14 w-14 place-items-center rounded-full bg-white/70 shadow-sm">
-              <MessageCircle class="h-6 w-6 text-fluvius-700" />
-            </div>
-            <p class="mt-3 text-sm font-medium text-[#3b4a54]">Comece este atendimento</p>
-            <p class="mt-1 max-w-xs text-xs">Envie uma mensagem para iniciar a conversa com este contato.</p>
           </div>
         </div>
+        <button
+          v-if="newMessagesBelow > 0"
+          type="button"
+          class="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-fluvius-700 px-4 py-2 text-xs font-semibold text-white shadow-lg transition hover:bg-fluvius-800"
+          @click="scrollToBottom('smooth')"
+        >
+          <ArrowDown class="h-4 w-4" />
+          {{ newMessagesBelow === 1 ? '1 nova mensagem' : `${newMessagesBelow} novas mensagens` }}
+        </button>
       </div>
       <MessageComposer
+        :draft-key="draftStorageKey"
         :disabled-reason="composerDisabledReason"
         :reply-to="replyingTo"
         :sending="sending"

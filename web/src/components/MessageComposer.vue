@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { FileText, Paperclip, Reply, Send, X, Zap } from 'lucide-vue-next'
 import type { Message } from '../api/types'
 import QuickReplyPicker from './QuickReplyPicker.vue'
 
 const props = defineProps<{
+  draftKey: string | null
   disabledReason: string | null
   replyTo: Message | null
   sending: boolean
@@ -26,6 +27,42 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref<string | null>(null)
 const isDisabled = computed(() => Boolean(props.disabledReason))
+let loadingDraft = false
+
+watch(
+  () => props.draftKey,
+  (draftKey) => {
+    loadingDraft = true
+    try {
+      text.value = draftKey
+        ? localStorage.getItem(draftKey) || ''
+        : ''
+    } catch {
+      text.value = ''
+    }
+    clearFile()
+    showReplies.value = false
+    nextTick(() => {
+      resizeTextarea()
+      loadingDraft = false
+    })
+  },
+  { immediate: true },
+)
+
+watch(
+  text,
+  (value) => {
+    if (loadingDraft || !props.draftKey) return
+    try {
+      if (value) localStorage.setItem(props.draftKey, value)
+      else localStorage.removeItem(props.draftKey)
+    } catch {
+      // Storage can be unavailable in private or restricted browser contexts.
+    }
+  },
+  { flush: 'sync' },
+)
 
 function resizeTextarea() {
   if (!textarea.value) return

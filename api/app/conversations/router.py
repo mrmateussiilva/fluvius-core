@@ -10,7 +10,11 @@ from app.channels.models import WhatsAppChannel
 from app.common.enums import ConversationStatus, MessageDirection
 from app.contacts.models import Contact
 from app.conversations.models import Conversation, ConversationRead
-from app.conversations.schemas import AssignRequest, ConversationResponse
+from app.conversations.schemas import (
+    AssignRequest,
+    ConversationReadRequest,
+    ConversationResponse,
+)
 from app.database import get_db
 from app.messages.models import Message
 from app.realtime.manager import realtime_manager
@@ -195,10 +199,27 @@ def get_conversation(
 @router.post("/{conversation_id}/read", status_code=status.HTTP_204_NO_CONTENT)
 def mark_conversation_read(
     conversation_id: UUID,
+    payload: ConversationReadRequest | None = None,
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> Response:
     get_tenant_conversation(db, context.tenant_id, conversation_id)
+    read_through = datetime.now(UTC)
+    if payload and payload.through_message_id:
+        visible_message = db.scalar(
+            select(Message).where(
+                Message.id == payload.through_message_id,
+                Message.tenant_id == context.tenant_id,
+                Message.conversation_id == conversation_id,
+                Message.direction == MessageDirection.INCOMING,
+            )
+        )
+        if visible_message is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Mensagem visível não encontrada",
+            )
+        read_through = visible_message.created_at
     marker = db.scalar(
         select(ConversationRead).where(
             ConversationRead.tenant_id == context.tenant_id,
@@ -206,18 +227,17 @@ def mark_conversation_read(
             ConversationRead.user_id == context.user.id,
         )
     )
-    now = datetime.now(UTC)
     if marker is None:
         db.add(
             ConversationRead(
                 tenant_id=context.tenant_id,
                 conversation_id=conversation_id,
                 user_id=context.user.id,
-                last_read_at=now,
+                last_read_at=read_through,
             )
         )
-    else:
-        marker.last_read_at = now
+    elif marker.last_read_at < read_through:
+        marker.last_read_at = read_through
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

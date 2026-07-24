@@ -50,7 +50,7 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 8. Enviar texto/anexo, reenviar falha e finalizar exigem conversa `open` atribuída ao usuário autenticado.
 9. Finalizar move a conversa para `closed`, mas não separa seu histórico. A próxima incoming reabre a mesma conversa como `new`, sem atendente; o operador precisa assumi-la novamente antes de responder.
 10. Payload bruto de provider pode conter dado pessoal; produção precisa de retenção, mascaramento e controles LGPD.
-11. A contagem de não lidas é individual por usuário e considera apenas mensagens `incoming` posteriores a `last_read_at`.
+11. A contagem de não lidas é individual por usuário e considera apenas mensagens `incoming` posteriores a `last_read_at`. Abrir ou atualizar o histórico não avança o marcador; a UI chama o endpoint de leitura somente com aba visível e final da conversa alcançado, informando a última incoming visível. A API valida essa mensagem no mesmo tenant/conversa e nunca regride `last_read_at`.
 12. Perfil de contato é consultado sempre pelo provider do canal validado e nunca diretamente pelo frontend; ausência de foto/recado não é erro de cadastro.
 13. `reply_to_message_id` deve apontar para uma mensagem do mesmo tenant e conversa; o ID externo citado é preservado para interoperabilidade com o provider.
 14. `sent_at`, `delivered_at` e `read_at` registram fatos distintos. Horários ausentes permanecem nulos; um recibo `read` também confirma entrega, mas nenhum estado pode regredir.

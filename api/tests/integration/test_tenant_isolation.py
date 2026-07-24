@@ -7,6 +7,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.channels.models import WhatsAppChannel
 from app.conversations.models import ConversationRead
 from app.database import SessionLocal
+from app.messages.models import Message
 from app.quick_replies.models import QuickReply
 from app.security import create_access_token
 from app.users.models import TenantUser, User
@@ -168,8 +169,15 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         read = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/read",
             headers=self.headers_a,
+            json={"through_message_id": str(self.tenant_a.message_id)},
         )
         self.assertEqual(read.status_code, 204)
+        foreign_visible_message = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/read",
+            headers=self.headers_a,
+            json={"through_message_id": str(self.tenant_b.message_id)},
+        )
+        self.assertEqual(foreign_visible_message.status_code, 404)
         with SessionLocal() as db:
             marker = db.scalar(
                 select(ConversationRead).where(
@@ -179,8 +187,17 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                     ConversationRead.user_id == self.tenant_a.user_id,
                 )
             )
+            visible_message = db.scalar(
+                select(Message).where(
+                    Message.id == self.tenant_a.message_id,
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.conversation_id
+                    == self.tenant_a.conversation_id,
+                )
+            )
             self.assertIsNotNone(marker)
             self.assertEqual(marker.tenant_id, self.tenant_a.tenant_id)
+            self.assertEqual(marker.last_read_at, visible_message.created_at)
 
         wrong_membership = self.client.post(
             "/api/v1/auth/login",

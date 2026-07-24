@@ -22,6 +22,9 @@ export const useConversationStore = defineStore('conversations', {
     contactError: null as string | null,
     retryingMessageIds: [] as string[],
     sendingConversationIds: [] as string[],
+    markingReadConversationIds: [] as string[],
+    activeReadMessageIds: {} as Record<string, string | null>,
+    pendingReadMessageIds: {} as Record<string, string | null>,
     sendErrorsByConversation: {} as Record<string, string | null>,
     operationLoading: false,
     operationError: null as string | null,
@@ -62,15 +65,48 @@ export const useConversationStore = defineStore('conversations', {
     async selectConversation(id: string) {
       this.selectedId = id
       this.operationError = null
-      await this.refreshMessages(id, true)
+      await this.refreshMessages(id)
     },
-    async refreshMessages(id: string, markAsRead = false) {
+    async refreshMessages(id: string) {
       this.messagesByConversation[id] = await messageApi.listMessages(id)
-      if (markAsRead && this.selectedId === id && document.visibilityState === 'visible') {
-        await conversationApi.markConversationRead(id)
-        this.conversations = this.conversations.map((item) =>
-          item.id === id ? { ...item, unread_count: 0 } : item,
-        )
+    },
+    async markConversationRead(id: string, throughMessageId: string) {
+      const conversation = this.conversations.find((item) => item.id === id)
+      if (!conversation?.unread_count) {
+        return
+      }
+      if (this.markingReadConversationIds.includes(id)) {
+        if (this.activeReadMessageIds[id] !== throughMessageId) {
+          this.pendingReadMessageIds[id] = throughMessageId
+        }
+        return
+      }
+      this.markingReadConversationIds.push(id)
+      this.activeReadMessageIds[id] = throughMessageId
+      try {
+        let nextMessageId: string | null = throughMessageId
+        while (nextMessageId) {
+          this.activeReadMessageIds[id] = nextMessageId
+          try {
+            await conversationApi.markConversationRead(id, nextMessageId)
+          } catch {
+            // Keep the unread count so a later visible-bottom event can retry.
+          }
+          nextMessageId = this.pendingReadMessageIds[id] || null
+          delete this.pendingReadMessageIds[id]
+        }
+      } finally {
+        delete this.activeReadMessageIds[id]
+        delete this.pendingReadMessageIds[id]
+        this.markingReadConversationIds =
+          this.markingReadConversationIds.filter(
+            (conversationId) => conversationId !== id,
+          )
+        try {
+          this.replace(await conversationApi.getConversation(id))
+        } catch {
+          // Realtime or a later refresh will reconcile the unread count.
+        }
       }
     },
     async send(

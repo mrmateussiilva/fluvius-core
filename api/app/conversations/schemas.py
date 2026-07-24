@@ -29,3 +29,7 @@ class ConversationResponse(BaseModel):
 
 class AssignRequest(BaseModel):
     user_id: UUID | None = None
+
+
+class ConversationReadRequest(BaseModel):
+    through_message_id: UUID | None = None

@@ -38,10 +38,7 @@ export const useRealtimeStore = defineStore('realtime', {
           conversationId &&
           conversations.selectedId === conversationId
         ) {
-          await conversations.refreshMessages(
-            conversationId,
-            document.visibilityState === 'visible',
-          )
+          await conversations.refreshMessages(conversationId)
         }
       }
     },

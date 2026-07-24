@@ -30,7 +30,7 @@ async function sendAttachment(
 async function refreshVisibleConversation() {
   if (document.visibilityState !== 'visible' || !store.selectedId) return
   await store.loadConversations()
-  await store.refreshMessages(store.selectedId, true)
+  await store.refreshMessages(store.selectedId)
 }
 
 onMounted(async () => {
@@ -71,6 +71,7 @@ onBeforeUnmount(() => {
       @send="sendMessage"
       @send-attachment="sendAttachment"
       @retry="store.retryMessage"
+      @read="store.markConversationRead"
       @show-contact="store.loadSelectedContact()"
       @refresh-contact="store.loadSelectedContact(true)"
     />

@@ -10,5 +10,8 @@ export const assignConversation = (id: string) =>
   })
 export const closeConversation = (id: string) =>
   http<Conversation>(`/api/v1/conversations/${id}/close`, { method: 'POST' })
-export const markConversationRead = (id: string) =>
-  http<void>(`/api/v1/conversations/${id}/read`, { method: 'POST' })
+export const markConversationRead = (id: string, throughMessageId: string) =>
+  http<void>(`/api/v1/conversations/${id}/read`, {
+    method: 'POST',
+    body: JSON.stringify({ through_message_id: throughMessageId }),
+  })

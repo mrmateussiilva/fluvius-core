@@ -36,6 +36,10 @@ Depois do `sent`, webhooks `Receipt` podem avançar a mensagem para `delivered` 
 
 Uma resposta valida a mensagem citada no mesmo tenant/conversa, persiste a referência local e envia apenas os identificadores externos necessários pelo adapter. Webhooks recebidos extraem a referência de `ContextInfo.StanzaID`. O reenvio manual aceita somente outgoing em `failed`, reutiliza o UUID local como chave do provider, incrementa a tentativa e repete o ciclo `pending` antes da chamada externa.
 
+Carregar ou receber mensagens por realtime não marca a conversa como lida. O frontend emite a leitura somente quando a aba está visível, o histórico terminou de carregar e o operador alcançou o final da conversa. A requisição informa a última mensagem incoming realmente visível; a API valida tenant e conversa e avança o marcador exatamente até o `created_at` dela. Fora do final, novas mensagens preservam a posição atual e aparecem em um indicador explícito.
+
+Rascunhos de texto ficam somente no `localStorage`, sob chave composta por usuário e conversa. Eles não são enviados à API antes do envio, são removidos quando o composer fica vazio e não incluem arquivos selecionados.
+
 O envio é síncrono nesta fundação. A evolução natural é enfileirar tentativas e retries no RQ com idempotency key, mantendo a mesma máquina de estados.
 
 ## Fluxo de recebimento
