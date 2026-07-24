@@ -1,0 +1,36 @@
+name: fluvius-core-test
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fluvius_test
+      POSTGRES_USER: fluvius_test
+      POSTGRES_PASSWORD: fluvius_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fluvius_test -d fluvius_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api-test:
+    build: ./api
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && python -m unittest discover -s tests -v
+    environment:
+      DATABASE_URL: postgresql+psycopg://fluvius_test:fluvius_test@postgres-test:5432/fluvius_test
+      ENVIRONMENT: test
+      SECRET_KEY: integration-test-secret-key-with-at-least-32-bytes
+      WEBHOOK_SECRET: integration-webhook-secret
+      EVOLUTION_GO_API_KEY: integration-instance-token
+      LOCAL_STORAGE_PATH: /tmp/fluvius-test-storage
+      RUN_INTEGRATION_TESTS: "1"
+    volumes:
+      - ./api:/app
+    depends_on:
+      postgres-test:
+        condition: service_healthy

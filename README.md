@@ -60,6 +60,26 @@ cd api && python -m venv .venv && .venv/bin/pip install -e '.[dev]'
 cd web && npm install && npm run dev
 ```
 
+## Testes
+
+Os testes unitários da API podem ser executados no ambiente Python de desenvolvimento:
+
+```bash
+cd api
+python -m unittest discover -s tests -v
+```
+
+A suíte completa usa um PostgreSQL temporário, aplica todas as migrations e inclui os testes de
+isolamento entre tenants e do ciclo de atendimento:
+
+```bash
+./scripts/test-integration.sh
+```
+
+O Compose de testes usa um projeto isolado chamado `fluvius-core-test`. O script encerra os
+containers e remove os volumes temporários mesmo quando algum teste falha; ele não utiliza o banco
+de desenvolvimento.
+
 ## Escopo do MVP
 
 O MVP cobre login, canais WhatsApp, filas de conversas, assumir/finalizar atendimento, mensagens de texto e anexos básicos, respostas rápidas, perfil operacional básico do contato, webhook, status/QR e realtime em uma única réplica da API.

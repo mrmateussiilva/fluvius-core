@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.auth.router import router as auth_router
@@ -17,7 +16,7 @@ from app.realtime.router import router as realtime_router
 
 load_all_models()
 
-app = FastAPI(title=settings.app_name, default_response_class=ORJSONResponse)
+app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
