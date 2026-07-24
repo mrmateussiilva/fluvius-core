@@ -1,0 +1,39 @@
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+.coverage
+coverage.xml
+htmlcov/
+
+# Runtime data
+api/storage/
+
+# Node / Vite
+web/node_modules/
+web/dist/
+web/.vite/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log

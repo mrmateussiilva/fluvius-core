@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fluvius}
+      POSTGRES_USER: ${POSTGRES_USER:-fluvius}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fluvius}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-evolution-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fluvius} -d ${POSTGRES_DB:-fluvius}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./api
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fluvius}:${POSTGRES_PASSWORD:-fluvius}@postgres:5432/${POSTGRES_DB:-fluvius}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-local-only-change-me}
+      CORS_ORIGINS: http://localhost:${WEB_PORT:-5173}
+      PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+      EVOLUTION_GO_BASE_URL: http://evolution-go:8080
+      EVOLUTION_GO_WEBHOOK_BASE_URL: ${EVOLUTION_GO_WEBHOOK_BASE_URL:-http://api:8000}
+      EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-local-evolution-key}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-local-webhook-secret}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - api_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./api
+    command: ["rq", "worker", "--url", "redis://redis:6379/0", "fluvius"]
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fluvius}:${POSTGRES_PASSWORD:-fluvius}@postgres:5432/${POSTGRES_DB:-fluvius}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-local-only-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    environment:
+      VITE_API_URL: http://localhost:${API_PORT:-8000}
+      VITE_WS_URL: ws://localhost:${API_PORT:-8000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+  evolution-go:
+    image: ${EVOLUTION_GO_IMAGE:-evoapicloud/evolution-go:0.7.2}
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+    environment:
+      SERVER_PORT: 8080
+      CLIENT_NAME: fluvius-core
+      GLOBAL_API_KEY: ${EVOLUTION_GO_GLOBAL_API_KEY:-local-evolution-admin-key}
+      POSTGRES_AUTH_DB: postgresql://${POSTGRES_USER:-fluvius}:${POSTGRES_PASSWORD:-fluvius}@postgres:5432/evogo_auth?sslmode=disable
+      POSTGRES_USERS_DB: postgresql://${POSTGRES_USER:-fluvius}:${POSTGRES_PASSWORD:-fluvius}@postgres:5432/evogo_users?sslmode=disable
+      DATABASE_SAVE_MESSAGES: "false"
+      CONNECT_ON_STARTUP: "true"
+      WEBHOOK_FILES: "true"
+      EVOLUTION_OPERATOR_EMAIL: ${EVOLUTION_OPERATOR_EMAIL:-}
+      WADEBUG: INFO
+      LOGTYPE: console
+    ports:
+      - "${EVOLUTION_GO_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  api_storage:

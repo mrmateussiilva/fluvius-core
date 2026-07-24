@@ -1,0 +1,56 @@
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.common.enums import MessageDirection, MessageStatus, MessageType
+from app.common.models import TimestampMixin, UUIDPrimaryKeyMixin
+from app.database import Base
+
+
+class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "provider_message_id", name="uq_messages_provider_id"),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sender_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    reply_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("messages.id", ondelete="SET NULL"), index=True
+    )
+    direction: Mapped[MessageDirection] = mapped_column(
+        Enum(
+            MessageDirection,
+            name="message_direction",
+            values_callable=lambda e: [x.value for x in e],
+        ),
+        nullable=False,
+    )
+    message_type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, name="message_type", values_callable=lambda e: [x.value for x in e]),
+        nullable=False,
+    )
+    status: Mapped[MessageStatus] = mapped_column(
+        Enum(MessageStatus, name="message_status", values_callable=lambda e: [x.value for x in e]),
+        default=MessageStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    body: Mapped[str | None] = mapped_column(Text)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    reply_to_provider_message_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    error: Mapped[str | None] = mapped_column(Text)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
