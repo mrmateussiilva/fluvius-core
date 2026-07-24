@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from uuid import uuid4
 
 from sqlalchemy import func, select
 
@@ -149,15 +150,43 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(message_count_after, message_count_before)
 
         provider = ConfirmingProvider("outgoing-integration-1")
+        client_message_id = str(uuid4())
         with patch("app.messages.router.get_provider", return_value=provider):
             outgoing = self.client.post(
                 f"/api/v1/conversations/{conversation_id}/messages",
                 headers=self.headers_a,
-                json={"text": "Olá! Como posso ajudar?"},
+                json={
+                    "text": "Olá! Como posso ajudar?",
+                    "client_message_id": client_message_id,
+                },
+            )
+            repeated = self.client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                headers=self.headers_a,
+                json={
+                    "text": "Olá! Como posso ajudar?",
+                    "client_message_id": client_message_id,
+                },
+            )
+            conflicting = self.client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                headers=self.headers_a,
+                json={
+                    "text": "Conteúdo diferente",
+                    "client_message_id": client_message_id,
+                },
             )
 
         self.assertEqual(outgoing.status_code, 201, outgoing.text)
+        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(conflicting.status_code, 409, conflicting.text)
+        self.assertEqual(
+            conflicting.json()["detail"],
+            "Identificador de mensagem já utilizado",
+        )
         outgoing_message = outgoing.json()
+        self.assertEqual(outgoing_message["id"], client_message_id)
+        self.assertEqual(repeated.json()["id"], client_message_id)
         self.assertEqual(outgoing_message["status"], "sent")
         self.assertEqual(
             outgoing_message["provider_message_id"],

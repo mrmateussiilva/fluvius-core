@@ -18,6 +18,8 @@ from app.users.models import TenantUser
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+ASSIGNMENT_REQUIRED = "Assuma o atendimento antes de continuar"
+ASSIGNED_TO_ANOTHER_AGENT = "Atendimento já assumido por outro agente"
 
 
 def conversation_query(tenant_id: UUID, user_id: UUID):
@@ -124,6 +126,41 @@ def get_tenant_conversation(db: Session, tenant_id: UUID, conversation_id: UUID)
     return conversation
 
 
+def get_tenant_conversation_for_update(
+    db: Session, tenant_id: UUID, conversation_id: UUID
+) -> Conversation:
+    conversation = db.scalar(
+        select(Conversation)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == tenant_id,
+        )
+        .with_for_update()
+    )
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversa não encontrada",
+        )
+    return conversation
+
+
+def ensure_conversation_assignee(conversation: Conversation, user_id: UUID) -> None:
+    if (
+        conversation.status != ConversationStatus.OPEN
+        or conversation.assigned_user_id is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ASSIGNMENT_REQUIRED,
+        )
+    if conversation.assigned_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ASSIGNED_TO_ANOTHER_AGENT,
+        )
+
+
 @router.get("", response_model=list[ConversationResponse])
 def list_conversations(
     context: AuthContext = Depends(get_auth_context), db: Session = Depends(get_db)
@@ -192,7 +229,9 @@ async def assign_conversation(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
-    conversation = get_tenant_conversation(db, context.tenant_id, conversation_id)
+    conversation = get_tenant_conversation_for_update(
+        db, context.tenant_id, conversation_id
+    )
     assignee_id = payload.user_id or context.user.id
     membership = db.scalar(
         select(TenantUser).where(
@@ -206,13 +245,31 @@ async def assign_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Atendente fora do tenant",
         )
+    if assignee_id != context.user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Transferência de atendimento não disponível no MVP",
+        )
+    if (
+        conversation.status == ConversationStatus.OPEN
+        and conversation.assigned_user_id is not None
+        and conversation.assigned_user_id != assignee_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ASSIGNED_TO_ANOTHER_AGENT,
+        )
     conversation.assigned_user_id = assignee_id
     conversation.status = ConversationStatus.OPEN
     db.commit()
     await realtime_manager.broadcast(
         context.tenant_id,
         "conversation.updated",
-        {"id": str(conversation.id), "status": conversation.status},
+        {
+            "id": str(conversation.id),
+            "status": conversation.status.value,
+            "assigned_user_id": str(conversation.assigned_user_id),
+        },
     )
     return get_conversation(conversation_id, context, db)
 
@@ -223,12 +280,19 @@ async def close_conversation(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
-    conversation = get_tenant_conversation(db, context.tenant_id, conversation_id)
+    conversation = get_tenant_conversation_for_update(
+        db, context.tenant_id, conversation_id
+    )
+    ensure_conversation_assignee(conversation, context.user.id)
     conversation.status = ConversationStatus.CLOSED
     db.commit()
     await realtime_manager.broadcast(
         context.tenant_id,
         "conversation.updated",
-        {"id": str(conversation.id), "status": conversation.status},
+        {
+            "id": str(conversation.id),
+            "status": conversation.status.value,
+            "assigned_user_id": str(conversation.assigned_user_id),
+        },
     )
     return get_conversation(conversation_id, context, db)

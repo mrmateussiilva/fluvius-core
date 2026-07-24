@@ -9,6 +9,7 @@ from app.conversations.models import ConversationRead
 from app.database import SessionLocal
 from app.quick_replies.models import QuickReply
 from app.security import create_access_token
+from app.users.models import TenantUser, User
 from .base import PostgresIntegrationTestCase, TEST_PASSWORD
 
 
@@ -190,6 +191,102 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(wrong_membership.status_code, 403)
+
+    def test_assignment_cannot_be_stolen_and_only_assignee_can_operate(self) -> None:
+        unassigned_send = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages",
+            headers=self.headers_a,
+            json={"text": "Não deve sair sem assumir"},
+        )
+        self.assertEqual(unassigned_send.status_code, 409)
+        self.assertEqual(
+            unassigned_send.json()["detail"],
+            "Assuma o atendimento antes de continuar",
+        )
+
+        with SessionLocal() as db:
+            second_user = User(
+                email="second-agent-a@example.com",
+                name="Segundo Agente A",
+                password_hash=self.password_hash,
+            )
+            db.add(second_user)
+            db.flush()
+            db.add(
+                TenantUser(
+                    tenant_id=self.tenant_a.tenant_id,
+                    user_id=second_user.id,
+                    role="agent",
+                )
+            )
+            db.commit()
+            second_user_id = second_user.id
+
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "second-agent-a@example.com",
+                "password": TEST_PASSWORD,
+                "tenant_id": str(self.tenant_a.tenant_id),
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        second_headers = {
+            "Authorization": f"Bearer {login.json()['access_token']}"
+        }
+
+        unsupported_transfer = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={"user_id": str(second_user_id)},
+        )
+        self.assertEqual(unsupported_transfer.status_code, 403)
+        self.assertEqual(
+            unsupported_transfer.json()["detail"],
+            "Transferência de atendimento não disponível no MVP",
+        )
+
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+        self.assertEqual(
+            assigned.json()["assigned_user_id"],
+            str(self.tenant_a.user_id),
+        )
+
+        takeover = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=second_headers,
+            json={"user_id": str(second_user_id)},
+        )
+        self.assertEqual(takeover.status_code, 409)
+        self.assertEqual(
+            takeover.json()["detail"],
+            "Atendimento já assumido por outro agente",
+        )
+
+        forbidden_send = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages",
+            headers=second_headers,
+            json={"text": "Não deve sair por outro agente"},
+        )
+        forbidden_close = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/close",
+            headers=second_headers,
+        )
+        self.assertEqual(forbidden_send.status_code, 409)
+        self.assertEqual(forbidden_close.status_code, 409)
+        self.assertEqual(
+            forbidden_send.json()["detail"],
+            "Atendimento já assumido por outro agente",
+        )
+        self.assertEqual(
+            forbidden_close.json()["detail"],
+            "Atendimento já assumido por outro agente",
+        )
 
     def test_websocket_revalidates_membership_instead_of_trusting_token_claim(self) -> None:
         forged_token = create_access_token(

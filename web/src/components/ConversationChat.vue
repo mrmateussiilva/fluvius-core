@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { CheckCircle2, MessageCircle, UserPlus } from 'lucide-vue-next'
+import {
+  CheckCircle2,
+  LockKeyhole,
+  MessageCircle,
+  RotateCcw,
+  UserPlus,
+} from 'lucide-vue-next'
 import type { ContactDetail, Conversation, Message } from '../api/types'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ContactDetailsPanel from './ContactDetailsPanel.vue'
@@ -14,14 +20,26 @@ const props = defineProps<{
   contactLoading: boolean
   contactError: string | null
   retryingMessageIds: string[]
+  currentUserId: string | null
   sending: boolean
   sendError: string | null
+  operationLoading: boolean
+  operationError: string | null
 }>()
 const emit = defineEmits<{
   assign: []
   close: []
-  send: [text: string, replyToMessageId: string | null]
-  sendAttachment: [file: File, caption: string | null, replyToMessageId: string | null]
+  send: [
+    text: string,
+    replyToMessageId: string | null,
+    done: (accepted: boolean) => void,
+  ]
+  sendAttachment: [
+    file: File,
+    caption: string | null,
+    replyToMessageId: string | null,
+    done: (accepted: boolean) => void,
+  ]
   retry: [messageId: string]
   showContact: []
   refreshContact: []
@@ -42,6 +60,44 @@ const contactInitials = computed(() =>
     .map((part) => part[0]?.toUpperCase())
     .join(''),
 )
+const isAssignedToCurrentUser = computed(
+  () =>
+    Boolean(props.currentUserId) &&
+    props.conversation?.assigned_user_id === props.currentUserId,
+)
+const canOperate = computed(
+  () =>
+    props.conversation?.status === 'open' &&
+    isAssignedToCurrentUser.value,
+)
+const canClaim = computed(
+  () =>
+    props.conversation?.status !== 'open' ||
+    !props.conversation.assigned_user_id,
+)
+const ownershipLabel = computed(() => {
+  if (!props.conversation) return ''
+  if (props.conversation.status === 'closed') return 'Atendimento finalizado'
+  if (!props.conversation.assigned_user_id) return 'Aguardando atendente'
+  if (isAssignedToCurrentUser.value) return 'Em atendimento por você'
+  return 'Em atendimento por outro agente'
+})
+const composerDisabledReason = computed(() => {
+  if (!props.conversation) return 'Selecione uma conversa para responder.'
+  if (props.conversation.channel_status !== 'connected') {
+    return 'WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.'
+  }
+  if (props.conversation.status === 'closed') {
+    return 'Reabra e assuma o atendimento antes de responder.'
+  }
+  if (!props.conversation.assigned_user_id) {
+    return 'Assuma este atendimento antes de responder.'
+  }
+  if (!isAssignedToCurrentUser.value) {
+    return 'Este atendimento está com outro agente.'
+  }
+  return null
+})
 
 function dayKey(value: string) {
   const date = new Date(value)
@@ -95,14 +151,40 @@ function toggleContactPanel() {
   if (contactPanelOpen.value) emit('showContact')
 }
 
-function sendMessage(text: string) {
-  emit('send', text, replyingTo.value?.id || null)
+function sendMessage(text: string, done: (accepted: boolean) => void) {
+  const conversationId = props.conversation?.id
+  const reply = replyingTo.value
   replyingTo.value = null
+  emit('send', text, reply?.id || null, (accepted) => {
+    if (
+      !accepted &&
+      props.conversation?.id === conversationId &&
+      !replyingTo.value
+    ) {
+      replyingTo.value = reply
+    }
+    done(accepted)
+  })
 }
 
-function sendAttachment(file: File, caption: string | null) {
-  emit('sendAttachment', file, caption, replyingTo.value?.id || null)
+function sendAttachment(
+  file: File,
+  caption: string | null,
+  done: (accepted: boolean) => void,
+) {
+  const conversationId = props.conversation?.id
+  const reply = replyingTo.value
   replyingTo.value = null
+  emit('sendAttachment', file, caption, reply?.id || null, (accepted) => {
+    if (
+      !accepted &&
+      props.conversation?.id === conversationId &&
+      !replyingTo.value
+    ) {
+      replyingTo.value = reply
+    }
+    done(accepted)
+  })
 }
 
 function jumpToMessage(messageId: string) {
@@ -133,30 +215,46 @@ function jumpToMessage(messageId: string) {
               {{ conversation.contact_name || conversation.contact_phone }}
             </h2>
             <p class="truncate text-xs text-[#667781]">
-              {{ conversation.contact_phone }} · clique para ver os dados
+              {{ conversation.contact_phone }} · {{ ownershipLabel }}
             </p>
           </div>
         </button>
         <div class="flex items-center gap-2">
           <ChannelStatusBadge :status="conversation.channel_status" />
           <button
-            v-if="conversation.status === 'new'"
+            v-if="canClaim"
             class="flex items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-3 py-2 text-xs font-medium text-[#3b4a54] shadow-sm transition hover:bg-[#f7f8f8]"
+            :disabled="operationLoading"
             @click="emit('assign')"
           >
-            <UserPlus class="h-4 w-4" />
-            Assumir
+            <RotateCcw v-if="conversation.status === 'closed'" class="h-4 w-4" />
+            <UserPlus v-else class="h-4 w-4" />
+            {{ conversation.status === 'closed' ? 'Reabrir' : 'Assumir' }}
           </button>
           <button
-            v-if="conversation.status !== 'closed'"
+            v-if="canOperate"
             class="flex items-center gap-1.5 rounded-lg bg-fluvius-700 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800"
+            :disabled="operationLoading"
             @click="emit('close')"
           >
             <CheckCircle2 class="h-4 w-4" />
             Finalizar
           </button>
+          <span
+            v-if="conversation.status === 'open' && !canOperate"
+            class="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-100"
+          >
+            <LockKeyhole class="h-3.5 w-3.5" />
+            Outro agente
+          </span>
         </div>
       </header>
+      <p
+        v-if="operationError"
+        class="border-b border-rose-100 bg-rose-50 px-4 py-2 text-center text-xs text-rose-700"
+      >
+        {{ operationError }}
+      </p>
       <div ref="messageList" class="chat-wallpaper soft-scrollbar flex-1 overflow-y-auto px-5 py-4 sm:px-8">
         <div class="mx-auto w-full max-w-5xl space-y-2">
           <template v-for="(message, index) in messages" :key="message.id">
@@ -189,7 +287,7 @@ function jumpToMessage(messageId: string) {
         </div>
       </div>
       <MessageComposer
-        :disabled="conversation.channel_status !== 'connected'"
+        :disabled-reason="composerDisabledReason"
         :reply-to="replyingTo"
         :sending="sending"
         :send-error="sendError"

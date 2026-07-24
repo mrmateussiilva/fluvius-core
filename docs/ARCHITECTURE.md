@@ -21,14 +21,16 @@ Os módulos em `api/app` são separados pelo domínio de negócio. Não há repo
 1. O frontend envia texto ou anexo à API com JWT.
 2. A API extrai `user_id` e `tenant_id` do JWT e revalida o membership no banco.
 3. A conversa, o contato e o canal são consultados com filtro de tenant.
-4. Se `channel.status != connected`, a API retorna `409` com: “WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.”
-5. A mensagem outgoing é persistida como `pending` antes do efeito externo.
-6. A factory cria o adapter correspondente a `channel.provider`.
-7. O adapter chama o gateway.
-8. Apenas uma resposta positiva com ID do provider muda o status para `sent`. A API
+4. A API exige que a conversa esteja `open` e atribuída ao usuário autenticado. Assumir usa bloqueio de linha no PostgreSQL, impedindo que dois agentes sobrescrevam a posse ativa.
+5. Se `channel.status != connected`, a API retorna `409` com: “WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.”
+6. Para texto, o frontend gera `client_message_id`, mostra imediatamente a bolha `pending` e a API usa esse UUID como ID local e chave idempotente. Repetir o mesmo ID e conteúdo devolve a mensagem existente sem chamar novamente o provider.
+7. A mensagem outgoing é persistida como `pending` antes do efeito externo.
+8. A factory cria o adapter correspondente a `channel.provider`.
+9. O adapter chama o gateway.
+10. Apenas uma resposta positiva com ID do provider muda o status para `sent`. A API
    reaplica essa invariante mesmo que um adapter retorne um resultado contraditório. Falha ou
    resposta ambígua muda para `failed`.
-9. A API emite `message.created` no tenant.
+11. A API emite `message.created` no tenant.
 
 Depois do `sent`, webhooks `Receipt` podem avançar a mensagem para `delivered` e `read`. A atualização é monotônica, limitada a mensagens outgoing do mesmo tenant/canal e emite `message.updated`. Recibos que chegam antes do ID de envio ficam pendentes em `provider_events` para reconciliação após a resposta síncrona do gateway.
 

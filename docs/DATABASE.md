@@ -46,15 +46,18 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 4. `sent` exige confirmação positiva e `provider_message_id`.
 5. Falha confirmada ou resposta sem confirmação muda para `failed`; não mascarar como sucesso.
 6. Canal diferente de `connected` bloqueia envio antes de criar a mensagem.
-7. Finalizar move a conversa para `closed`, mas não separa seu histórico. A próxima incoming reabre a mesma conversa como `new`, sem atendente; um envio explícito do operador a reabre como `open` e atribui o operador atual.
-8. Payload bruto de provider pode conter dado pessoal; produção precisa de retenção, mascaramento e controles LGPD.
-9. A contagem de não lidas é individual por usuário e considera apenas mensagens `incoming` posteriores a `last_read_at`.
-10. Perfil de contato é consultado sempre pelo provider do canal validado e nunca diretamente pelo frontend; ausência de foto/recado não é erro de cadastro.
-11. `reply_to_message_id` deve apontar para uma mensagem do mesmo tenant e conversa; o ID externo citado é preservado para interoperabilidade com o provider.
-12. `sent_at`, `delivered_at` e `read_at` registram fatos distintos. Horários ausentes permanecem nulos; um recibo `read` também confirma entrega, mas nenhum estado pode regredir.
-13. Reenvio manual é permitido somente para mensagem outgoing em `failed`, incrementa `attempt_count` e volta a persistir `pending` antes do efeito externo.
-14. Mídia recebida é decodificada pelo adapter e copiada para o storage do Fluvius antes da resposta ao webhook. O frontend nunca usa diretamente a URL criptografada do WhatsApp.
-15. Uploads locais têm limite de 25 MB. Figurinhas usam WebP; vídeo e áudio preservam o MIME type para reprodução no navegador.
+7. Assumir uma conversa bloqueia sua linha durante a transição e sempre atribui o usuário autenticado. Uma conversa `open` já atribuída não pode ser tomada por outro agente; transferência fica fora do MVP.
+8. Enviar texto/anexo, reenviar falha e finalizar exigem conversa `open` atribuída ao usuário autenticado.
+9. Finalizar move a conversa para `closed`, mas não separa seu histórico. A próxima incoming reabre a mesma conversa como `new`, sem atendente; o operador precisa assumi-la novamente antes de responder.
+10. Payload bruto de provider pode conter dado pessoal; produção precisa de retenção, mascaramento e controles LGPD.
+11. A contagem de não lidas é individual por usuário e considera apenas mensagens `incoming` posteriores a `last_read_at`.
+12. Perfil de contato é consultado sempre pelo provider do canal validado e nunca diretamente pelo frontend; ausência de foto/recado não é erro de cadastro.
+13. `reply_to_message_id` deve apontar para uma mensagem do mesmo tenant e conversa; o ID externo citado é preservado para interoperabilidade com o provider.
+14. `sent_at`, `delivered_at` e `read_at` registram fatos distintos. Horários ausentes permanecem nulos; um recibo `read` também confirma entrega, mas nenhum estado pode regredir.
+15. Reenvio manual é permitido somente para mensagem outgoing em `failed`, incrementa `attempt_count` e volta a persistir `pending` antes do efeito externo.
+16. Para texto, `client_message_id` fornecido pelo frontend torna-se `Message.id`; repetir o mesmo ID, conteúdo e referência de resposta devolve a mensagem existente sem novo efeito externo.
+17. Mídia recebida é decodificada pelo adapter e copiada para o storage do Fluvius antes da resposta ao webhook. O frontend nunca usa diretamente a URL criptografada do WhatsApp.
+18. Uploads locais têm limite de 25 MB. Figurinhas usam WebP; vídeo e áudio preservam o MIME type para reprodução no navegador.
 
 ## Migration inicial
 

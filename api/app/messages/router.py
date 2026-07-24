@@ -11,7 +11,6 @@ from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelStatus,
-    ConversationStatus,
     MessageDirection,
     MessageStatus,
     MessageType,
@@ -23,7 +22,11 @@ from app.common.schemas import (
 )
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
-from app.conversations.router import get_tenant_conversation
+from app.conversations.router import (
+    ensure_conversation_assignee,
+    get_tenant_conversation,
+    get_tenant_conversation_for_update,
+)
 from app.database import get_db
 from app.messages.models import Message
 from app.messages.schemas import MessageCreate
@@ -36,22 +39,6 @@ from app.storage.local import LocalStorageProvider
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
-
-
-def reopen_for_agent(conversation: Conversation, user_id: UUID) -> bool:
-    if conversation.status != ConversationStatus.CLOSED:
-        return False
-    conversation.status = ConversationStatus.OPEN
-    conversation.assigned_user_id = user_id
-    return True
-
-
-async def broadcast_reopened_conversation(conversation: Conversation) -> None:
-    await realtime_manager.broadcast(
-        conversation.tenant_id,
-        "conversation.updated",
-        {"id": str(conversation.id), "status": conversation.status.value},
-    )
 
 
 def apply_send_result(
@@ -75,9 +62,12 @@ def apply_send_result(
 
 
 def conversation_delivery_context(
-    db: Session, tenant_id: UUID, conversation_id: UUID
+    db: Session, tenant_id: UUID, conversation_id: UUID, user_id: UUID
 ) -> tuple[Conversation, WhatsAppChannel, Contact]:
-    conversation = get_tenant_conversation(db, tenant_id, conversation_id)
+    conversation = get_tenant_conversation_for_update(
+        db, tenant_id, conversation_id
+    )
+    ensure_conversation_assignee(conversation, user_id)
     channel = db.scalar(
         select(WhatsAppChannel).where(
             WhatsAppChannel.id == conversation.channel_id,
@@ -303,8 +293,27 @@ async def send_message(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, channel, contact = conversation_delivery_context(
-        db, context.tenant_id, conversation_id
+        db, context.tenant_id, conversation_id, context.user.id
     )
+    existing = db.scalar(
+        select(Message).where(
+            Message.id == payload.client_message_id,
+            Message.tenant_id == context.tenant_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    if existing is not None:
+        if (
+            existing.direction == MessageDirection.OUTGOING
+            and existing.message_type == MessageType.TEXT
+            and existing.body == payload.text
+            and existing.reply_to_message_id == payload.reply_to_message_id
+        ):
+            return message_response(db, context.tenant_id, existing)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Identificador de mensagem já utilizado",
+        )
     reply_to = None
     if payload.reply_to_message_id:
         reply_to = get_tenant_message(
@@ -319,8 +328,8 @@ async def send_message(
                 detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
             )
     attempted_at = datetime.now(UTC)
-    reopened_conversation = reopen_for_agent(conversation, context.user.id)
     message = Message(
+        id=payload.client_message_id,
         tenant_id=context.tenant_id,
         conversation_id=conversation_id,
         sender_user_id=context.user.id,
@@ -336,8 +345,6 @@ async def send_message(
     db.add(message)
     conversation.last_message_at = attempted_at
     db.commit()  # Persist pending before performing an external side effect.
-    if reopened_conversation:
-        await broadcast_reopened_conversation(conversation)
     reconciled = await deliver_message(
         db, message=message, channel=channel, contact=contact
     )
@@ -372,7 +379,7 @@ async def send_attachment(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, channel, contact = conversation_delivery_context(
-        db, context.tenant_id, conversation_id
+        db, context.tenant_id, conversation_id, context.user.id
     )
     reply_to = None
     if reply_to_message_id:
@@ -402,7 +409,6 @@ async def send_attachment(
         str(context.tenant_id), file.filename or "anexo", content
     )
     attempted_at = datetime.now(UTC)
-    reopened_conversation = reopen_for_agent(conversation, context.user.id)
     message = Message(
         tenant_id=context.tenant_id,
         conversation_id=conversation_id,
@@ -431,8 +437,6 @@ async def send_attachment(
         )
     )
     db.commit()
-    if reopened_conversation:
-        await broadcast_reopened_conversation(conversation)
     reconciled = await deliver_message(
         db, message=message, channel=channel, contact=contact
     )
@@ -464,7 +468,7 @@ async def retry_message(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, channel, contact = conversation_delivery_context(
-        db, context.tenant_id, conversation_id
+        db, context.tenant_id, conversation_id, context.user.id
     )
     message = get_tenant_message(db, context.tenant_id, conversation_id, message_id)
     if message.direction != MessageDirection.OUTGOING or message.status != MessageStatus.FAILED:
@@ -474,7 +478,6 @@ async def retry_message(
         )
 
     attempted_at = datetime.now(UTC)
-    reopened_conversation = reopen_for_agent(conversation, context.user.id)
     message.status = MessageStatus.PENDING
     message.error = None
     message.provider_message_id = None
@@ -485,8 +488,6 @@ async def retry_message(
     message.last_attempt_at = attempted_at
     conversation.last_message_at = attempted_at
     db.commit()  # Persist the retry intent before calling the provider.
-    if reopened_conversation:
-        await broadcast_reopened_conversation(conversation)
 
     reconciled = await deliver_message(
         db, message=message, channel=channel, contact=contact

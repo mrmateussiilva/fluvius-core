@@ -1,18 +1,22 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { FileText, Paperclip, Reply, Send, X, Zap } from 'lucide-vue-next'
 import type { Message } from '../api/types'
 import QuickReplyPicker from './QuickReplyPicker.vue'
 
 const props = defineProps<{
-  disabled: boolean
+  disabledReason: string | null
   replyTo: Message | null
   sending: boolean
   sendError: string | null
 }>()
 const emit = defineEmits<{
-  send: [text: string]
-  sendAttachment: [file: File, caption: string | null]
+  send: [text: string, done: (accepted: boolean) => void]
+  sendAttachment: [
+    file: File,
+    caption: string | null,
+    done: (accepted: boolean) => void,
+  ]
   cancelReply: []
 }>()
 const text = ref('')
@@ -21,6 +25,7 @@ const textarea = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref<string | null>(null)
+const isDisabled = computed(() => Boolean(props.disabledReason))
 
 function resizeTextarea() {
   if (!textarea.value) return
@@ -30,17 +35,30 @@ function resizeTextarea() {
 
 function submit() {
   const content = text.value.trim()
-  if (props.disabled || props.sending) return
+  if (isDisabled.value || props.sending) return
   if (selectedFile.value) {
-    emit('sendAttachment', selectedFile.value, content || null)
-    selectedFile.value = null
-    if (fileInput.value) fileInput.value.value = ''
+    const submittedFile = selectedFile.value
+    emit('sendAttachment', submittedFile, content || null, (accepted) => {
+      if (!accepted || selectedFile.value !== submittedFile) return
+      clearFile()
+      if (text.value.trim() === content) text.value = ''
+      nextTick(resizeTextarea)
+    })
   } else {
     if (!content) return
-    emit('send', content)
+    text.value = ''
+    nextTick(resizeTextarea)
+    emit('send', content, (accepted) => {
+      if (accepted) return
+      text.value = text.value.trim()
+        ? `${content}\n${text.value}`
+        : content
+      nextTick(() => {
+        resizeTextarea()
+        textarea.value?.focus()
+      })
+    })
   }
-  text.value = ''
-  nextTick(resizeTextarea)
 }
 
 function selectFile(event: Event) {
@@ -79,8 +97,8 @@ function useReply(content: string) {
 
 <template>
   <div class="border-t border-[#d8dcdf] bg-[#f0f2f5] px-4 py-2.5">
-    <p v-if="disabled" class="mx-auto mb-2.5 max-w-5xl rounded-lg bg-rose-50 px-3 py-2 text-center text-xs text-rose-700 ring-1 ring-rose-100">
-      WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.
+    <p v-if="disabledReason" class="mx-auto mb-2.5 max-w-5xl rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-800 ring-1 ring-amber-100">
+      {{ disabledReason }}
     </p>
     <p v-else-if="sendError || fileError" class="mx-auto mb-2.5 max-w-5xl rounded-lg bg-rose-50 px-3 py-2 text-center text-xs text-rose-700 ring-1 ring-rose-100">
       {{ fileError || sendError }}
@@ -127,7 +145,7 @@ function useReply(content: string) {
         <button
           type="button"
           class="grid h-11 w-11 place-items-center rounded-full text-[#54656f] transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40"
-          :disabled="disabled"
+          :disabled="isDisabled"
           title="Respostas rápidas"
           @click="showReplies = !showReplies"
         >
@@ -145,7 +163,7 @@ function useReply(content: string) {
       <button
         type="button"
         class="grid h-11 w-11 place-items-center rounded-full text-[#54656f] transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40"
-        :disabled="disabled || sending"
+        :disabled="isDisabled || sending"
         title="Anexar imagem, áudio, vídeo, documento ou figurinha"
         @click="fileInput?.click()"
       >
@@ -157,13 +175,13 @@ function useReply(content: string) {
         rows="1"
         class="soft-scrollbar min-h-11 flex-1 resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[13.5px] leading-5 text-[#111b21] shadow-sm outline-none placeholder:text-[#667781] focus:ring-1 focus:ring-fluvius-500/30 disabled:bg-[#e2e6e8]"
         placeholder="Digite uma mensagem..."
-        :disabled="disabled || sending"
+        :disabled="isDisabled"
         @input="resizeTextarea"
         @keydown.enter.exact.prevent="submit"
       />
       <button
         class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white shadow-sm transition hover:bg-fluvius-700 disabled:cursor-not-allowed disabled:bg-[#c6cccf] disabled:shadow-none"
-        :disabled="disabled || sending || (!text.trim() && !selectedFile)"
+        :disabled="isDisabled || sending || (!text.trim() && !selectedFile)"
         :title="sending ? 'Enviando...' : 'Enviar'"
       >
         <span

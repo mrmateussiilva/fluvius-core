@@ -10,6 +10,23 @@ const store = useConversationStore()
 const auth = useAuthStore()
 const realtime = useRealtimeStore()
 
+async function sendMessage(
+  text: string,
+  replyToMessageId: string | null,
+  done: (accepted: boolean) => void,
+) {
+  done(await store.send(text, replyToMessageId))
+}
+
+async function sendAttachment(
+  file: File,
+  caption: string | null,
+  replyToMessageId: string | null,
+  done: (accepted: boolean) => void,
+) {
+  done(await store.sendAttachment(file, caption, replyToMessageId))
+}
+
 async function refreshVisibleConversation() {
   if (document.visibilityState !== 'visible' || !store.selectedId) return
   await store.loadConversations()
@@ -44,12 +61,15 @@ onBeforeUnmount(() => {
       :contact-loading="store.contactLoading"
       :contact-error="store.contactError"
       :retrying-message-ids="store.retryingMessageIds"
-      :sending="store.sending"
-      :send-error="store.sendError"
+      :current-user-id="auth.user?.id || null"
+      :sending="store.selectedSending"
+      :send-error="store.selectedSendError"
+      :operation-loading="store.operationLoading"
+      :operation-error="store.operationError"
       @assign="store.assignSelected"
       @close="store.closeSelected"
-      @send="store.send"
-      @send-attachment="store.sendAttachment"
+      @send="sendMessage"
+      @send-attachment="sendAttachment"
       @retry="store.retryMessage"
       @show-contact="store.loadSelectedContact()"
       @refresh-contact="store.loadSelectedContact(true)"

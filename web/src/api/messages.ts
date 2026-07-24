@@ -6,11 +6,16 @@ export const listMessages = (conversationId: string) =>
 export const sendMessage = (
   conversationId: string,
   text: string,
+  clientMessageId: string,
   replyToMessageId: string | null = null,
 ) =>
   http<Message>(`/api/v1/conversations/${conversationId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ text, reply_to_message_id: replyToMessageId }),
+    body: JSON.stringify({
+      text,
+      reply_to_message_id: replyToMessageId,
+      client_message_id: clientMessageId,
+    }),
   })
 
 export const sendAttachment = (

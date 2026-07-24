@@ -93,7 +93,10 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 ## Estado desta fundação
 
 - Os endpoints iniciais existem e são tenant-scoped.
+- Assumir uma conversa é atômico; outro agente não pode sobrescrever a atribuição ativa.
+- Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
+- No texto, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
 - O composer e a API bloqueiam envio com o canal offline.
 - O worker RQ está disponível, mas o envio ainda é síncrono para manter simples a confirmação nesta etapa.
