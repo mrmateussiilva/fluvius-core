@@ -164,6 +164,8 @@ class EvolutionGoProvider(WhatsAppProvider):
             response.raise_for_status()
             return self._parse_qr_code(response.json())
         except httpx.HTTPStatusError as exc:
+            if self._qr_session_already_connected(exc.response):
+                return QRCodeResult(status=ChannelStatus.CONNECTED)
             return QRCodeResult(
                 status=ChannelStatus.FAILED,
                 error=self._http_error_message(exc),
@@ -644,6 +646,19 @@ class EvolutionGoProvider(WhatsAppProvider):
             pairing_code=str(pairing) if pairing else None,
             status=ChannelStatus.REQUIRES_QR if qr or pairing else ChannelStatus.CONNECTING,
         )
+
+    @staticmethod
+    def _qr_session_already_connected(response: httpx.Response) -> bool:
+        if response.status_code != 400:
+            return False
+        try:
+            data = response.json()
+        except ValueError:
+            return False
+        if not isinstance(data, dict):
+            return False
+        error = data.get("error")
+        return isinstance(error, str) and error.strip().lower() == "session already logged in"
 
     @staticmethod
     def _optional_bool(value: Any) -> bool | None:

@@ -1,0 +1,8 @@
+{
+  "message": "success",
+  "data": {
+    "Connected": true,
+    "LoggedIn": true,
+    "Name": "<instance-name>"
+  }
+}

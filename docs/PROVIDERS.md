@@ -26,6 +26,8 @@ A imagem local padrão é `evoapicloud/evolution-go:0.7.2`, substituível por `E
 
 O status chega no envelope `{"message": "success", "data": {...}}`. Dentro de `data`, os campos `Connected` e `LoggedIn` indicam, respectivamente, conexão do socket e sessão autenticada. O adapter aceita também as variantes em camelCase. O QR usa o mesmo envelope e expõe `qrcode` e `code`.
 
+Em uma sessão já autenticada, `GET /instance/qr` responde HTTP 400 com `{"error": "session already logged in"}`. Essa resposta específica confirma que não há QR a exibir e preserva o canal como `connected`; qualquer outro HTTP 400 continua sendo tratado como falha.
+
 O token em `EVOLUTION_GO_API_KEY` deve ser o **Token da Instância** mostrado no Manager. Ele não é o nome `Pessoal` e também não é a chave administrativa `EVOLUTION_GO_GLOBAL_API_KEY`.
 
 ### Webhook Evolution Go 0.7.2
@@ -75,7 +77,7 @@ A documentação pública e o Swagger da linha Evolution Go estão evoluindo. An
 - política de retries e idempotência aceita pelo gateway;
 - exigência e ciclo de ativação da licença na versão implantada.
 
-Até isso ser confirmado com fixtures reais, o adapter é uma implementação estrutural: falha de HTTP ou resposta sem ID nunca é tratada como envio bem-sucedido.
+As fixtures sanitizadas de status conectado e QR solicitado durante sessão autenticada ficam em `api/tests/fixtures/evolution_go/0.7.2`. Envio de texto/mídia e demais itens acima ainda dependem de captura real antes da liberação para produção. Falha de HTTP ou resposta de envio sem ID nunca é tratada como envio bem-sucedido.
 
 ## MetaCloudProvider
 

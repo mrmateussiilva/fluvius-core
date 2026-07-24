@@ -1,5 +1,7 @@
 import asyncio
+import json
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 from unittest.mock import AsyncMock, patch
@@ -17,6 +19,14 @@ from app.config import settings
 from app.providers.base import IgnoredWebhookEvent
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.status_updates import can_advance_message_status
+
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "evolution_go" / "0.7.2"
+
+
+def load_fixture(name: str) -> dict:
+    with (FIXTURE_DIR / name).open(encoding="utf-8") as fixture:
+        return json.load(fixture)
 
 
 def message_payload(
@@ -261,10 +271,59 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             asyncio.run(self.provider.handle_webhook(message_payload(is_group=True)))
 
     def test_parses_connected_status_envelope(self) -> None:
-        result = self.provider._parse_status(
-            {"message": "success", "data": {"Connected": True, "LoggedIn": True}}
-        )
+        result = self.provider._parse_status(load_fixture("status-connected.json"))
         self.assertEqual(result.status, ChannelStatus.CONNECTED)
+        self.assertEqual(result.raw_status, "connected=true,loggedIn=true")
+
+    def test_qr_reports_connected_when_session_is_already_logged_in(self) -> None:
+        connect_response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/instance/connect"),
+            json={"message": "success", "data": {}},
+        )
+        qr_response = httpx.Response(
+            400,
+            request=httpx.Request("GET", "http://evolution-go:8080/instance/qr"),
+            json=load_fixture("qr-session-already-logged-in.json"),
+        )
+        channel = SimpleNamespace(
+            id=UUID("5a113028-0944-4051-86e2-7c139b02820a"),
+            provider=ChannelProvider.EVOLUTION_GO,
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(side_effect=[connect_response, qr_response]),
+        ):
+            result = asyncio.run(self.provider.get_qr_code(channel))
+        self.assertEqual(result.status, ChannelStatus.CONNECTED)
+        self.assertIsNone(result.qr_code)
+        self.assertIsNone(result.pairing_code)
+        self.assertIsNone(result.error)
+
+    def test_qr_keeps_unrecognized_bad_request_as_failure(self) -> None:
+        connect_response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/instance/connect"),
+            json={"message": "success", "data": {}},
+        )
+        qr_response = httpx.Response(
+            400,
+            request=httpx.Request("GET", "http://evolution-go:8080/instance/qr"),
+            json={"error": "invalid request"},
+        )
+        channel = SimpleNamespace(
+            id=UUID("5a113028-0944-4051-86e2-7c139b02820a"),
+            provider=ChannelProvider.EVOLUTION_GO,
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(side_effect=[connect_response, qr_response]),
+        ):
+            result = asyncio.run(self.provider.get_qr_code(channel))
+        self.assertEqual(result.status, ChannelStatus.FAILED)
+        self.assertEqual(result.error, "Evolution Go respondeu com HTTP 400")
 
     def test_configures_webhook_for_channel(self) -> None:
         response = httpx.Response(
