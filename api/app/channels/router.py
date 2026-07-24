@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -49,9 +49,29 @@ def list_channels(
 @router.post("", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
 def create_channel(
     payload: ChannelCreate,
+    response: Response,
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> WhatsAppChannel:
+    credential_fingerprint: str | None = None
+    if payload.provider == ChannelProvider.EVOLUTION_GO:
+        try:
+            credential_fingerprint = evolution_credential_fingerprint(
+                payload.provider_config
+            )
+        except ProviderConfigurationError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+        existing_channel = db.scalar(
+            select(WhatsAppChannel).where(
+                WhatsAppChannel.tenant_id == context.tenant_id,
+                WhatsAppChannel.provider == payload.provider,
+                WhatsAppChannel.credential_fingerprint == credential_fingerprint,
+            )
+        )
+        if existing_channel is not None:
+            response.status_code = status.HTTP_200_OK
+            return existing_channel
+
     channel = WhatsAppChannel(
         tenant_id=context.tenant_id,
         name=payload.name,
@@ -59,22 +79,27 @@ def create_channel(
         provider=payload.provider,
         provider_config=payload.provider_config,
         status=ChannelStatus.DISCONNECTED,
+        credential_fingerprint=credential_fingerprint,
     )
-    if payload.provider == ChannelProvider.EVOLUTION_GO:
-        try:
-            channel.credential_fingerprint = evolution_credential_fingerprint(
-                payload.provider_config
-            )
-        except ProviderConfigurationError as exc:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     db.add(channel)
     try:
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        if credential_fingerprint is not None:
+            existing_channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.tenant_id == context.tenant_id,
+                    WhatsAppChannel.provider == payload.provider,
+                    WhatsAppChannel.credential_fingerprint == credential_fingerprint,
+                )
+            )
+            if existing_channel is not None:
+                response.status_code = status.HTTP_200_OK
+                return existing_channel
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Esta instância Evolution já está associada a outro canal",
+            detail="Esta credencial Evolution já está associada a outro canal",
         ) from exc
     db.refresh(channel)
     return channel

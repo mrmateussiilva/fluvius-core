@@ -58,7 +58,7 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 16. Para texto, `client_message_id` fornecido pelo frontend torna-se `Message.id`; repetir o mesmo ID, conteúdo e referência de resposta devolve a mensagem existente sem novo efeito externo.
 17. Mídia recebida é decodificada pelo adapter e copiada para o storage do Fluvius antes da resposta ao webhook. O frontend nunca usa diretamente a URL criptografada do WhatsApp.
 18. Uploads locais têm limite de 25 MB. Figurinhas usam WebP; vídeo e áudio preservam o MIME type para reprodução no navegador.
-19. Uma credencial de provider pode pertencer a somente um canal. A referência pública fica em `provider_config`, o fingerprint sustenta a constraint global e o segredo permanece no ambiente.
+19. Uma credencial de provider pode pertencer a somente um canal. A referência pública fica em `provider_config`, o fingerprint sustenta a constraint global e o segredo permanece no ambiente. Repetir a credencial no mesmo tenant reutiliza o canal existente; outro tenant permanece bloqueado.
 
 ## Migration inicial
 

@@ -107,7 +107,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             self.assertEqual(channel.tenant_id, self.tenant_a.tenant_id)
             self.assertEqual(quick_reply.tenant_id, self.tenant_a.tenant_id)
 
-    def test_evolution_credentials_cannot_be_reused_by_another_channel(self) -> None:
+    def test_reuses_the_channel_that_already_owns_the_evolution_credential(self) -> None:
         with patch.object(
             settings,
             "evolution_go_instance_tokens",
@@ -127,10 +127,34 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                 },
             )
 
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["id"], str(self.tenant_a.channel_id))
+        self.assertEqual(response.json()["name"], "Canal A")
+
+    def test_evolution_credential_cannot_cross_tenants(self) -> None:
+        with patch.object(
+            settings,
+            "evolution_go_instance_tokens",
+            {
+                "tenant-a": "token-a",
+                "tenant-b": "token-b",
+                "foreign-copy": "token-b",
+            },
+        ):
+            response = self.client.post(
+                "/api/v1/channels",
+                headers=self.headers_a,
+                json={
+                    "name": "Cópia cruzada",
+                    "provider": "evolution_go",
+                    "provider_config": {"instance_name": "foreign-copy"},
+                },
+            )
+
         self.assertEqual(response.status_code, 409)
         self.assertEqual(
             response.json()["detail"],
-            "Esta instância Evolution já está associada a outro canal",
+            "Esta credencial Evolution já está associada a outro canal",
         )
 
     def test_connects_channel_through_tenant_scoped_api(self) -> None:

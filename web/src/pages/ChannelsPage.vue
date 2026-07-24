@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   Clipboard,
   LoaderCircle,
+  Plus,
   QrCode,
   RefreshCw,
   Smartphone,
@@ -32,8 +33,10 @@ const STATUS_POLL_INTERVAL = 3_000
 
 const channels = ref<Channel[]>([])
 const error = ref('')
+const notice = ref('')
 const loadingChannels = ref(true)
 const creating = ref(false)
+const showCreateForm = ref(false)
 const form = reactive({ name: '', phone_number: '', instance_name: '' })
 const connection = reactive<{
   channel: Channel | null
@@ -197,6 +200,7 @@ async function refresh() {
 
 async function submit() {
   error.value = ''
+  notice.value = ''
   creating.value = true
   try {
     const channel = await createChannel({
@@ -205,9 +209,19 @@ async function submit() {
       provider: 'evolution_go',
       provider_config: { instance_name: form.instance_name },
     })
-    channels.value.push(channel)
+    const existingChannel = channels.value.find((item) => item.id === channel.id)
+    const targetChannel = existingChannel || channel
+    if (existingChannel) {
+      Object.assign(existingChannel, channel)
+      notice.value =
+        `Essa credencial já pertence ao canal “${existingChannel.name}”. ` +
+        'Abrimos o canal existente para você.'
+    } else {
+      channels.value.push(channel)
+    }
     Object.assign(form, { name: '', phone_number: '', instance_name: '' })
-    await openConnection(channel)
+    showCreateForm.value = false
+    await openConnection(targetChannel)
   } catch (exception) {
     error.value = exception instanceof Error ? exception.message : 'Falha ao criar canal'
   } finally {
@@ -282,7 +296,28 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <div
+      v-if="!loadingChannels && channels.length && !showCreateForm"
+      class="mt-6 flex flex-col gap-4 rounded-2xl border border-sky-200 bg-sky-50 p-5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div>
+        <p class="font-semibold text-sky-950">Seu canal já está cadastrado</p>
+        <p class="mt-1 max-w-2xl text-sm leading-5 text-sky-800">
+          Use Conectar ou Verificar no canal abaixo. Outro nome não cria outra instância:
+          um canal adicional precisa de outro token configurado na API.
+        </p>
+      </div>
+      <button
+        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-sky-300 bg-white px-3 py-2 text-sm font-semibold text-sky-900 transition hover:bg-sky-100"
+        @click="showCreateForm = true; notice = ''"
+      >
+        <Plus class="h-4 w-4" />
+        Adicionar outro canal
+      </button>
+    </div>
+
     <form
+      v-if="!loadingChannels && (!channels.length || showCreateForm)"
       class="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3"
       @submit.prevent="submit"
     >
@@ -306,7 +341,7 @@ onBeforeUnmount(() => {
         />
       </label>
       <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
-        Instância configurada
+        Referência da instância
         <input
           v-model="form.instance_name"
           required
@@ -316,18 +351,38 @@ onBeforeUnmount(() => {
       </label>
       <div class="sm:col-span-3 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p class="max-w-2xl text-xs leading-5 text-slate-500">
-          O nome identifica uma credencial previamente configurada na API. Tokens e URLs nunca são enviados por esta tela.
+          A referência identifica uma credencial configurada na API. Mudar apenas esse
+          nome não cria uma nova instância Evolution; cada canal adicional precisa de
+          outro token.
         </p>
-        <button
-          :disabled="creating"
-          class="inline-flex items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <LoaderCircle v-if="creating" class="h-4 w-4 animate-spin" />
-          <Smartphone v-else class="h-4 w-4" />
-          {{ creating ? 'Criando…' : 'Criar e conectar' }}
-        </button>
+        <div class="flex items-center justify-end gap-2">
+          <button
+            v-if="channels.length"
+            type="button"
+            class="rounded-lg px-3 py-2.5 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+            @click="showCreateForm = false"
+          >
+            Cancelar
+          </button>
+          <button
+            :disabled="creating"
+            class="inline-flex items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <LoaderCircle v-if="creating" class="h-4 w-4 animate-spin" />
+            <Smartphone v-else class="h-4 w-4" />
+            {{ creating ? 'Verificando…' : 'Criar e conectar' }}
+          </button>
+        </div>
       </div>
     </form>
+
+    <p
+      v-if="notice"
+      role="status"
+      class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+    >
+      {{ notice }}
+    </p>
 
     <p
       v-if="error"

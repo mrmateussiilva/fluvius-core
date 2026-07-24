@@ -58,6 +58,8 @@ O status pode ser consultado pela API ou atualizado por webhook. Em ambos os cas
 
 O assistente de conexão chama `POST /api/v1/channels/{id}/connect`, recebe somente QR/código de pareamento e consulta `GET /status` até a sessão ficar conectada. A solicitação inicial reaplica o webhook; as consultas periódicas de status são somente leitura no provider. O frontend nunca recebe URL ou token da Evolution. `provider_config.instance_name` funciona como referência não secreta para `EVOLUTION_GO_INSTANCE_TOKENS`; a API compara fingerprints dos tokens e rejeita a associação da mesma credencial a mais de um canal.
 
+O cadastro é idempotente por credencial dentro do tenant: se o usuário tentar criar novamente o canal que já possui aquele token, a API devolve o canal existente e a UI abre sua conexão. A constraint global continua bloqueando reutilização entre tenants sem revelar a qual conta a credencial pertence.
+
 ## Perfil do contato
 
 O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A atualização explícita usa `POST /api/v1/contacts/{id}/refresh`, valida tenant, vínculo entre contato e canal e status conectado antes de chamar `WhatsAppProvider.get_contact_profile`. O Evolution Go é consultado apenas pelo adapter e os resultados disponíveis são armazenados como cache; estatísticas de primeira/última interação e atendimentos são calculadas a partir dos dados do Fluvius.
