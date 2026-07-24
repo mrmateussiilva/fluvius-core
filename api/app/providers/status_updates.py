@@ -13,7 +13,6 @@ from app.providers.base import IgnoredWebhookEvent, MessageStatusUpdateResult
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
 
-
 STATUS_ORDER = {
     MessageStatus.PENDING: 0,
     MessageStatus.SENT: 1,
@@ -93,7 +92,7 @@ def reconcile_pending_status_events(
     if not provider_message_id:
         return []
 
-    adapter = get_provider(channel.provider)
+    adapter = get_provider(channel.provider, channel)
     events = list(
         db.scalars(
             select(ProviderEvent)

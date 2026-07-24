@@ -7,15 +7,18 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
-from app.common.enums import ChannelStatus, ConversationStatus
+from app.common.enums import ChannelProvider, ChannelStatus, ConversationStatus
 from app.contacts.models import Contact
 from app.contacts.schemas import ContactRefreshRequest, ContactResponse
 from app.conversations.models import Conversation
 from app.database import get_db
 from app.messages.models import Message
+from app.providers.evolution_credentials import (
+    ProviderConfigurationError,
+    claim_evolution_credential,
+)
 from app.providers.factory import get_provider
 from app.realtime.manager import realtime_manager
-
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de atualizar o contato."
@@ -116,9 +119,13 @@ async def refresh_contact(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OFFLINE_MESSAGE)
 
     try:
-        profile = await get_provider(channel.provider).get_contact_profile(
+        if channel.provider == ChannelProvider.EVOLUTION_GO:
+            claim_evolution_credential(db, channel)
+        profile = await get_provider(channel.provider, channel).get_contact_profile(
             channel, contact.phone_number
         )
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except NotImplementedError as exc:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)) from exc
 

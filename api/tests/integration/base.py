@@ -2,6 +2,7 @@ import os
 import unittest
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -27,7 +28,6 @@ from app.quick_replies.models import QuickReply
 from app.security import hash_password
 from app.tenants.models import Tenant
 from app.users.models import TenantUser, User
-
 
 TEST_PASSWORD = "integration-password"
 
@@ -69,7 +69,7 @@ class PostgresIntegrationTestCase(unittest.TestCase):
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        if revision != "20260722_0006":
+        if revision != "20260724_0007":
             raise RuntimeError(f"Schema de teste está na revisão inesperada {revision}")
 
         cls.password_hash = hash_password(TEST_PASSWORD)
@@ -117,6 +117,7 @@ class PostgresIntegrationTestCase(unittest.TestCase):
                 phone_number=f"5527888{'2' if label == 'b' else '1'}0000",
                 provider=ChannelProvider.EVOLUTION_GO,
                 provider_config={"instance_name": f"tenant-{label}"},
+                credential_fingerprint=sha256(f"token-{label}".encode()).hexdigest(),
                 status=ChannelStatus.CONNECTED,
             )
             contact = Contact(

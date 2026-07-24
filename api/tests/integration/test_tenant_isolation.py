@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import quote
 from uuid import UUID
 
@@ -5,13 +6,17 @@ from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
 from app.channels.models import WhatsAppChannel
+from app.common.enums import ChannelStatus
+from app.config import settings
 from app.conversations.models import ConversationRead
 from app.database import SessionLocal
 from app.messages.models import Message
+from app.providers.base import QRCodeResult
 from app.quick_replies.models import QuickReply
 from app.security import create_access_token
 from app.users.models import TenantUser, User
-from .base import PostgresIntegrationTestCase, TEST_PASSWORD
+
+from .base import TEST_PASSWORD, PostgresIntegrationTestCase
 
 
 class TenantIsolationTest(PostgresIntegrationTestCase):
@@ -55,15 +60,24 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             {str(self.tenant_a.quick_reply_id)},
         )
 
-        created_channel = self.client.post(
-            "/api/v1/channels",
-            headers=self.headers_a,
-            json={
-                "name": "Canal adicional A",
-                "provider": "evolution_go",
-                "provider_config": {"instance_name": "tenant-a-extra"},
+        with patch.object(
+            settings,
+            "evolution_go_instance_tokens",
+            {
+                "tenant-a": "token-a",
+                "tenant-b": "token-b",
+                "tenant-a-extra": "token-a-extra",
             },
-        )
+        ):
+            created_channel = self.client.post(
+                "/api/v1/channels",
+                headers=self.headers_a,
+                json={
+                    "name": "Canal adicional A",
+                    "provider": "evolution_go",
+                    "provider_config": {"instance_name": "tenant-a-extra"},
+                },
+            )
         self.assertEqual(created_channel.status_code, 201, created_channel.text)
 
         created_reply = self.client.post(
@@ -93,6 +107,67 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             self.assertEqual(channel.tenant_id, self.tenant_a.tenant_id)
             self.assertEqual(quick_reply.tenant_id, self.tenant_a.tenant_id)
 
+    def test_evolution_credentials_cannot_be_reused_by_another_channel(self) -> None:
+        with patch.object(
+            settings,
+            "evolution_go_instance_tokens",
+            {
+                "tenant-a": "token-a",
+                "tenant-b": "token-b",
+                "tenant-a-copy": "token-a",
+            },
+        ):
+            response = self.client.post(
+                "/api/v1/channels",
+                headers=self.headers_a,
+                json={
+                    "name": "Cópia insegura",
+                    "provider": "evolution_go",
+                    "provider_config": {"instance_name": "tenant-a-copy"},
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["detail"],
+            "Esta instância Evolution já está associada a outro canal",
+        )
+
+    def test_connects_channel_through_tenant_scoped_api(self) -> None:
+        provider = Mock()
+        provider.get_qr_code = AsyncMock(
+            return_value=QRCodeResult(
+                qr_code="cXItY29kZS1pbWFnZQ==",
+                pairing_code="1234-5678",
+                status=ChannelStatus.REQUIRES_QR,
+            )
+        )
+        with (
+            patch.object(
+                settings,
+                "evolution_go_instance_tokens",
+                {"tenant-a": "token-a", "tenant-b": "token-b"},
+            ),
+            patch("app.channels.router.get_provider", return_value=provider),
+        ):
+            response = self.client.post(
+                f"/api/v1/channels/{self.tenant_a.channel_id}/connect",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "requires_qr")
+        self.assertEqual(response.json()["pairing_code"], "1234-5678")
+        provider.get_qr_code.assert_awaited_once()
+        with SessionLocal() as db:
+            channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.id == self.tenant_a.channel_id,
+                    WhatsAppChannel.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(channel.status, ChannelStatus.REQUIRES_QR)
+
     def test_cross_tenant_ids_are_rejected_by_every_operational_route(self) -> None:
         tenant_b = self.tenant_b
         headers = self.headers_a
@@ -104,6 +179,10 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             ),
             self.client.get(
                 f"/api/v1/channels/{tenant_b.channel_id}/qr",
+                headers=headers,
+            ),
+            self.client.post(
+                f"/api/v1/channels/{tenant_b.channel_id}/connect",
                 headers=headers,
             ),
             self.client.get(

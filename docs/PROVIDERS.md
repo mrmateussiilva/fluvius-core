@@ -18,7 +18,9 @@ Os DTOs normalizam confirmação de envio, status do canal, QR/pairing code e me
 
 ## EvolutionGoProvider
 
-É a implementação inicial. Usa `httpx`, `EVOLUTION_GO_BASE_URL` e `EVOLUTION_GO_API_KEY`. A chave é enviada no header `apikey` e nunca deve aparecer em logs. Na versão 0.7.2, as rotas de dados confirmadas são `/send/text`, `/send/media`, `/instance/status` e `/instance/qr`; o middleware resolve a instância pelo token do header. Cada canal informa `provider_config.instance_name` somente como referência não secreta.
+É a implementação inicial. Usa `httpx`, `EVOLUTION_GO_BASE_URL` e credenciais mantidas no ambiente. `EVOLUTION_GO_INSTANCE_TOKENS` é um mapa JSON entre `provider_config.instance_name` e o token da instância; `EVOLUTION_GO_API_KEY` permanece como fallback compatível para uma única instância. A chave resolvida é enviada no header `apikey` e nunca deve aparecer em logs ou respostas. Na versão 0.7.2, as rotas de dados confirmadas são `/send/text`, `/send/media`, `/instance/status` e `/instance/qr`; o middleware resolve a instância pelo token do header.
+
+A mesma credencial não pode ser associada a canais diferentes, mesmo quando referências distintas apontam por engano para o mesmo token. O banco guarda somente o fingerprint SHA-256 do token e aplica unicidade por provider; o segredo continua apenas no ambiente. `ChannelResponse` filtra `provider_config` e devolve somente `instance_name`, inclusive para registros antigos.
 
 A imagem local padrão é `evoapicloud/evolution-go:0.7.2`, substituível por `EVOLUTION_GO_IMAGE`. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e pode exigir `EVOLUTION_OPERATOR_EMAIL` ou ativação pelo Manager.
 
@@ -38,7 +40,7 @@ A instância é conectada com uma URL por canal e as assinaturas `MESSAGE`, `CON
 http://api:8000/api/v1/webhooks/whatsapp/evolution_go/{channel_id}
 ```
 
-Ao consultar status ou QR pela API, o adapter reaplica essa configuração por meio de `/instance/connect`. Assim, uma instância apagada e recriada com o mesmo nome recupera webhook e assinaturas quando o operador usa **Reconectar WhatsApp**. A base interna é configurada por `EVOLUTION_GO_WEBHOOK_BASE_URL`; em Docker local, o padrão é `http://api:8000`.
+Ao iniciar ou renovar o QR por `POST /api/v1/channels/{id}/connect`, o adapter reaplica essa configuração por meio de `/instance/connect`. A consulta periódica de status não reconfigura o webhook. Assim, uma instância apagada e recriada com o mesmo nome recupera webhook e assinaturas quando o operador abre novamente o assistente de conexão. A base interna é configurada por `EVOLUTION_GO_WEBHOOK_BASE_URL`; em Docker local, o padrão é `http://api:8000`.
 
 ### DNS no ambiente local
 
@@ -46,7 +48,7 @@ O Evolution Go precisa resolver e acessar `web.whatsapp.com` para obter a versã
 
 Se a rede bloquear resolvedores públicos, configure esses valores no `.env` com os servidores permitidos pela infraestrutura. Erros contendo `lookup web.whatsapp.com on 127.0.0.11:53` indicam falha de DNS do Docker, não credencial ou número inválido.
 
-Ao apagar e recriar uma instância, atualize `EVOLUTION_GO_API_KEY` com o novo token e reinicie a API. O `provider_config.instance_name` do canal também deve coincidir exatamente com o nome da nova instância.
+Ao apagar e recriar uma instância, atualize seu token em `EVOLUTION_GO_INSTANCE_TOKENS` — ou em `EVOLUTION_GO_API_KEY` no modo de instância única — e reinicie a API. O `provider_config.instance_name` do canal deve coincidir exatamente com a chave do mapa.
 
 Essa versão não envia header customizado no webhook. Ela inclui `instanceToken` no corpo; o adapter compara esse valor com `EVOLUTION_GO_API_KEY` em tempo constante. O token é removido do payload antes de gravar `provider_events`. O header `X-Webhook-Secret` continua aceito como alternativa para providers capazes de configurá-lo.
 
@@ -69,7 +71,7 @@ O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/av
 A documentação pública e o Swagger da linha Evolution Go estão evoluindo. Antes do primeiro teste integrado/produção, confirmar contra o Swagger da imagem efetivamente fixada:
 
 - compatibilidade das rotas ao trocar a imagem (0.7.2 usa `/send/text` e `/send/media`);
-- armazenamento seguro de um token por canal para suportar múltiplas instâncias; o environment atual atende uma instância por processo;
+- substituir o mapa de tokens no ambiente por referências a um cofre de segredos antes de permitir gestão dinâmica de credenciais;
 - schema exato de confirmação de `SendMedia`;
 - validade/cache das URLs de avatar e latência de `/user/info` em diferentes contas;
 - eventos de falha de entrega e os códigos de erro associados (os recibos `Delivered`/`Read` estão confirmados);

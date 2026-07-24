@@ -39,7 +39,7 @@ Serviços locais:
 - Healthcheck: http://localhost:8000/health
 - Evolution Go/Manager: http://localhost:8080
 
-Antes de usar o gateway, ajuste os segredos do `.env` e conclua a ativação exigida pela versão do Evolution Go. Na versão 0.7.2, `EVOLUTION_GO_GLOBAL_API_KEY` administra o gateway e `EVOLUTION_GO_API_KEY` deve receber o token da instância usada pelo Fluvius. O nome da instância continua registrado em `provider_config.instance_name` como referência não secreta.
+Antes de usar o gateway, ajuste os segredos do `.env` e conclua a ativação exigida pela versão do Evolution Go. Na versão 0.7.2, `EVOLUTION_GO_GLOBAL_API_KEY` administra o gateway e `EVOLUTION_GO_API_KEY` recebe o token no modo compatível de instância única. Para múltiplas instâncias, `EVOLUTION_GO_INSTANCE_TOKENS` contém um mapa JSON entre o nome não secreto usado pelo canal e seu token. A tela **Canais do WhatsApp** inicia a conexão, exibe QR/código de pareamento e acompanha o status sem enviar credenciais ao navegador.
 
 ## Comandos principais
 

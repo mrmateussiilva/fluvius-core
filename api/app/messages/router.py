@@ -10,6 +10,7 @@ from app.attachments.service import MAX_MEDIA_BYTES, message_type_for_upload
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
+    ChannelProvider,
     ChannelStatus,
     MessageDirection,
     MessageStatus,
@@ -31,11 +32,14 @@ from app.database import get_db
 from app.messages.models import Message
 from app.messages.schemas import MessageCreate
 from app.providers.base import SendResult
+from app.providers.evolution_credentials import (
+    ProviderConfigurationError,
+    claim_evolution_credential,
+)
 from app.providers.factory import get_provider
 from app.providers.status_updates import reconcile_pending_status_events
 from app.realtime.manager import realtime_manager
 from app.storage.local import LocalStorageProvider
-
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
@@ -81,6 +85,14 @@ def conversation_delivery_context(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Conversa inconsistente")
     if channel.status != ChannelStatus.CONNECTED:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OFFLINE_MESSAGE)
+    if channel.provider == ChannelProvider.EVOLUTION_GO:
+        try:
+            claim_evolution_credential(db, channel)
+        except ProviderConfigurationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
     return conversation, channel, contact
 
 
@@ -196,7 +208,6 @@ async def deliver_message(
     channel: WhatsAppChannel,
     contact: Contact,
 ) -> list[Message]:
-    provider = get_provider(channel.provider)
     reply_to = (
         get_tenant_message(
             db,
@@ -208,6 +219,7 @@ async def deliver_message(
         else None
     )
     try:
+        provider = get_provider(channel.provider, channel)
         participant = None
         if reply_to:
             participant = (
@@ -249,7 +261,7 @@ async def deliver_message(
                 idempotency_key=str(message.id),
             )
         apply_send_result(message, result)
-    except NotImplementedError as exc:
+    except (NotImplementedError, ProviderConfigurationError) as exc:
         message.status = MessageStatus.FAILED
         message.error = str(exc)
         message.sent_at = None

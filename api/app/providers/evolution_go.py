@@ -145,7 +145,6 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     async def get_status(self, channel: WhatsAppChannel) -> ChannelStatusResult:
         try:
-            await self._configure_webhook(channel)
             response = await self._request("GET", "/instance/status")
             response.raise_for_status()
             return self._parse_status(response.json())

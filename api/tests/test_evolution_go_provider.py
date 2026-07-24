@@ -3,8 +3,8 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import UUID
 from unittest.mock import AsyncMock, patch
+from uuid import UUID
 
 import httpx
 
@@ -19,7 +19,6 @@ from app.config import settings
 from app.providers.base import IgnoredWebhookEvent
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.status_updates import can_advance_message_status
-
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "evolution_go" / "0.7.2"
 
@@ -274,6 +273,22 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         result = self.provider._parse_status(load_fixture("status-connected.json"))
         self.assertEqual(result.status, ChannelStatus.CONNECTED)
         self.assertEqual(result.raw_status, "connected=true,loggedIn=true")
+
+    def test_status_poll_does_not_reconfigure_the_webhook(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("GET", "http://evolution-go:8080/instance/status"),
+            json=load_fixture("status-connected.json"),
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(self.provider.get_status(None))
+
+        self.assertEqual(result.status, ChannelStatus.CONNECTED)
+        request.assert_awaited_once_with("GET", "/instance/status")
 
     def test_qr_reports_connected_when_session_is_already_logged_in(self) -> None:
         connect_response = httpx.Response(

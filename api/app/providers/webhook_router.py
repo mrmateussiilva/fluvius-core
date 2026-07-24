@@ -20,6 +20,10 @@ from app.conversations.models import Conversation
 from app.database import get_db
 from app.messages.models import Message
 from app.providers.base import IgnoredWebhookEvent
+from app.providers.evolution_credentials import (
+    ProviderConfigurationError,
+    claim_evolution_credential,
+)
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
 from app.providers.status_updates import apply_message_status_update
@@ -44,13 +48,6 @@ async def whatsapp_webhook(
     x_webhook_secret: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
-    provider_adapter = get_provider(provider)
-    if not provider_adapter.verify_webhook(payload, x_webhook_secret, settings.webhook_secret):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Webhook não autorizado",
-        )
-
     channel = db.scalar(
         select(WhatsAppChannel).where(
             WhatsAppChannel.id == channel_id, WhatsAppChannel.provider == provider
@@ -58,6 +55,21 @@ async def whatsapp_webhook(
     )
     if channel is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canal não encontrado")
+
+    try:
+        if channel.provider == ChannelProvider.EVOLUTION_GO:
+            claim_evolution_credential(db, channel)
+        provider_adapter = get_provider(provider, channel)
+    except ProviderConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    if not provider_adapter.verify_webhook(payload, x_webhook_secret, settings.webhook_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Webhook não autorizado",
+        )
 
     event_type = str(payload.get("event") or payload.get("type") or "unknown")
     event_id = provider_adapter.webhook_event_id(payload)
@@ -278,7 +290,7 @@ async def _process_channel_status(channel: WhatsAppChannel, payload: dict, db: S
     elif event_name in {"disconnected", "loggedout"}:
         channel.status = ChannelStatus.DISCONNECTED
     elif raw:
-        mapper = get_provider(channel.provider)
+        mapper = get_provider(channel.provider, channel)
         map_status = getattr(mapper, "_map_status", None)
         channel.status = map_status(raw) if map_status else ChannelStatus.DISCONNECTED
     await realtime_manager.broadcast(

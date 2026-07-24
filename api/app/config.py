@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     evolution_go_base_url: str = "http://evolution-go:8080"
     evolution_go_webhook_base_url: str = "http://api:8000"
     evolution_go_api_key: str = ""
+    evolution_go_instance_tokens: dict[str, str] = Field(default_factory=dict)
     webhook_secret: str = ""
 
     model_config = SettingsConfigDict(

@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from app.attachments.models import MessageAttachment
 from app.attachments.service import persist_incoming_attachment
+from app.channels.models import WhatsAppChannel
 from app.database import SessionLocal, load_all_models
 from app.messages.models import Message
 from app.providers.factory import get_provider
@@ -43,7 +44,15 @@ async def backfill_media() -> None:
             )
             if existing:
                 continue
-            provider = get_provider(event.provider)
+            channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.id == event.channel_id,
+                    WhatsAppChannel.tenant_id == event.tenant_id,
+                )
+            )
+            if channel is None:
+                continue
+            provider = get_provider(event.provider, channel)
             try:
                 incoming = await provider.handle_webhook(event.payload)
                 attachment, error = await persist_incoming_attachment(
