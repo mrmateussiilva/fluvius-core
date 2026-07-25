@@ -9,12 +9,12 @@ const props = defineProps<{
   currentUserId: string | null
 }>()
 const emit = defineEmits<{ select: [id: string] }>()
-const activeStatus = ref<ConversationStatus>('open')
+const activeStatus = ref<ConversationStatus>('new')
 const search = ref('')
 const tabs: { label: string; value: ConversationStatus }[] = [
-  { label: 'Meus atendimentos', value: 'open' },
-  { label: 'Novos clientes', value: 'new' },
-  { label: 'Finalizados', value: 'closed' },
+  { label: 'Aguardando', value: 'new' },
+  { label: 'Em atendimento', value: 'open' },
+  { label: 'Finalizadas', value: 'closed' },
 ]
 
 function belongsToTab(conversation: Conversation, status: ConversationStatus) {
