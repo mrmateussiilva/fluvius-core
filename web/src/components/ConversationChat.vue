@@ -140,10 +140,29 @@ function dayKey(value: string) {
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
 }
 
-function showDateSeparator(index: number) {
-  if (index === 0) return true
-  return dayKey(props.messages[index].created_at) !== dayKey(props.messages[index - 1].created_at)
-}
+const messageDayGroups = computed(() => {
+  const groups: {
+    key: string
+    createdAt: string
+    items: { message: Message; index: number }[]
+  }[] = []
+
+  props.messages.forEach((message, index) => {
+    const key = dayKey(message.created_at)
+    const currentGroup = groups.at(-1)
+    if (!currentGroup || currentGroup.key !== key) {
+      groups.push({
+        key,
+        createdAt: message.created_at,
+        items: [{ message, index }],
+      })
+      return
+    }
+    currentGroup.items.push({ message, index })
+  })
+
+  return groups
+})
 
 function belongsToSameGroup(first: Message, second: Message) {
   return (
@@ -487,35 +506,43 @@ function previewMedia(
           @scroll.passive="updateScrollState"
         >
           <div class="mx-auto w-full max-w-5xl">
-            <template v-for="(message, index) in messages" :key="message.id">
+            <section
+              v-for="dayGroup in messageDayGroups"
+              :key="dayGroup.key"
+              class="relative pb-px"
+            >
               <div
-                v-if="showDateSeparator(index)"
                 class="sticky top-2 z-10 flex justify-center py-2.5"
               >
                 <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm">
-                  {{ dateLabel(message.created_at) }}
+                  {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
-              <div
-                :id="`message-${message.id}`"
-                class="rounded-lg transition-colors duration-500"
-                :class="[
-                  messageSpacing(index),
-                  highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : '',
-                ]"
+              <template
+                v-for="{ message, index } in dayGroup.items"
+                :key="message.id"
               >
-                <MessageBubble
-                  :message="message"
-                  :retrying="retryingMessageIds.includes(message.id)"
-                  :group-start="isGroupStart(index)"
-                  :group-end="isGroupEnd(index)"
-                  @reply="replyingTo = $event"
-                  @jump-to="jumpToMessage"
-                  @preview="previewMedia"
-                  @retry="emit('retry', $event)"
-                />
-              </div>
-            </template>
+                <div
+                  :id="`message-${message.id}`"
+                  class="rounded-lg transition-colors duration-500"
+                  :class="[
+                    messageSpacing(index),
+                    highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : '',
+                  ]"
+                >
+                  <MessageBubble
+                    :message="message"
+                    :retrying="retryingMessageIds.includes(message.id)"
+                    :group-start="isGroupStart(index)"
+                    :group-end="isGroupEnd(index)"
+                    @reply="replyingTo = $event"
+                    @jump-to="jumpToMessage"
+                    @preview="previewMedia"
+                    @retry="emit('retry', $event)"
+                  />
+                </div>
+              </template>
+            </section>
             <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-[#667781]">
               <div class="grid h-14 w-14 place-items-center rounded-full bg-white/70 shadow-sm">
                 <MessageCircle class="h-6 w-6 text-fluvius-700" />
