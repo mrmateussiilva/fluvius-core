@@ -33,6 +33,10 @@ async function refreshVisibleConversation() {
   await store.refreshMessages(store.selectedId)
 }
 
+function backToConversationList() {
+  store.selectedId = null
+}
+
 onMounted(async () => {
   await auth.restore()
   await store.loadConversations()
@@ -49,12 +53,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full min-h-0">
     <ConversationList
+      :class="store.selectedId ? 'hidden md:flex' : 'flex'"
       :conversations="store.conversations"
       :selected-id="store.selectedId"
       :current-user-id="auth.user?.id || null"
       @select="store.selectConversation"
     />
     <ConversationChat
+      :class="store.selectedId ? 'flex' : 'hidden md:flex'"
       :conversation="store.selected"
       :messages="store.selectedMessages"
       :contact="store.selectedContact"
@@ -72,6 +78,7 @@ onBeforeUnmount(() => {
       @send-attachment="sendAttachment"
       @retry="store.retryMessage"
       @read="store.markConversationRead"
+      @back="backToConversationList"
       @show-contact="store.loadSelectedContact()"
       @refresh-contact="store.loadSelectedContact(true)"
     />

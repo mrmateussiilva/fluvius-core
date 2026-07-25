@@ -60,7 +60,7 @@ function formatDate(value: string | null | undefined) {
 </script>
 
 <template>
-  <aside class="flex h-full w-[340px] shrink-0 flex-col border-l border-[#d8dcdf] bg-[#f7f8f8]">
+  <aside class="absolute inset-0 z-30 flex h-full w-full shrink-0 flex-col border-l border-[#d8dcdf] bg-[#f7f8f8] xl:static xl:w-[340px]">
     <header class="flex min-h-[64px] items-center justify-between border-b border-[#d8dcdf] bg-[#f0f2f5] px-4 py-3">
       <h2 class="text-sm font-semibold text-[#111b21]">Dados do contato</h2>
       <button class="rounded-full p-2 text-[#667781] transition hover:bg-black/5" title="Fechar" @click="emit('close')">

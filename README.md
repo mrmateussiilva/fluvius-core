@@ -99,6 +99,6 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 - No texto, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
 - O composer e a API bloqueiam envio com o canal offline.
-- O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível.
+- O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia e anexos por seleção, colagem ou arrastar e soltar.
 - O worker RQ está disponível, mas o envio ainda é síncrono para manter simples a confirmação nesta etapa.
 - Payloads e rotas exatas do Evolution Go devem ser validados contra o Swagger da imagem escolhida antes de produção.

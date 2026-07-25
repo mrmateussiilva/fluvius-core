@@ -112,7 +112,7 @@ function timeLabel(value: string | null) {
 </script>
 
 <template>
-  <aside class="flex h-full w-[372px] shrink-0 flex-col border-r border-[#d8dcdf] bg-white">
+  <aside class="flex h-full w-full shrink-0 flex-col border-r border-[#d8dcdf] bg-white md:w-[372px]">
     <div class="border-b border-[#e6e9eb] bg-[#f7f8f8] px-4 pb-3 pt-4">
       <div class="flex items-center justify-between">
         <div>

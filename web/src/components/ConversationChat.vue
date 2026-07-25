@@ -9,15 +9,23 @@ import {
 } from 'vue'
 import {
   ArrowDown,
+  ArrowLeft,
   CheckCircle2,
   LockKeyhole,
   MessageCircle,
   RotateCcw,
   UserPlus,
 } from 'lucide-vue-next'
-import type { ContactDetail, Conversation, Message } from '../api/types'
+import type {
+  ContactDetail,
+  Conversation,
+  Message,
+  MessageAttachment,
+  MessageType,
+} from '../api/types'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ContactDetailsPanel from './ContactDetailsPanel.vue'
+import MediaLightbox from './MediaLightbox.vue'
 import MessageBubble from './MessageBubble.vue'
 import MessageComposer from './MessageComposer.vue'
 
@@ -50,6 +58,7 @@ const emit = defineEmits<{
   ]
   retry: [messageId: string]
   read: [conversationId: string, throughMessageId: string]
+  back: []
   showContact: []
   refreshContact: []
 }>()
@@ -57,6 +66,10 @@ const messageList = ref<HTMLElement | null>(null)
 const contactPanelOpen = ref(false)
 const replyingTo = ref<Message | null>(null)
 const highlightedMessageId = ref<string | null>(null)
+const mediaPreview = ref<{
+  attachment: MessageAttachment
+  messageType: MessageType
+} | null>(null)
 const isNearBottom = ref(true)
 const newMessagesBelow = ref(0)
 const scrollPositions = new Map<
@@ -66,6 +79,7 @@ const scrollPositions = new Map<
 const knownMessageIds = new Map<string, Set<string>>()
 let scrollReadyConversationId: string | null = null
 const BOTTOM_THRESHOLD = 96
+const MESSAGE_GROUP_WINDOW = 5 * 60 * 1000
 
 const contactDisplayName = computed(
   () => props.contact?.display_name || props.conversation?.contact_name || props.conversation?.contact_phone || '',
@@ -129,6 +143,35 @@ function dayKey(value: string) {
 function showDateSeparator(index: number) {
   if (index === 0) return true
   return dayKey(props.messages[index].created_at) !== dayKey(props.messages[index - 1].created_at)
+}
+
+function belongsToSameGroup(first: Message, second: Message) {
+  return (
+    first.direction === second.direction &&
+    dayKey(first.created_at) === dayKey(second.created_at) &&
+    Math.abs(
+      new Date(second.created_at).getTime() -
+        new Date(first.created_at).getTime(),
+    ) <= MESSAGE_GROUP_WINDOW
+  )
+}
+
+function isGroupStart(index: number) {
+  return (
+    index === 0 ||
+    !belongsToSameGroup(props.messages[index - 1], props.messages[index])
+  )
+}
+
+function isGroupEnd(index: number) {
+  return (
+    index === props.messages.length - 1 ||
+    !belongsToSameGroup(props.messages[index], props.messages[index + 1])
+  )
+}
+
+function messageSpacing(index: number) {
+  return isGroupStart(index) ? 'mt-2' : 'mt-[2px]'
 }
 
 function dateLabel(value: string) {
@@ -200,6 +243,7 @@ watch(
     scrollReadyConversationId = null
     newMessagesBelow.value = 0
     replyingTo.value = null
+    mediaPreview.value = null
     if (contactPanelOpen.value) emit('showContact')
     if (!conversationId) return
     const previousIds = knownMessageIds.get(conversationId)
@@ -351,55 +395,82 @@ function jumpToMessage(messageId: string) {
     if (highlightedMessageId.value === messageId) highlightedMessageId.value = null
   }, 1600)
 }
+
+function previewMedia(
+  attachment: MessageAttachment,
+  messageType: MessageType,
+) {
+  mediaPreview.value = { attachment, messageType }
+}
 </script>
 
 <template>
-  <div v-if="conversation" class="flex min-w-0 flex-1">
+  <div v-if="conversation" class="relative flex min-w-0 flex-1">
     <section class="flex min-w-0 flex-1 flex-col bg-[#efeae2]">
       <header class="z-10 flex min-h-[64px] items-center justify-between border-b border-[#d8dcdf] bg-[#f0f2f5] px-4 py-2 shadow-sm shadow-slate-900/[0.03]">
-        <button
-          class="flex min-w-0 items-center gap-3 rounded-lg text-left transition hover:opacity-75"
-          @click="toggleContactPanel"
-        >
-          <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-fluvius-100 to-emerald-200 text-xs font-semibold text-fluvius-800 ring-1 ring-black/5">
-            {{ contactInitials }}
-          </div>
-          <div class="min-w-0">
-            <h2 class="truncate text-[15px] font-semibold text-[#111b21]">
-              {{ conversation.contact_name || conversation.contact_phone }}
-            </h2>
-            <p class="truncate text-xs text-[#667781]">
-              {{ conversation.contact_phone }} · {{ ownershipLabel }}
-            </p>
-          </div>
-        </button>
+        <div class="flex min-w-0 items-center">
+          <button
+            class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#54656f] transition hover:bg-black/5 md:hidden"
+            title="Voltar para conversas"
+            @click="emit('back')"
+          >
+            <ArrowLeft class="h-5 w-5" />
+          </button>
+          <button
+            class="flex min-w-0 items-center gap-3 rounded-lg text-left transition hover:opacity-75"
+            @click="toggleContactPanel"
+          >
+            <div class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-fluvius-100 to-emerald-200 text-xs font-semibold text-fluvius-800 ring-1 ring-black/5">
+              <img
+                v-if="contact?.profile_picture_url"
+                :src="contact.profile_picture_url"
+                :alt="contactDisplayName"
+                class="h-full w-full object-cover"
+              />
+              <span v-else>{{ contactInitials }}</span>
+            </div>
+            <div class="min-w-0">
+              <h2 class="truncate text-[15px] font-semibold text-[#111b21]">
+                {{ conversation.contact_name || conversation.contact_phone }}
+              </h2>
+              <p class="truncate text-[11px] text-[#667781] sm:text-xs">
+                <span class="hidden sm:inline">{{ conversation.contact_phone }} · </span>{{ ownershipLabel }}
+              </p>
+            </div>
+          </button>
+        </div>
         <div class="flex items-center gap-2">
-          <ChannelStatusBadge :status="conversation.channel_status" />
+          <ChannelStatusBadge class="hidden xl:inline-flex" :status="conversation.channel_status" />
           <button
             v-if="canClaim"
-            class="flex items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-3 py-2 text-xs font-medium text-[#3b4a54] shadow-sm transition hover:bg-[#f7f8f8]"
+            class="flex h-9 items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-2.5 text-xs font-medium text-[#3b4a54] shadow-sm transition hover:bg-[#f7f8f8] sm:px-3"
             :disabled="operationLoading"
+            :title="conversation.status === 'closed' ? 'Reabrir atendimento' : 'Assumir atendimento'"
             @click="emit('assign')"
           >
             <RotateCcw v-if="conversation.status === 'closed'" class="h-4 w-4" />
             <UserPlus v-else class="h-4 w-4" />
-            {{ conversation.status === 'closed' ? 'Reabrir' : 'Assumir' }}
+            <span class="hidden sm:inline">
+              {{ conversation.status === 'closed' ? 'Reabrir' : 'Assumir' }}
+            </span>
           </button>
           <button
             v-if="canOperate"
-            class="flex items-center gap-1.5 rounded-lg bg-fluvius-700 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800"
+            class="flex h-9 items-center gap-1.5 rounded-lg bg-fluvius-700 px-2.5 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 sm:px-3"
             :disabled="operationLoading"
+            title="Finalizar atendimento"
             @click="emit('close')"
           >
             <CheckCircle2 class="h-4 w-4" />
-            Finalizar
+            <span class="hidden sm:inline">Finalizar</span>
           </button>
           <span
             v-if="conversation.status === 'open' && !canOperate"
-            class="flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-100"
+            class="flex h-9 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 text-xs font-medium text-amber-800 ring-1 ring-amber-100 sm:px-3"
+            title="Atendimento atribuído a outro agente"
           >
             <LockKeyhole class="h-3.5 w-3.5" />
-            Outro agente
+            <span class="hidden lg:inline">Outro agente</span>
           </span>
         </div>
       </header>
@@ -412,26 +483,35 @@ function jumpToMessage(messageId: string) {
       <div class="relative min-h-0 flex-1">
         <div
           ref="messageList"
-          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-5 py-4 sm:px-8"
+          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
           @scroll.passive="updateScrollState"
         >
-          <div class="mx-auto w-full max-w-5xl space-y-2">
+          <div class="mx-auto w-full max-w-5xl">
             <template v-for="(message, index) in messages" :key="message.id">
-              <div v-if="showDateSeparator(index)" class="flex justify-center py-2.5">
-                <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03]">
+              <div
+                v-if="showDateSeparator(index)"
+                class="sticky top-2 z-10 flex justify-center py-2.5"
+              >
+                <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm">
                   {{ dateLabel(message.created_at) }}
                 </span>
               </div>
               <div
                 :id="`message-${message.id}`"
                 class="rounded-lg transition-colors duration-500"
-                :class="highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : ''"
+                :class="[
+                  messageSpacing(index),
+                  highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : '',
+                ]"
               >
                 <MessageBubble
                   :message="message"
                   :retrying="retryingMessageIds.includes(message.id)"
+                  :group-start="isGroupStart(index)"
+                  :group-end="isGroupEnd(index)"
                   @reply="replyingTo = $event"
                   @jump-to="jumpToMessage"
+                  @preview="previewMedia"
                   @retry="emit('retry', $event)"
                 />
               </div>
@@ -474,6 +554,12 @@ function jumpToMessage(messageId: string) {
       :error="contactError"
       @close="contactPanelOpen = false"
       @refresh="emit('refreshContact')"
+    />
+    <MediaLightbox
+      v-if="mediaPreview"
+      :attachment="mediaPreview.attachment"
+      :message-type="mediaPreview.messageType"
+      @close="mediaPreview = null"
     />
   </div>
   <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-[#f7f8f8] px-6 text-center">

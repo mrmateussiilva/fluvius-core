@@ -1,6 +1,17 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import { FileText, Paperclip, Reply, Send, X, Zap } from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import {
+  FileText,
+  Film,
+  Image as ImageIcon,
+  Music,
+  Paperclip,
+  Reply,
+  Send,
+  UploadCloud,
+  X,
+  Zap,
+} from 'lucide-vue-next'
 import type { Message } from '../api/types'
 import QuickReplyPicker from './QuickReplyPicker.vue'
 
@@ -26,7 +37,26 @@ const textarea = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref<string | null>(null)
+const filePreviewUrl = ref<string | null>(null)
+const dragActive = ref(false)
 const isDisabled = computed(() => Boolean(props.disabledReason))
+const selectedFileKind = computed(() => {
+  const file = selectedFile.value
+  if (!file) return 'document'
+  if (file.type.startsWith('image/')) return 'image'
+  if (file.type.startsWith('video/')) return 'video'
+  if (file.type.startsWith('audio/')) return 'audio'
+  return 'document'
+})
+const selectedFileKindLabel = computed(
+  () =>
+    ({
+      image: 'Imagem',
+      video: 'Vídeo',
+      audio: 'Áudio',
+      document: 'Documento',
+    })[selectedFileKind.value],
+)
 let loadingDraft = false
 
 watch(
@@ -64,6 +94,18 @@ watch(
   { flush: 'sync' },
 )
 
+watch(selectedFile, (file) => {
+  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
+  filePreviewUrl.value =
+    file && (file.type.startsWith('image/') || file.type.startsWith('video/'))
+      ? URL.createObjectURL(file)
+      : null
+})
+
+onBeforeUnmount(() => {
+  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
+})
+
 function resizeTextarea() {
   if (!textarea.value) return
   textarea.value.style.height = '44px'
@@ -100,12 +142,15 @@ function submit() {
 
 function selectFile(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0] || null
+  setFile(input.files?.[0] || null)
+}
+
+function setFile(file: File | null) {
   fileError.value = null
   if (file && file.size > 25 * 1024 * 1024) {
     fileError.value = 'O arquivo deve ter até 25 MB.'
-    input.value = ''
     selectedFile.value = null
+    if (fileInput.value) fileInput.value.value = ''
     return
   }
   selectedFile.value = file
@@ -130,10 +175,52 @@ function useReply(content: string) {
     textarea.value?.focus()
   })
 }
+
+function handlePaste(event: ClipboardEvent) {
+  if (isDisabled.value || props.sending) return
+  const file = Array.from(event.clipboardData?.files || [])[0]
+  if (!file) return
+  event.preventDefault()
+  setFile(file)
+}
+
+function handleDragEnter() {
+  if (!isDisabled.value && !props.sending) dragActive.value = true
+}
+
+function handleDragLeave(event: DragEvent) {
+  const container = event.currentTarget as HTMLElement
+  if (!event.relatedTarget || !container.contains(event.relatedTarget as Node)) {
+    dragActive.value = false
+  }
+}
+
+function handleDrop(event: DragEvent) {
+  dragActive.value = false
+  if (isDisabled.value || props.sending) return
+  const file = event.dataTransfer?.files?.[0] || null
+  if (file) setFile(file)
+}
 </script>
 
 <template>
-  <div class="border-t border-[#d8dcdf] bg-[#f0f2f5] px-4 py-2.5">
+  <div
+    class="relative border-t border-[#d8dcdf] bg-[#f0f2f5] px-3 py-2.5 sm:px-4"
+    @dragenter.prevent="handleDragEnter"
+    @dragover.prevent
+    @dragleave.prevent="handleDragLeave"
+    @drop.prevent="handleDrop"
+  >
+    <div
+      v-if="dragActive"
+      class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded-xl border-2 border-dashed border-fluvius-500 bg-fluvius-50/95 text-center shadow-lg backdrop-blur-sm"
+    >
+      <div>
+        <UploadCloud class="mx-auto h-8 w-8 text-fluvius-700" />
+        <p class="mt-2 text-sm font-semibold text-fluvius-800">Solte para anexar</p>
+        <p class="mt-0.5 text-xs text-fluvius-700">Imagem, vídeo, áudio ou documento · até 25 MB</p>
+      </div>
+    </div>
     <p v-if="disabledReason" class="mx-auto mb-2.5 max-w-5xl rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-800 ring-1 ring-amber-100">
       {{ disabledReason }}
     </p>
@@ -164,16 +251,41 @@ function useReply(content: string) {
     </div>
     <div
       v-if="selectedFile"
-      class="mx-auto mb-2 flex max-w-5xl items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-black/5"
+      class="mx-auto mb-2 flex max-w-5xl items-center gap-3 overflow-hidden rounded-xl bg-white p-2 shadow-sm ring-1 ring-black/5"
     >
-      <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-fluvius-50 text-fluvius-700">
-        <FileText class="h-4 w-4" />
+      <div class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-fluvius-50 text-fluvius-700">
+        <img
+          v-if="selectedFileKind === 'image' && filePreviewUrl"
+          :src="filePreviewUrl"
+          :alt="selectedFile.name"
+          class="h-full w-full object-cover"
+        />
+        <video
+          v-else-if="selectedFileKind === 'video' && filePreviewUrl"
+          :src="filePreviewUrl"
+          class="h-full w-full object-cover"
+          muted
+        />
+        <Music v-else-if="selectedFileKind === 'audio'" class="h-5 w-5" />
+        <Film v-else-if="selectedFileKind === 'video'" class="h-5 w-5" />
+        <ImageIcon v-else-if="selectedFileKind === 'image'" class="h-5 w-5" />
+        <FileText v-else class="h-5 w-5" />
       </div>
       <div class="min-w-0 flex-1">
-        <p class="truncate text-xs font-medium text-[#111b21]">{{ selectedFile.name }}</p>
-        <p class="mt-0.5 text-[10px] text-[#667781]">{{ fileSize(selectedFile.size) }}</p>
+        <p class="truncate text-xs font-semibold text-[#111b21]">
+          {{ selectedFile.name || 'Arquivo colado' }}
+        </p>
+        <p class="mt-1 text-[10px] uppercase tracking-wide text-[#667781]">
+          {{ selectedFileKindLabel }} · {{ fileSize(selectedFile.size) }}
+        </p>
+        <p class="mt-1 text-[10px] text-[#8696a0]">Você pode adicionar uma legenda abaixo.</p>
       </div>
-      <button type="button" class="rounded-full p-1.5 text-[#667781] hover:bg-[#e9edef]" title="Remover anexo" @click="clearFile">
+      <button
+        type="button"
+        class="rounded-full p-2 text-[#667781] transition hover:bg-[#e9edef]"
+        title="Remover anexo"
+        @click="clearFile"
+      >
         <X class="h-4 w-4" />
       </button>
     </div>
@@ -215,6 +327,7 @@ function useReply(content: string) {
         :disabled="isDisabled"
         @input="resizeTextarea"
         @keydown.enter.exact.prevent="submit"
+        @paste="handlePaste"
       />
       <button
         class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white shadow-sm transition hover:bg-fluvius-700 disabled:cursor-not-allowed disabled:bg-[#c6cccf] disabled:shadow-none"
