@@ -46,6 +46,16 @@ class IncomingMessageResult(BaseModel):
     raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class IncomingMessageEditResult(BaseModel):
+    provider_event_id: str
+    target_provider_message_id: str
+    from_number: str
+    direction: MessageDirection = MessageDirection.INCOMING
+    body: str | None = None
+    timestamp: datetime
+    raw_payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class MessageStatusUpdateResult(BaseModel):
     provider_message_ids: list[str]
     status: MessageStatus
@@ -132,5 +142,7 @@ class WhatsAppProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def handle_webhook(self, payload: dict[str, Any]) -> IncomingMessageResult:
+    async def handle_webhook(
+        self, payload: dict[str, Any]
+    ) -> IncomingMessageResult | IncomingMessageEditResult:
         raise NotImplementedError

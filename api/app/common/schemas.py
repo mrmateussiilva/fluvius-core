@@ -41,4 +41,6 @@ class MessageResponse(ORMModel):
     sent_at: datetime | None
     delivered_at: datetime | None
     read_at: datetime | None
+    edited_at: datetime | None
+    edit_content_unavailable: bool
     created_at: datetime

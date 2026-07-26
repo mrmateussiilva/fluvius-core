@@ -1,0 +1,51 @@
+diff --git a/pkg/whatsmeow/service/whatsmeow.go b/pkg/whatsmeow/service/whatsmeow.go
+index 12044b0..f60d8aa 100644
+--- a/pkg/whatsmeow/service/whatsmeow.go
++++ b/pkg/whatsmeow/service/whatsmeow.go
+@@ -1135,6 +1135,46 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 	case *events.Message:
+ 		doWebhook = true
+ 		postMap["event"] = "Message"
++
++		// WhatsApp may deliver message edits as SecretEncryptedMessage. The
++		// whatsmeow client already persists the original message secret and
++		// exposes the correct decryption primitive, but Evolution Go 0.7.2
++		// forwards the encrypted protobuf without invoking it. Normalize the
++		// decrypted payload to ProtocolMessage_MESSAGE_EDIT so consumers receive
++		// both the original message ID and the edited content.
++		encryptedEdit := evt.Message.GetSecretEncryptedMessage()
++		if encryptedEdit.GetSecretEncType() == waE2E.SecretEncryptedMessage_MESSAGE_EDIT {
++			decryptedEdit, err := mycli.WAClient.DecryptSecretEncryptedMessage(context.Background(), evt)
++			if err != nil {
++				mycli.loggerWrapper.GetLogger(mycli.userID).LogWarn(
++					"[%s] Failed to decrypt message edit ID %s targeting %s: %v",
++					mycli.userID,
++					evt.Info.ID,
++					encryptedEdit.GetTargetMessageKey().GetID(),
++					err,
++				)
++			} else {
++				directProtocol := decryptedEdit.GetProtocolMessage()
++				nestedProtocol := decryptedEdit.GetEditedMessage().GetMessage().GetProtocolMessage()
++				switch {
++				case directProtocol.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
++					evt.Message = decryptedEdit
++				case nestedProtocol.GetType() == waE2E.ProtocolMessage_MESSAGE_EDIT:
++					evt.Message = decryptedEdit.GetEditedMessage().GetMessage()
++				default:
++					evt.Message = &waE2E.Message{
++						ProtocolMessage: &waE2E.ProtocolMessage{
++							Key:           encryptedEdit.GetTargetMessageKey(),
++							Type:          waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(),
++							EditedMessage: decryptedEdit,
++							TimestampMS:   proto.Int64(evt.Info.Timestamp.UnixMilli()),
++						},
++					}
++				}
++				evt.Info.Edit = types.EditAttributeMessageEdit
++			}
++		}
++
+ 		// Message received
+ 
+ 		// Log message arrival with detailed info

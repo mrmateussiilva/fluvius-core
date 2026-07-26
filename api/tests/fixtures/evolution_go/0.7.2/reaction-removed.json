@@ -1,0 +1,28 @@
+{
+  "event": "Message",
+  "instanceId": "fixture-instance-id",
+  "instanceName": "fixture-instance",
+  "data": {
+    "Info": {
+      "ID": "REACTION-EVENT-1",
+      "Chat": "5527999999999@s.whatsapp.net",
+      "Edit": "7",
+      "Type": "reaction",
+      "Sender": "5527999999999@s.whatsapp.net",
+      "IsGroup": false,
+      "IsFromMe": false,
+      "PushName": "Contato Teste",
+      "Timestamp": "2026-07-25T23:25:26-03:00"
+    },
+    "Message": {
+      "reactionMessage": {
+        "key": {
+          "ID": "ORIGINAL-MESSAGE-2",
+          "fromMe": true,
+          "remoteJID": "fixture-contact@lid"
+        },
+        "senderTimestampMS": 1785032722922
+      }
+    }
+  }
+}

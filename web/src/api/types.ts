@@ -78,6 +78,8 @@ export interface Message {
   sent_at: string | null
   delivered_at: string | null
   read_at: string | null
+  edited_at: string | null
+  edit_content_unavailable: boolean
   created_at: string
 }
 

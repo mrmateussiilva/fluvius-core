@@ -1,7 +1,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, Uuid
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.enums import MessageDirection, MessageStatus, MessageType
@@ -54,3 +64,36 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    edit_content_unavailable: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
+
+class MessageRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "message_revisions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "provider_event_id",
+            name="uq_message_revisions_provider_event",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    previous_body: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[str | None] = mapped_column(Text)
+    content_available: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -317,7 +317,14 @@ function showDetails() {
         v-else-if="!message.attachments.length"
         class="px-0.5 pr-5 text-[13px] italic text-[#667781]"
       >
-        [{{ message.message_type }}]
+        Conteúdo indisponível
+      </p>
+
+      <p
+        v-if="message.edit_content_unavailable"
+        class="mt-1 rounded-md bg-amber-50/90 px-2 py-1 text-[10.5px] leading-4 text-amber-800"
+      >
+        Editada no WhatsApp · o novo texto não foi disponibilizado pelo canal
       </p>
 
       <p
@@ -341,6 +348,7 @@ function showDetails() {
         :title="`${fullDateLabel} · ${statusLabel}`"
       >
         <span v-if="copied" class="mr-1 text-fluvius-700">Copiada</span>
+        <span v-if="message.edited_at" class="mr-0.5">editada</span>
         <time :datetime="message.sent_at || message.created_at">{{ timeLabel }}</time>
         <span v-if="message.direction === 'outgoing'" class="flex items-center" :title="statusLabel">
           <Clock3 v-if="message.status === 'pending'" class="h-3 w-3" :aria-label="statusLabel" />
@@ -395,6 +403,10 @@ function showDetails() {
           <div class="flex justify-between gap-3">
             <dt class="text-[#667781]">Lida</dt>
             <dd class="text-right">{{ dateTimeLabel(message.read_at) }}</dd>
+          </div>
+          <div v-if="message.edited_at" class="flex justify-between gap-3">
+            <dt class="text-[#667781]">Editada</dt>
+            <dd class="text-right">{{ dateTimeLabel(message.edited_at) }}</dd>
           </div>
           <div class="flex justify-between gap-3 border-t border-[#e9edef] pt-2.5">
             <dt class="text-[#667781]">Tentativas</dt>

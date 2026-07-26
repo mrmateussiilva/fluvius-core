@@ -1,0 +1,30 @@
+{
+  "event": "Message",
+  "instanceId": "fixture-instance-id",
+  "instanceName": "fixture-instance",
+  "data": {
+    "Info": {
+      "ID": "EDIT-EVENT-1",
+      "Chat": "5527999999999@s.whatsapp.net",
+      "Edit": "1",
+      "Type": "text",
+      "Sender": "5527999999999@s.whatsapp.net",
+      "IsGroup": false,
+      "IsFromMe": false,
+      "PushName": "Contato Teste",
+      "Timestamp": "2026-07-25T23:24:41-03:00"
+    },
+    "IsEdit": false,
+    "Message": {
+      "secretEncryptedMessage": {
+        "secretEncType": 2,
+        "encryptedPayloadRemoved": true,
+        "targetMessageKey": {
+          "ID": "ORIGINAL-MESSAGE-1",
+          "fromMe": true,
+          "remoteJID": "fixture-contact@lid"
+        }
+      }
+    }
+  }
+}

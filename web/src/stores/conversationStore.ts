@@ -150,6 +150,8 @@ export const useConversationStore = defineStore('conversations', {
         sent_at: null,
         delivered_at: null,
         read_at: null,
+        edited_at: null,
+        edit_content_unavailable: false,
         created_at: createdAt,
       }
       this.sendingConversationIds.push(conversationId)

@@ -16,7 +16,7 @@ from app.common.enums import (
     MessageType,
 )
 from app.config import settings
-from app.providers.base import IgnoredWebhookEvent
+from app.providers.base import IgnoredWebhookEvent, IncomingMessageEditResult
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.status_updates import can_advance_message_status
 
@@ -133,6 +133,80 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         }
         result = asyncio.run(self.provider.handle_webhook(payload))
         self.assertEqual(result.reply_to_provider_message_id, "ORIGINAL-123")
+
+    def test_parses_encrypted_edit_without_creating_an_empty_message(self) -> None:
+        result = asyncio.run(
+            self.provider.handle_webhook(
+                load_fixture("message-edited-encrypted.json")
+            )
+        )
+
+        self.assertIsInstance(result, IncomingMessageEditResult)
+        self.assertEqual(result.provider_event_id, "EDIT-EVENT-1")
+        self.assertEqual(
+            result.target_provider_message_id,
+            "ORIGINAL-MESSAGE-1",
+        )
+        self.assertIsNone(result.body)
+
+    def test_parses_plaintext_protocol_edit(self) -> None:
+        payload = message_payload()
+        payload["data"]["Info"]["ID"] = "EDIT-EVENT-2"
+        payload["data"]["Info"]["Edit"] = "1"
+        payload["data"]["Message"] = {
+            "protocolMessage": {
+                "key": {"ID": "ORIGINAL-MESSAGE-2"},
+                "editedMessage": {
+                    "extendedTextMessage": {"text": "Texto corrigido"}
+                },
+            }
+        }
+
+        result = asyncio.run(self.provider.handle_webhook(payload))
+
+        self.assertIsInstance(result, IncomingMessageEditResult)
+        self.assertEqual(
+            result.target_provider_message_id,
+            "ORIGINAL-MESSAGE-2",
+        )
+        self.assertEqual(result.body, "Texto corrigido")
+
+    def test_ignores_reaction_removal(self) -> None:
+        with self.assertRaisesRegex(
+            IgnoredWebhookEvent,
+            "Reações não geram mensagens",
+        ):
+            asyncio.run(
+                self.provider.handle_webhook(
+                    load_fixture("reaction-removed.json")
+                )
+            )
+
+    def test_sanitizes_encrypted_edit_material(self) -> None:
+        payload = message_payload()
+        payload["data"]["Message"] = {
+            "messageContextInfo": {
+                "deviceListMetadata": {"senderKeyHash": "sensitive"}
+            },
+            "secretEncryptedMessage": {
+                "encIV": "sensitive-iv",
+                "encPayload": "sensitive-payload",
+                "targetMessageKey": {"ID": "ORIGINAL-MESSAGE-3"},
+            },
+        }
+
+        sanitized = self.provider.sanitize_webhook_payload(payload)
+        message = sanitized["data"]["Message"]
+
+        self.assertNotIn(
+            "deviceListMetadata",
+            message["messageContextInfo"],
+        )
+        self.assertNotIn("encIV", message["secretEncryptedMessage"])
+        self.assertNotIn("encPayload", message["secretEncryptedMessage"])
+        self.assertTrue(
+            message["secretEncryptedMessage"]["encryptedPayloadRemoved"]
+        )
 
     def test_parses_incoming_image_file(self) -> None:
         payload = message_payload()

@@ -21,6 +21,7 @@ from app.providers.base import (
     ChannelStatusResult,
     ContactProfileResult,
     IgnoredWebhookEvent,
+    IncomingMessageEditResult,
     IncomingMessageResult,
     MessageStatusUpdateResult,
     QRCodeResult,
@@ -243,7 +244,9 @@ class EvolutionGoProvider(WhatsAppProvider):
         except (httpx.HTTPError, ValueError):
             return None
 
-    async def handle_webhook(self, payload: dict[str, Any]) -> IncomingMessageResult:
+    async def handle_webhook(
+        self, payload: dict[str, Any]
+    ) -> IncomingMessageResult | IncomingMessageEditResult:
         data = payload.get("data", payload)
         if not isinstance(data, dict):
             raise ValueError("Webhook Evolution Go com data inválido")
@@ -275,15 +278,39 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
         remote_jid = self._contact_jid(key, info, data, is_from_me=is_from_me)
         from_number = self._number_from_jid(remote_jid)
-        text = (
-            message.get("conversation")
-            or message.get("Conversation")
-            or self._dict_value(message, "extendedTextMessage", "ExtendedTextMessage").get("text")
-            or self._dict_value(message, "imageMessage", "ImageMessage").get("caption")
-            or self._dict_value(message, "documentMessage", "DocumentMessage").get("caption")
-            or self._dict_value(message, "videoMessage", "VideoMessage").get("caption")
-            or data.get("text")
+        raw_timestamp = (
+            info.get("Timestamp")
+            or info.get("timestamp")
+            or data.get("messageTimestamp")
+            or data.get("timestamp")
         )
+
+        reaction = self._dict_value(message, "reactionMessage", "ReactionMessage")
+        info_type = str(info.get("Type") or info.get("type") or "").lower()
+        if reaction or info_type == "reaction":
+            raise IgnoredWebhookEvent(
+                "Reações não geram mensagens separadas no MVP"
+            )
+
+        edit_target, edited_body = self._message_edit(message, info, data)
+        if edit_target:
+            if not message_id or not from_number:
+                raise ValueError("Webhook de edição sem ID ou remetente")
+            return IncomingMessageEditResult(
+                provider_event_id=str(message_id),
+                target_provider_message_id=edit_target,
+                from_number=from_number,
+                direction=(
+                    MessageDirection.OUTGOING
+                    if is_from_me
+                    else MessageDirection.INCOMING
+                ),
+                body=edited_body,
+                timestamp=self._timestamp(raw_timestamp),
+                raw_payload=payload,
+            )
+
+        text = self._message_text(message, data)
         (
             media_type,
             media_url,
@@ -297,15 +324,12 @@ class EvolutionGoProvider(WhatsAppProvider):
             or context_info.get("StanzaID")
             or context_info.get("stanzaId")
         )
-        raw_timestamp = (
-            info.get("Timestamp")
-            or info.get("timestamp")
-            or data.get("messageTimestamp")
-            or data.get("timestamp")
-        )
-
         if not message_id or not from_number:
             raise ValueError("Webhook Evolution Go sem ID ou remetente")
+        if media_type is None and not text:
+            raise IgnoredWebhookEvent(
+                "Mensagem sem conteúdo compatível com o MVP"
+            )
 
         return IncomingMessageResult(
             provider_message_id=str(message_id),
@@ -409,6 +433,21 @@ class EvolutionGoProvider(WhatsAppProvider):
             if "base64" in message:
                 message.pop("base64", None)
                 message["mediaStoredSeparately"] = True
+            secret = self._dict_value(
+                message, "secretEncryptedMessage", "SecretEncryptedMessage"
+            )
+            removed_encrypted_payload = False
+            for field in ("encIV", "EncIV", "encPayload", "EncPayload"):
+                if field in secret:
+                    secret.pop(field, None)
+                    removed_encrypted_payload = True
+            if removed_encrypted_payload:
+                secret["encryptedPayloadRemoved"] = True
+            context = self._dict_value(
+                message, "messageContextInfo", "MessageContextInfo"
+            )
+            context.pop("deviceListMetadata", None)
+            context.pop("DeviceListMetadata", None)
         return sanitized
 
     def webhook_event_id(self, payload: dict[str, Any]) -> str | None:
@@ -680,6 +719,80 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "Configure EVOLUTION_GO_API_KEY e reinicie a API."
             )
         return f"Evolution Go respondeu com HTTP {status_code}"
+
+    @classmethod
+    def _message_text(
+        cls, message: dict[str, Any], data: dict[str, Any] | None = None
+    ) -> str | None:
+        data = data or {}
+        value = (
+            message.get("conversation")
+            or message.get("Conversation")
+            or cls._dict_value(
+                message, "extendedTextMessage", "ExtendedTextMessage"
+            ).get("text")
+            or cls._dict_value(message, "imageMessage", "ImageMessage").get(
+                "caption"
+            )
+            or cls._dict_value(
+                message, "documentMessage", "DocumentMessage"
+            ).get("caption")
+            or cls._dict_value(message, "videoMessage", "VideoMessage").get(
+                "caption"
+            )
+            or data.get("text")
+        )
+        return str(value) if value is not None else None
+
+    @classmethod
+    def _message_edit(
+        cls,
+        message: dict[str, Any],
+        info: dict[str, Any],
+        data: dict[str, Any],
+    ) -> tuple[str | None, str | None]:
+        protocol = cls._dict_value(
+            message, "protocolMessage", "ProtocolMessage"
+        )
+        secret = cls._dict_value(
+            message, "secretEncryptedMessage", "SecretEncryptedMessage"
+        )
+        bot_info = cls._dict_value(info, "MsgBotInfo", "msgBotInfo")
+        meta_info = cls._dict_value(info, "MsgMetaInfo", "msgMetaInfo")
+        protocol_key = cls._dict_value(protocol, "key", "Key")
+        secret_key = cls._dict_value(
+            secret, "targetMessageKey", "TargetMessageKey"
+        )
+        target = (
+            bot_info.get("EditTargetID")
+            or bot_info.get("editTargetID")
+            or meta_info.get("TargetID")
+            or meta_info.get("targetID")
+            or protocol_key.get("ID")
+            or protocol_key.get("id")
+            or secret_key.get("ID")
+            or secret_key.get("id")
+        )
+        edit_marker = str(info.get("Edit") or info.get("edit") or "")
+        is_edit = (
+            edit_marker == "1"
+            or cls._optional_bool(data.get("IsEdit", data.get("isEdit"))) is True
+            or bool(target and secret)
+        )
+        if not is_edit or not target:
+            return None, None
+
+        edited_message = cls._dict_value(
+            protocol, "editedMessage", "EditedMessage"
+        )
+        if not edited_message:
+            edited_message = cls._dict_value(
+                message, "editedMessage", "EditedMessage"
+            )
+        body = cls._message_text(edited_message) if edited_message else None
+        if body is None and not secret:
+            body = cls._message_text(message, data)
+        return str(target), body
 
     @staticmethod
     def _media(

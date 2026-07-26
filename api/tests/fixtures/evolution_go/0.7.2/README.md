@@ -13,3 +13,9 @@ operacionais são substituídos ou omitidos antes de entrar no repositório.
 `qr-session-already-logged-in.json` é a resposta HTTP 400 observada ao pedir um
 QR para uma sessão já autenticada. Nesse caso específico, o canal permanece
 `connected`; outros erros HTTP continuam conservadoramente como `failed`.
+
+`message-edited-encrypted.json` e `reaction-removed.json` foram capturadas em
+25 de julho de 2026. A primeira preserva a estrutura de uma edição cujo novo
+texto não foi disponibilizado pela Evolution Go; a segunda representa uma
+remoção de reação. Material criptográfico e identificadores operacionais foram
+removidos.

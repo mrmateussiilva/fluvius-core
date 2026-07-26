@@ -18,8 +18,11 @@ from app.config import settings
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.database import get_db
-from app.messages.models import Message
-from app.providers.base import IgnoredWebhookEvent
+from app.messages.models import Message, MessageRevision
+from app.providers.base import (
+    IgnoredWebhookEvent,
+    IncomingMessageEditResult,
+)
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
@@ -30,6 +33,9 @@ from app.providers.status_updates import apply_message_status_update
 from app.realtime.manager import realtime_manager
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+EDIT_CONTENT_UNAVAILABLE = (
+    "O WhatsApp informou a edição, mas o provider não disponibilizou o novo texto"
+)
 
 
 def reopen_from_provider(conversation: Conversation) -> bool:
@@ -38,6 +44,62 @@ def reopen_from_provider(conversation: Conversation) -> bool:
     conversation.status = ConversationStatus.NEW
     conversation.assigned_user_id = None
     return True
+
+
+def apply_message_edit(
+    db: Session,
+    *,
+    channel: WhatsAppChannel,
+    event: ProviderEvent,
+    edit: IncomingMessageEditResult,
+) -> Message | None:
+    message = db.scalar(
+        select(Message)
+        .join(
+            Conversation,
+            (Conversation.id == Message.conversation_id)
+            & (Conversation.tenant_id == Message.tenant_id),
+        )
+        .where(
+            Message.tenant_id == channel.tenant_id,
+            Message.provider_message_id == edit.target_provider_message_id,
+            Conversation.tenant_id == channel.tenant_id,
+            Conversation.channel_id == channel.id,
+        )
+        .with_for_update()
+    )
+    if message is None:
+        return None
+
+    revision = db.scalar(
+        select(MessageRevision).where(
+            MessageRevision.tenant_id == channel.tenant_id,
+            MessageRevision.provider_event_id == edit.provider_event_id,
+        )
+    )
+    if revision is None:
+        revision = MessageRevision(
+            tenant_id=channel.tenant_id,
+            message_id=message.id,
+            provider_event_id=edit.provider_event_id,
+            previous_body=message.body,
+            body=edit.body,
+            content_available=edit.body is not None,
+            edited_at=edit.timestamp,
+        )
+        db.add(revision)
+
+    message.edited_at = edit.timestamp
+    if edit.body is None:
+        message.edit_content_unavailable = True
+        event.processing_error = EDIT_CONTENT_UNAVAILABLE
+    else:
+        message.body = edit.body
+        message.edit_content_unavailable = False
+        event.processing_error = None
+    event.processed = True
+    db.flush()
+    return message
 
 
 @router.post("/whatsapp/{provider}/{channel_id}", status_code=status.HTTP_202_ACCEPTED)
@@ -143,6 +205,34 @@ async def whatsapp_webhook(
 
     try:
         incoming = await provider_adapter.handle_webhook(payload)
+        if isinstance(incoming, IncomingMessageEditResult):
+            edited_message = apply_message_edit(
+                db,
+                channel=channel,
+                event=event,
+                edit=incoming,
+            )
+            if edited_message is None:
+                event.processing_error = (
+                    "Aguardando a mensagem original da edição ser persistida"
+                )
+                db.commit()
+                return {"status": "pending"}
+            db.commit()
+            await realtime_manager.broadcast(
+                channel.tenant_id,
+                "message.updated",
+                {
+                    "id": str(edited_message.id),
+                    "conversation_id": str(edited_message.conversation_id),
+                    "edited_at": edited_message.edited_at.isoformat(),
+                    "edit_content_unavailable": (
+                        edited_message.edit_content_unavailable
+                    ),
+                },
+            )
+            return {"status": "accepted"}
+
         duplicate = db.scalar(
             select(Message).where(
                 Message.tenant_id == channel.tenant_id,
@@ -243,6 +333,40 @@ async def whatsapp_webhook(
         )
         if media_error:
             message.error = media_error
+        reconciled_edits: list[Message] = []
+        pending_events = list(
+            db.scalars(
+                select(ProviderEvent)
+                .where(
+                    ProviderEvent.tenant_id == channel.tenant_id,
+                    ProviderEvent.channel_id == channel.id,
+                    ProviderEvent.event_type.in_(["Message", "message"]),
+                    ProviderEvent.processed.is_(False),
+                    ProviderEvent.id != event.id,
+                )
+                .order_by(ProviderEvent.created_at)
+            )
+        )
+        for pending_event in pending_events:
+            try:
+                pending_edit = await provider_adapter.handle_webhook(
+                    pending_event.payload
+                )
+            except (IgnoredWebhookEvent, ValueError):
+                continue
+            if (
+                isinstance(pending_edit, IncomingMessageEditResult)
+                and pending_edit.target_provider_message_id
+                == message.provider_message_id
+            ):
+                reconciled = apply_message_edit(
+                    db,
+                    channel=channel,
+                    event=pending_event,
+                    edit=pending_edit,
+                )
+                if reconciled is not None:
+                    reconciled_edits.append(reconciled)
         event.processed = True
         db.commit()
         if created_conversation:
@@ -260,6 +384,19 @@ async def whatsapp_webhook(
             "message.created",
             {"id": str(message.id), "conversation_id": str(conversation.id)},
         )
+        for reconciled in reconciled_edits:
+            await realtime_manager.broadcast(
+                channel.tenant_id,
+                "message.updated",
+                {
+                    "id": str(reconciled.id),
+                    "conversation_id": str(reconciled.conversation_id),
+                    "edited_at": reconciled.edited_at.isoformat(),
+                    "edit_content_unavailable": (
+                        reconciled.edit_content_unavailable
+                    ),
+                },
+            )
         return {"status": "accepted"}
     except IgnoredWebhookEvent:
         event.processed = True
