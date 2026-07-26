@@ -2,7 +2,7 @@
 
 ## Entra no MVP
 
-- Autenticação simples e usuários associados a tenants.
+- Autenticação simples e gestão de administradores/atendentes associados a tenants. Administradores criam, atualizam senha, definem papel e desativam usuários da própria empresa.
 - Um ou mais canais WhatsApp por tenant.
 - Evolution Go como provider inicial plugável.
 - Estado e reconexão/QR do canal por meio da API.
@@ -11,8 +11,11 @@
 - Filas `new`, `open` e `closed`.
 - Assumir e finalizar atendimento.
 - Receber e enviar texto.
-- Responder/citar mensagens, acompanhar horários de entrega/leitura e reenviar falhas manualmente.
-- Anexos de imagem, documento, áudio, vídeo e figurinha, com limite local de 25 MB.
+- Responder/citar mensagens, refletir edições, acompanhar horários de
+  entrega/leitura e reenviar falhas manualmente.
+- Anexos de imagem, documento, áudio, vídeo e figurinha nativa, com limite local de 25 MB, validação do conteúdo e envio idempotente. PNG e JPG escolhidos como figurinha são convertidos para WebP 512×512 antes do envio.
+- Seletor de emojis Unicode por categoria e botão dedicado para escolher figurinha no composer.
+- Player de áudio com progresso e velocidades `1x`, `1,5x` e `2x`.
 - Respostas rápidas.
 - Atualizações realtime essenciais.
 - Auditoria/eventos técnicos suficientes para diagnosticar provider.

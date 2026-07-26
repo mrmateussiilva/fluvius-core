@@ -22,7 +22,7 @@ Os DTOs normalizam confirmação de envio, status do canal, QR/pairing code e me
 
 A mesma credencial não pode ser associada a canais diferentes, mesmo quando referências distintas apontam por engano para o mesmo token. O banco guarda somente o fingerprint SHA-256 do token e aplica unicidade por provider; o segredo continua apenas no ambiente. `ChannelResponse` filtra `provider_config` e devolve somente `instance_name`, inclusive para registros antigos.
 
-A imagem local padrão é `evoapicloud/evolution-go:0.7.2`, substituível por `EVOLUTION_GO_IMAGE`. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e pode exigir `EVOLUTION_OPERATOR_EMAIL` ou ativação pelo Manager.
+A imagem local padrão é `fluvius/evolution-go:0.7.2-edit-fix.1`, compilada pelo Compose a partir do commit oficial 0.7.2 fixado em `EVOLUTION_GO_SOURCE_REF`. O patch mantido junto ao provider chama `DecryptSecretEncryptedMessage` para edições `MESSAGE_EDIT` e normaliza o resultado como `ProtocolMessage_MESSAGE_EDIT` antes do webhook. Isso disponibiliza o texto novo e o ID da mensagem original à API; se a chave original não estiver disponível, o gateway mantém o evento cifrado e a API registra a edição como conteúdo indisponível. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e pode exigir `EVOLUTION_OPERATOR_EMAIL` ou ativação pelo Manager.
 
 ## Respostas confirmadas na versão 0.7.2
 
@@ -54,13 +54,22 @@ Essa versão não envia header customizado no webhook. Ela inclui `instanceToken
 
 Eventos `Message` usam o envelope nativo do Go com `data.Info` e `data.Message`. Mensagens com `Info.IsFromMe=true` originadas no celular são persistidas como `outgoing/sent`; o contato é resolvido por `Info.RecipientAlt`, evitando armazenar LIDs como telefone. Eventos técnicos `SendMessage` são ignorados porque a chamada síncrona da API já persiste esse envio. Grupos continuam fora do MVP.
 
+Edições observadas na 0.7.2 usam `Info.Edit=1` e apontam para a mensagem
+original em `Message.secretEncryptedMessage.targetMessageKey.ID`. O adapter
+também aceita a variante descriptografada
+`protocolMessage.editedMessage`. Quando o gateway não fornece o novo texto, o
+Fluvius marca a mensagem original como editada e indisponível, sem criar outra
+bolha. `Info.Edit=7`/`Type=reaction` representa alteração de reação e é ignorado
+no MVP. `encIV`, `encPayload` e metadados de chaves de dispositivos são
+removidos antes de `provider_events`.
+
 Respostas a botões legados podem gerar os eventos `ButtonClick` e `Message` para a mesma interação. O adapter ignora `ButtonClick` com sucesso HTTP e usa apenas `Message` como fonte canônica, evitando retries e duplicidade. Botões interativos continuam fora do escopo do MVP.
 
 O envio de texto retorna `{"message": "success", "data": {...}}`; a confirmação positiva é o identificador em `data.Info.ID`. Sem esse campo, o Fluvius mantém a regra conservadora e marca o envio como `failed`. Na 0.7.2, respostas usam `quoted.messageId` e `quoted.participant`; o adapter também envia o UUID local em `id`, mantendo a mesma chave em uma tentativa manual de reenvio.
 
-Mídia usa `/send/media` com `type` igual a `image`, `audio`, `video` ou `document`. WebP usa `/send/sticker` e o campo `sticker`. A URL armazenada para o navegador é convertida para a URL interna da API antes da chamada ao gateway. Respostas citadas também são encaminhadas nos dois endpoints.
+Mídia usa `/send/media` com `type` igual a `image`, `audio`, `video` ou `document`. Figurinhas são normalizadas como WebP 512×512 pelo composer, persistidas com `message_type=sticker`, enviadas sem legenda por `/send/sticker` no campo `sticker` e renderizadas sem o balão de mídia comum. WebP recebido do WhatsApp segue o mesmo tipo nativo e pode ser animado. A URL armazenada para o navegador é convertida para a URL interna da API antes da chamada ao gateway. Respostas citadas também são encaminhadas nos dois endpoints. O UUID criado pelo navegador acompanha o multipart como `client_message_id`, nasce como ID local `pending` e é reutilizado como chave idempotente no provider; o SHA-256 do conteúdo impede que o mesmo UUID seja aceito para outro arquivo.
 
-Com `WEBHOOK_FILES=true`, mensagens de mídia chegam com o arquivo em `data.Message.base64` e metadados no objeto `imageMessage`, `audioMessage`, `videoMessage`, `documentMessage` ou `stickerMessage`. O adapter normaliza esses dados, a API salva o arquivo em `MessageAttachment` e remove o base64 da cópia guardada em `provider_events`.
+Com `WEBHOOK_FILES=true`, mensagens de mídia chegam com o arquivo em `data.Message.base64` e metadados no objeto `imageMessage`, `audioMessage`, `videoMessage`, `documentMessage` ou `stickerMessage`. O adapter normaliza esses dados, a API valida a assinatura do arquivo, salva o conteúdo e seu SHA-256 em `MessageAttachment` e remove o base64 da cópia guardada em `provider_events`.
 
 Recibos chegam como evento `Receipt`, com o estado em `state`, os IDs em `data.MessageIDs` e o instante em `data.Timestamp`. `Delivered` e `Read` avançam mensagens outgoing do mesmo tenant e canal, preenchem `delivered_at`/`read_at` e nunca regridem. `ReadSelf` é ignorado porque representa leitura local de uma mensagem recebida, não leitura pelo cliente. Se o recibo chegar antes da confirmação síncrona do envio, ele permanece não processado em `provider_events` e é reconciliado assim que o ID do provider for persistido.
 
@@ -79,7 +88,11 @@ A documentação pública e o Swagger da linha Evolution Go estão evoluindo. An
 - política de retries e idempotência aceita pelo gateway;
 - exigência e ciclo de ativação da licença na versão implantada.
 
-As fixtures sanitizadas de status conectado e QR solicitado durante sessão autenticada ficam em `api/tests/fixtures/evolution_go/0.7.2`. Envio de texto/mídia e demais itens acima ainda dependem de captura real antes da liberação para produção. Falha de HTTP ou resposta de envio sem ID nunca é tratada como envio bem-sucedido.
+As fixtures sanitizadas de status conectado, QR solicitado durante sessão
+autenticada, edição criptografada e remoção de reação ficam em
+`api/tests/fixtures/evolution_go/0.7.2`. Envio de texto/mídia e demais itens
+acima ainda dependem de captura real antes da liberação para produção. Falha de
+HTTP ou resposta de envio sem ID nunca é tratada como envio bem-sucedido.
 
 ## MetaCloudProvider
 

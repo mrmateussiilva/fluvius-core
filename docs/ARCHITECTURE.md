@@ -38,7 +38,7 @@ Uma resposta valida a mensagem citada no mesmo tenant/conversa, persiste a refer
 
 Carregar ou receber mensagens por realtime não marca a conversa como lida. O frontend emite a leitura somente quando a aba está visível, o histórico terminou de carregar e o operador alcançou o final da conversa. A requisição informa a última mensagem incoming realmente visível; a API valida tenant e conversa e avança o marcador exatamente até o `created_at` dela. Fora do final, novas mensagens preservam a posição atual e aparecem em um indicador explícito.
 
-Rascunhos de texto ficam somente no `localStorage`, sob chave composta por usuário e conversa. Eles não são enviados à API antes do envio, são removidos quando o composer fica vazio e não incluem arquivos selecionados.
+Rascunhos de texto ficam somente no `localStorage`, sob chave composta por usuário e conversa. Eles não são enviados à API antes do envio, são removidos quando o composer fica vazio e não incluem arquivos selecionados. Anexos recebem um UUID no navegador, aparecem imediatamente como `pending` e reutilizam esse identificador no multipart e no provider. Repetir o mesmo UUID e o mesmo SHA-256 devolve a mensagem existente sem duplicar o envio; reutilizá-lo com outro conteúdo retorna conflito.
 
 O envio é síncrono nesta fundação. A evolução natural é enfileirar tentativas e retries no RQ com idempotency key, mantendo a mesma máquina de estados.
 
@@ -47,10 +47,19 @@ O envio é síncrono nesta fundação. A evolução natural é enfileirar tentat
 1. O gateway chama `/api/v1/webhooks/whatsapp/{provider}/{channel_id}`.
 2. A API valida a credencial do webhook e encontra o canal; o tenant vem do canal, nunca do payload. No Evolution Go 0.7.2, o `instanceToken` do corpo é validado pelo adapter.
 3. O payload sanitizado entra em `provider_events`, permitindo auditoria, deduplicação e reprocessamento futuro. Credenciais são removidas antes da persistência.
-4. O adapter normaliza o evento em `IncomingMessageResult`.
+4. O adapter normaliza o evento como mensagem nova ou edição. Reações são
+   reconhecidas e ignoradas no MVP, sem gerar bolhas artificiais.
 5. A API deduplica pelo ID da mensagem, encontra/cria o contato e usa sua conversa única naquele canal. Se ela estava finalizada, é reaberta como `new`, sem perder o histórico e sem manter a atribuição anterior.
-6. Para mídia, o adapter normaliza base64, MIME type e nome; a API valida o limite, grava o arquivo no storage e cria `MessageAttachment` no mesmo tenant.
+6. Para mídia, o adapter normaliza base64, MIME type e nome; a API valida limite, assinatura binária e coerência entre conteúdo/MIME/extensão, grava o arquivo no storage e cria `MessageAttachment` com SHA-256 no mesmo tenant.
 7. A mensagem incoming é persistida e os eventos realtime são emitidos.
+
+Uma edição localiza a mensagem original pelo ID externo dentro do mesmo tenant
+e canal, grava uma `MessageRevision`, atualiza a mesma linha e emite
+`message.updated`. Se a edição chegar antes da mensagem, o `ProviderEvent` fica
+pendente e é reconciliado depois. Na Evolution Go 0.7.2, algumas edições chegam
+como `secretEncryptedMessage` sem o novo texto; nesse caso a mensagem é marcada
+como editada e a UI informa que o conteúdo atualizado não foi disponibilizado.
+Material criptográfico do envelope não é persistido.
 
 ## Fluxo de status do canal
 
@@ -64,13 +73,21 @@ O cadastro é idempotente por credencial dentro do tenant: se o usuário tentar 
 
 O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A atualização explícita usa `POST /api/v1/contacts/{id}/refresh`, valida tenant, vínculo entre contato e canal e status conectado antes de chamar `WhatsAppProvider.get_contact_profile`. O Evolution Go é consultado apenas pelo adapter e os resultados disponíveis são armazenados como cache; estatísticas de primeira/última interação e atendimentos são calculadas a partir dos dados do Fluvius.
 
+## Usuários da empresa
+
+`TenantUser` é a autorização entre uma identidade global e uma empresa. A gestão usa `/api/v1/users`, exige papel `admin` e filtra explicitamente cada listagem ou alteração pelo `tenant_id` autenticado. Um atendente enxerga e opera somente os canais e números do seu tenant; não existe acesso direto do usuário ao gateway. E-mails novos são únicos, senhas são persistidas apenas como hash e nenhuma resposta expõe credenciais.
+
+Desativar uma membership invalida imediatamente o acesso porque toda requisição e WebSocket revalidam a associação ativa. Conversas `open` atribuídas ao usuário desativado voltam para `new` e ficam sem responsável, dentro do mesmo tenant. O próprio administrador não pode remover seu papel administrativo nem desativar seu acesso.
+
 ## Storage de mídia
 
-No ambiente local, arquivos ficam no volume `api_storage` e são servidos por `/storage`. A API retorna o endereço externo ao navegador; o adapter converte esse endereço para `http://api:8000/storage/...` ao enviar pela Evolution Go, pois `localhost` dentro do container apontaria para o próprio gateway. Imagens, áudios, vídeos, documentos e WebP são limitados a 25 MB nesta etapa. Produção deverá substituir o storage local por S3/MinIO e URLs assinadas.
+No ambiente local, arquivos ficam no volume `api_storage` e são servidos por `/storage`. A API retorna o endereço externo ao navegador; o adapter converte esse endereço para `http://api:8000/storage/...` ao enviar pela Evolution Go, pois `localhost` dentro do container apontaria para o próprio gateway. Imagens JPEG/PNG/GIF, WebP, áudios AAC/FLAC/M4A/MP3/OGG/WAV/WebM, vídeos MP4/MOV/WebM e documentos PDF/Office/texto/CSV/ZIP são limitados a 25 MB nesta etapa. Ao escolher a categoria figurinha, o navegador converte PNG/JPG para WebP 512×512 com fundo transparente; WebP recebido ou selecionado é preservado. A API valida o WebP e o persiste como `sticker`, sem legenda. A leitura do upload também é limitada a 25 MB + 1 byte, evitando aceitar corpos arbitrariamente grandes. Produção deverá substituir o storage local por S3/MinIO e URLs assinadas.
 
 ## Realtime
 
-`WS /ws?token=...` valida o JWT e o membership antes de registrar a conexão na sala em memória do tenant. Eventos planejados:
+`WS /ws` recebe o JWT pelo subprotocolo `fluvius-auth`, sem colocá-lo na URL ou
+no access log, e valida o membership antes de registrar a conexão na sala em
+memória do tenant. Eventos planejados:
 
 - `conversation.created`
 - `conversation.updated`

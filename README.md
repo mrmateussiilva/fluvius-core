@@ -39,7 +39,7 @@ Serviços locais:
 - Healthcheck: http://localhost:8000/health
 - Evolution Go/Manager: http://localhost:8080
 
-Antes de usar o gateway, ajuste os segredos do `.env` e conclua a ativação exigida pela versão do Evolution Go. Na versão 0.7.2, `EVOLUTION_GO_GLOBAL_API_KEY` administra o gateway e `EVOLUTION_GO_API_KEY` recebe o token no modo compatível de instância única. Para múltiplas instâncias, `EVOLUTION_GO_INSTANCE_TOKENS` contém um mapa JSON entre o nome não secreto usado pelo canal e seu token. A tela **Canais do WhatsApp** inicia a conexão, exibe QR/código de pareamento e acompanha o status sem enviar credenciais ao navegador.
+Antes de usar o gateway, ajuste os segredos do `.env` e conclua a ativação exigida pela versão do Evolution Go. O Compose compila uma imagem derivada do Evolution Go 0.7.2, fixada no commit oficial `9337afc47e10b86cc896a6f432240e40fee95dd1`, com o patch mínimo que decripta edições `SecretEncryptedMessage` antes do webhook. Na versão 0.7.2, `EVOLUTION_GO_GLOBAL_API_KEY` administra o gateway e `EVOLUTION_GO_API_KEY` recebe o token no modo compatível de instância única. Para múltiplas instâncias, `EVOLUTION_GO_INSTANCE_TOKENS` contém um mapa JSON entre o nome não secreto usado pelo canal e seu token. A tela **Canais do WhatsApp** inicia a conexão, exibe QR/código de pareamento e acompanha o status sem enviar credenciais ao navegador.
 
 ## Comandos principais
 
@@ -96,9 +96,12 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 - Assumir uma conversa é atômico; outro agente não pode sobrescrever a atribuição ativa.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
-- No texto, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente.
+- Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
+- Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, redefinem senha e desativam memberships sem atravessar tenants. Os números disponíveis continuam sendo exclusivamente os canais cadastrados naquela empresa.
+- Edições atualizam a mensagem original, aparecem como `editada` e nunca criam
+  uma bolha `[text]`; reações ficam fora do MVP.
 - O composer e a API bloqueiam envio com o canal offline.
-- O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia e anexos por seleção, colagem ou arrastar e soltar.
+- O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia, seletor de emojis, botão dedicado para figurinha e um menu de anexos separado em fotos/vídeos, documentos e áudio, além de colagem e arrastar e soltar. PNG/JPG escolhidos como figurinha são convertidos para WebP 512×512 e enviados pelo fluxo nativo de sticker, sem legenda. Áudios usam player próprio com progresso e velocidades `1x`, `1,5x` e `2x`.
 - O worker RQ está disponível, mas o envio ainda é síncrono para manter simples a confirmação nesta etapa.
 - Payloads e rotas exatas do Evolution Go devem ser validados contra o Swagger da imagem escolhida antes de produção.
