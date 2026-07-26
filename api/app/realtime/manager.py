@@ -8,8 +8,14 @@ class RealtimeManager:
     def __init__(self) -> None:
         self._connections: dict[UUID, set[WebSocket]] = defaultdict(set)
 
-    async def connect(self, tenant_id: UUID, websocket: WebSocket) -> None:
-        await websocket.accept()
+    async def connect(
+        self,
+        tenant_id: UUID,
+        websocket: WebSocket,
+        *,
+        subprotocol: str | None = None,
+    ) -> None:
+        await websocket.accept(subprotocol=subprotocol)
         self._connections[tenant_id].add(websocket)
 
     def disconnect(self, tenant_id: UUID, websocket: WebSocket) -> None:

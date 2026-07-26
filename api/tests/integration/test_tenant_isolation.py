@@ -1,5 +1,4 @@
 from unittest.mock import AsyncMock, Mock, patch
-from urllib.parse import quote
 from uuid import UUID
 
 from sqlalchemy import select
@@ -409,6 +408,20 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         )
 
     def test_websocket_revalidates_membership_instead_of_trusting_token_claim(self) -> None:
+        valid_token = create_access_token(
+            str(self.tenant_a.user_id),
+            str(self.tenant_a.tenant_id),
+            role="admin",
+        )
+        with self.client.websocket_connect(
+            "/ws",
+            subprotocols=["fluvius-auth", valid_token],
+        ) as websocket:
+            self.assertEqual(
+                websocket.accepted_subprotocol,
+                "fluvius-auth",
+            )
+
         forged_token = create_access_token(
             str(self.tenant_a.user_id),
             str(self.tenant_b.tenant_id),
@@ -417,7 +430,8 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
 
         with self.assertRaises(WebSocketDisconnect) as raised:
             with self.client.websocket_connect(
-                f"/ws?token={quote(forged_token)}"
+                "/ws",
+                subprotocols=["fluvius-auth", forged_token],
             ):
                 pass
 

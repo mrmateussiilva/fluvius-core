@@ -14,7 +14,16 @@ router = APIRouter()
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
+async def websocket_endpoint(websocket: WebSocket) -> None:
+    protocols = [
+        value.strip()
+        for value in websocket.headers.get("sec-websocket-protocol", "").split(",")
+        if value.strip()
+    ]
+    if len(protocols) != 2 or protocols[0] != "fluvius-auth":
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    token = protocols[1]
     try:
         payload = decode_access_token(token)
         user_id = UUID(payload["sub"])
@@ -35,7 +44,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str) -> None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    await realtime_manager.connect(tenant_id, websocket)
+    await realtime_manager.connect(
+        tenant_id,
+        websocket,
+        subprotocol="fluvius-auth",
+    )
     try:
         while True:
             await websocket.receive_text()

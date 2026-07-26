@@ -14,7 +14,7 @@ export const useRealtimeStore = defineStore('realtime', {
     connect() {
       const token = localStorage.getItem('fluvius_token')
       if (!token || this.socket) return
-      this.socket = new WebSocket(`${WS_URL}/ws?token=${encodeURIComponent(token)}`)
+      this.socket = new WebSocket(`${WS_URL}/ws`, ['fluvius-auth', token])
       this.socket.onopen = () => (this.connected = true)
       this.socket.onclose = () => {
         this.connected = false
