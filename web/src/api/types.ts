@@ -2,13 +2,23 @@ export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'requi
 export type ConversationStatus = 'new' | 'open' | 'closed'
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker'
+export type UserRole = 'admin' | 'agent'
 
 export interface CurrentUser {
   id: string
   tenant_id: string
   email: string
   name: string
-  role: string
+  role: UserRole
+}
+
+export interface TenantUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  is_active: boolean
+  created_at: string
 }
 
 export interface Channel {

@@ -4,6 +4,7 @@ import ChannelsPage from './pages/ChannelsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
+import UsersPage from './pages/UsersPage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +18,7 @@ export const router = createRouter({
         { path: 'conversations', component: ConversationsPage },
         { path: 'quick-replies', component: QuickRepliesPage },
         { path: 'settings/channels', component: ChannelsPage },
+        { path: 'settings/users', component: UsersPage },
       ],
     },
   ],

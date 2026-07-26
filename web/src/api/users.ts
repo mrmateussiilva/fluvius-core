@@ -1,0 +1,30 @@
+import { http } from './http'
+import type { TenantUser, UserRole } from './types'
+
+export interface CreateUserPayload {
+  name: string
+  email: string
+  password: string
+  role: UserRole
+}
+
+export interface UpdateUserPayload {
+  name?: string
+  password?: string
+  role?: UserRole
+  is_active?: boolean
+}
+
+export const listUsers = () => http<TenantUser[]>('/api/v1/users')
+
+export const createUser = (payload: CreateUserPayload) =>
+  http<TenantUser>('/api/v1/users', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateUser = (id: string, payload: UpdateUserPayload) =>
+  http<TenantUser>(`/api/v1/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })

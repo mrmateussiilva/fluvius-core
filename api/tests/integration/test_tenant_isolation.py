@@ -5,9 +5,9 @@ from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
 from app.channels.models import WhatsAppChannel
-from app.common.enums import ChannelStatus
+from app.common.enums import ChannelStatus, ConversationStatus
 from app.config import settings
-from app.conversations.models import ConversationRead
+from app.conversations.models import Conversation, ConversationRead
 from app.database import SessionLocal
 from app.messages.models import Message
 from app.providers.base import QRCodeResult
@@ -19,6 +19,140 @@ from .base import TEST_PASSWORD, PostgresIntegrationTestCase
 
 
 class TenantIsolationTest(PostgresIntegrationTestCase):
+    def test_admin_manages_only_the_users_from_its_tenant(self) -> None:
+        created = self.client.post(
+            "/api/v1/users",
+            headers=self.headers_a,
+            json={
+                "name": "Atendente Empresa A",
+                "email": "atendente-a@example.com",
+                "password": "senha-temporaria-123",
+                "role": "agent",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        created_user_id = UUID(created.json()["id"])
+        self.assertEqual(created.json()["role"], "agent")
+        self.assertTrue(created.json()["is_active"])
+
+        tenant_a_users = self.client.get("/api/v1/users", headers=self.headers_a)
+        tenant_b_users = self.client.get("/api/v1/users", headers=self.headers_b)
+        self.assertEqual(tenant_a_users.status_code, 200, tenant_a_users.text)
+        self.assertEqual(tenant_b_users.status_code, 200, tenant_b_users.text)
+        self.assertEqual(
+            {user["id"] for user in tenant_a_users.json()},
+            {str(self.tenant_a.user_id), str(created_user_id)},
+        )
+        self.assertNotIn(
+            str(created_user_id),
+            {user["id"] for user in tenant_b_users.json()},
+        )
+
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "atendente-a@example.com",
+                "password": "senha-temporaria-123",
+                "tenant_id": str(self.tenant_a.tenant_id),
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        agent_headers = {
+            "Authorization": f"Bearer {login.json()['access_token']}"
+        }
+        self.assertEqual(
+            self.client.get("/api/v1/users", headers=agent_headers).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/users",
+                headers=agent_headers,
+                json={
+                    "name": "Usuário indevido",
+                    "email": "indevido@example.com",
+                    "password": "senha-indesejada",
+                },
+            ).status_code,
+            403,
+        )
+
+        cross_tenant = self.client.patch(
+            f"/api/v1/users/{created_user_id}",
+            headers=self.headers_b,
+            json={"name": "Tentativa cruzada"},
+        )
+        self.assertEqual(cross_tenant.status_code, 404, cross_tenant.text)
+
+        with SessionLocal() as db:
+            conversation = db.scalar(
+                select(Conversation).where(
+                    Conversation.id == self.tenant_a.conversation_id,
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            conversation.status = ConversationStatus.OPEN
+            conversation.assigned_user_id = created_user_id
+            db.commit()
+
+        deactivated = self.client.patch(
+            f"/api/v1/users/{created_user_id}",
+            headers=self.headers_a,
+            json={"is_active": False},
+        )
+        self.assertEqual(deactivated.status_code, 200, deactivated.text)
+        self.assertFalse(deactivated.json()["is_active"])
+        self.assertEqual(
+            self.client.get("/api/v1/auth/me", headers=agent_headers).status_code,
+            401,
+        )
+        with SessionLocal() as db:
+            conversation = db.scalar(
+                select(Conversation).where(
+                    Conversation.id == self.tenant_a.conversation_id,
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(conversation.status, ConversationStatus.NEW)
+            self.assertIsNone(conversation.assigned_user_id)
+
+        reactivated = self.client.patch(
+            f"/api/v1/users/{created_user_id}",
+            headers=self.headers_a,
+            json={
+                "is_active": True,
+                "password": "nova-senha-temporaria-456",
+            },
+        )
+        self.assertEqual(reactivated.status_code, 200, reactivated.text)
+        relogin = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "atendente-a@example.com",
+                "password": "nova-senha-temporaria-456",
+                "tenant_id": str(self.tenant_a.tenant_id),
+            },
+        )
+        self.assertEqual(relogin.status_code, 200, relogin.text)
+
+        self_change = self.client.patch(
+            f"/api/v1/users/{self.tenant_a.user_id}",
+            headers=self.headers_a,
+            json={"role": "agent"},
+        )
+        self.assertEqual(self_change.status_code, 409, self_change.text)
+
+        duplicate = self.client.post(
+            "/api/v1/users",
+            headers=self.headers_a,
+            json={
+                "name": "E-mail duplicado",
+                "email": "atendente-a@example.com",
+                "password": "outra-senha-temporaria",
+            },
+        )
+        self.assertEqual(duplicate.status_code, 409, duplicate.text)
+
     def test_lists_and_creates_resources_only_inside_authenticated_tenant(self) -> None:
         me = self.client.get("/api/v1/auth/me", headers=self.headers_a)
         self.assertEqual(me.status_code, 200)

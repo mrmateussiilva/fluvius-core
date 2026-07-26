@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { LogOut, MessageCircle, Settings, Zap } from 'lucide-vue-next'
+import { computed, onMounted } from 'vue'
+import { LogOut, MessageCircle, Settings, UserRoundCog, Zap } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useRealtimeStore } from '../stores/realtimeStore'
@@ -9,6 +9,10 @@ const auth = useAuthStore()
 const realtime = useRealtimeStore()
 const router = useRouter()
 const userInitial = computed(() => auth.user?.name?.trim().charAt(0).toUpperCase() || 'U')
+
+onMounted(() => {
+  void auth.restore().catch(() => undefined)
+})
 
 function logout() {
   realtime.disconnect()
@@ -46,6 +50,15 @@ function logout() {
         title="Canais"
       >
         <Settings class="h-5 w-5" />
+      </RouterLink>
+      <RouterLink
+        v-if="auth.user?.role === 'admin'"
+        class="mt-1.5 rounded-xl p-3 transition hover:bg-white/10 hover:text-white"
+        active-class="bg-white/15 text-white shadow-sm"
+        to="/app/settings/users"
+        title="Usuários"
+      >
+        <UserRoundCog class="h-5 w-5" />
       </RouterLink>
       <div class="mt-auto grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10" :title="auth.user?.name || 'Usuário'">
         {{ userInitial }}
