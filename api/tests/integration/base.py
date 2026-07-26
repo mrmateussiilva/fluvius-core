@@ -69,7 +69,7 @@ class PostgresIntegrationTestCase(unittest.TestCase):
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        if revision != "20260724_0007":
+        if revision != "20260726_0009":
             raise RuntimeError(f"Schema de teste está na revisão inesperada {revision}")
 
         cls.password_hash = hash_password(TEST_PASSWORD)

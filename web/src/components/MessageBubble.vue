@@ -15,6 +15,7 @@ import {
   RotateCcw,
 } from 'lucide-vue-next'
 import type { Message, MessageAttachment, MessageType } from '../api/types'
+import AudioMessagePlayer from './AudioMessagePlayer.vue'
 
 const props = defineProps<{
   message: Message
@@ -37,6 +38,11 @@ const canReply = computed(
   () => Boolean(props.message.provider_message_id) && props.message.status !== 'failed',
 )
 const canCopy = computed(() => Boolean(props.message.body?.trim()))
+const isNativeSticker = computed(
+  () =>
+    props.message.message_type === 'sticker' &&
+    props.message.attachments.length > 0,
+)
 const timeLabel = computed(() =>
   new Intl.DateTimeFormat('pt-BR', {
     hour: '2-digit',
@@ -61,6 +67,9 @@ const statusLabel = computed(
 )
 const bubbleClass = computed(() => {
   const outgoing = props.message.direction === 'outgoing'
+  if (isNativeSticker.value) {
+    return ['!max-w-none', '!bg-transparent', '!p-0', '!shadow-none']
+  }
   return [
     outgoing ? 'bg-[#d9fdd3]' : 'bg-white',
     outgoing && props.groupStart ? 'message-tail-out' : '',
@@ -150,7 +159,13 @@ function showDetails() {
       <button
         type="button"
         class="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-l from-white/95 via-white/85 to-white/60 text-[#667781] opacity-100 shadow-sm transition hover:text-[#111b21] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
-        :class="message.direction === 'outgoing' ? '!from-[#d9fdd3] !via-[#d9fdd3]/90' : ''"
+        :class="
+          isNativeSticker
+            ? '!bg-black/45 !text-white'
+            : message.direction === 'outgoing'
+              ? '!from-[#d9fdd3] !via-[#d9fdd3]/90'
+              : ''
+        "
         title="Ações da mensagem"
         @click.stop="menuOpen = !menuOpen"
       >
@@ -218,7 +233,11 @@ function showDetails() {
         </span>
       </button>
 
-      <div v-if="message.attachments.length" class="mb-1 space-y-1.5">
+      <div
+        v-if="message.attachments.length"
+        class="space-y-1.5"
+        :class="{ 'mb-1': !isNativeSticker }"
+      >
         <template v-for="attachment in message.attachments" :key="attachment.id">
           <button
             v-if="message.message_type === 'image'"
@@ -248,7 +267,7 @@ function showDetails() {
             <img
               :src="attachment.public_url"
               :alt="attachment.file_name"
-              class="max-h-52 max-w-52 object-contain"
+              class="max-h-60 max-w-60 object-contain drop-shadow-sm"
               loading="lazy"
             />
           </button>
@@ -275,12 +294,10 @@ function showDetails() {
             </button>
           </div>
 
-          <audio
+          <AudioMessagePlayer
             v-else-if="message.message_type === 'audio'"
-            class="h-12 w-64 max-w-full sm:w-72"
-            controls
-            preload="metadata"
             :src="attachment.public_url"
+            :file-name="attachment.file_name"
           />
 
           <a
@@ -345,6 +362,10 @@ function showDetails() {
 
       <div
         class="mt-0.5 flex items-center justify-end gap-0.5 px-0.5 text-[9.5px] leading-3 text-[#667781]"
+        :class="{
+          'absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-white shadow-sm':
+            isNativeSticker,
+        }"
         :title="`${fullDateLabel} · ${statusLabel}`"
       >
         <span v-if="copied" class="mr-1 text-fluvius-700">Copiada</span>

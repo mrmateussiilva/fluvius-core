@@ -1,16 +1,19 @@
-from unittest.mock import patch
-from uuid import uuid4
+from hashlib import sha256
+from unittest.mock import AsyncMock, patch
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
 from app.channels.models import WhatsAppChannel
+from app.attachments.models import MessageAttachment
 from app.common.enums import ChannelStatus, MessageStatus
 from app.config import settings
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.database import SessionLocal
-from app.messages.models import Message
+from app.messages.models import Message, MessageRevision
 from app.providers.base import SendResult
+from app.storage.base import StoredFile
 from .base import PostgresIntegrationTestCase
 
 
@@ -25,6 +28,29 @@ class ConfirmingProvider:
                 "channel_id": channel.id,
                 "to": to,
                 "text": text,
+                "idempotency_key": kwargs.get("idempotency_key"),
+            }
+        )
+        return SendResult(
+            success=True,
+            provider_message_id=self.provider_message_id,
+            status=MessageStatus.SENT,
+        )
+
+    async def send_media(
+        self,
+        channel,
+        to: str,
+        file_url: str,
+        caption: str | None = None,
+        **kwargs,
+    ) -> SendResult:
+        self.calls.append(
+            {
+                "channel_id": channel.id,
+                "to": to,
+                "file_url": file_url,
+                "caption": caption,
                 "idempotency_key": kwargs.get("idempotency_key"),
             }
         )
@@ -58,6 +84,34 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                 "Message": {"conversation": body},
             },
         }
+
+    def edit_payload(
+        self,
+        event_id: str,
+        target_message_id: str,
+        body: str | None,
+    ) -> dict:
+        message = (
+            {
+                "protocolMessage": {
+                    "key": {"ID": target_message_id},
+                    "editedMessage": {
+                        "extendedTextMessage": {"text": body}
+                    },
+                }
+            }
+            if body is not None
+            else {
+                "secretEncryptedMessage": {
+                    "secretEncType": 2,
+                    "targetMessageKey": {"ID": target_message_id},
+                }
+            }
+        )
+        payload = self.incoming_payload(event_id, "")
+        payload["data"]["Info"]["Edit"] = "1"
+        payload["data"]["Message"] = message
+        return payload
 
     @staticmethod
     def receipt_payload(provider_message_id: str, state: str) -> dict:
@@ -274,3 +328,294 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
 
         self.assertEqual(conversation_count, 1)
         self.assertEqual(incoming_count, 2)
+
+    def test_attachment_upload_is_validated_and_idempotent(self) -> None:
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        provider = ConfirmingProvider("outgoing-media-1")
+        client_message_id = str(uuid4())
+        content = b"\x89PNG\r\n\x1a\nintegration-image"
+        stored = StoredFile(
+            key=f"{self.tenant_a.tenant_id}/image.png",
+            public_url="http://api:8000/storage/tenant/image.png",
+            size_bytes=len(content),
+        )
+        request = {
+            "files": {"file": ("image.png", content, "image/png")},
+            "data": {
+                "caption": "Imagem validada",
+                "client_message_id": client_message_id,
+            },
+        }
+        with (
+            patch("app.messages.router.get_provider", return_value=provider),
+            patch(
+                "app.messages.router.LocalStorageProvider.save",
+                new=AsyncMock(return_value=stored),
+            ) as save,
+        ):
+            created = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+                headers=self.headers_a,
+                **request,
+            )
+            repeated = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+                headers=self.headers_a,
+                **request,
+            )
+            conflicting = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+                headers=self.headers_a,
+                files={
+                    "file": (
+                        "image.png",
+                        b"\x89PNG\r\n\x1a\ndifferent-image",
+                        "image/png",
+                    )
+                },
+                data={
+                    "caption": "Imagem validada",
+                    "client_message_id": client_message_id,
+                },
+            )
+
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(conflicting.status_code, 409, conflicting.text)
+        self.assertEqual(created.json()["id"], client_message_id)
+        self.assertEqual(created.json()["message_type"], "image")
+        self.assertEqual(created.json()["status"], "sent")
+        self.assertEqual(repeated.json()["id"], client_message_id)
+        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls[0]["idempotency_key"], client_message_id)
+        self.assertEqual(save.await_count, 1)
+
+        with SessionLocal() as db:
+            attachment = db.scalar(
+                select(MessageAttachment).where(
+                    MessageAttachment.tenant_id == self.tenant_a.tenant_id,
+                    MessageAttachment.message_id == UUID(client_message_id),
+                )
+            )
+        self.assertIsNotNone(attachment)
+        self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
+
+        rejected = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+            headers=self.headers_a,
+            files={"file": ("fake.jpg", b"%PDF-1.7 fake image", "image/jpeg")},
+            data={"client_message_id": str(uuid4())},
+        )
+        self.assertEqual(rejected.status_code, 415, rejected.text)
+
+    def test_sticker_is_native_without_caption_and_idempotent(self) -> None:
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        provider = ConfirmingProvider("outgoing-sticker-1")
+        client_message_id = str(uuid4())
+        content = b"RIFF\x0e\x00\x00\x00WEBPVP8 figurinha"
+        stored = StoredFile(
+            key=f"{self.tenant_a.tenant_id}/figurinha.webp",
+            public_url="http://api:8000/storage/tenant/figurinha.webp",
+            size_bytes=len(content),
+        )
+        request = {
+            "files": {"file": ("figurinha.webp", content, "image/webp")},
+            "data": {
+                "caption": "Esta legenda não deve acompanhar a figurinha",
+                "client_message_id": client_message_id,
+            },
+        }
+        with (
+            patch("app.messages.router.get_provider", return_value=provider),
+            patch(
+                "app.messages.router.LocalStorageProvider.save",
+                new=AsyncMock(return_value=stored),
+            ) as save,
+        ):
+            created = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+                headers=self.headers_a,
+                **request,
+            )
+            repeated = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/attachments",
+                headers=self.headers_a,
+                **request,
+            )
+
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(created.json()["message_type"], "sticker")
+        self.assertIsNone(created.json()["body"])
+        self.assertEqual(repeated.json()["id"], client_message_id)
+        self.assertEqual(len(provider.calls), 1)
+        self.assertIsNone(provider.calls[0]["caption"])
+        self.assertEqual(provider.calls[0]["idempotency_key"], client_message_id)
+        self.assertEqual(save.await_count, 1)
+
+    def test_edits_update_the_original_message_and_reactions_are_ignored(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        original_id = "incoming-edit-original"
+        created = self.client.post(
+            webhook_url,
+            json=self.incoming_payload(original_id, "Texto antes da edição"),
+        )
+        self.assertEqual(created.status_code, 202, created.text)
+
+        edited = self.client.post(
+            webhook_url,
+            json=self.edit_payload(
+                "incoming-edit-plaintext",
+                original_id,
+                "Texto depois da edição",
+            ),
+        )
+        repeated = self.client.post(
+            webhook_url,
+            json=self.edit_payload(
+                "incoming-edit-plaintext",
+                original_id,
+                "Texto depois da edição",
+            ),
+        )
+        unavailable = self.client.post(
+            webhook_url,
+            json=self.edit_payload(
+                "incoming-edit-encrypted",
+                original_id,
+                None,
+            ),
+        )
+        reaction = self.incoming_payload("incoming-reaction-removed", "")
+        reaction["data"]["Info"]["Edit"] = "7"
+        reaction["data"]["Info"]["Type"] = "reaction"
+        reaction["data"]["Message"] = {
+            "reactionMessage": {
+                "key": {"ID": original_id},
+                "senderTimestampMS": 1785032722922,
+            }
+        }
+        ignored = self.client.post(webhook_url, json=reaction)
+
+        self.assertEqual(edited.status_code, 202, edited.text)
+        self.assertEqual(edited.json()["status"], "accepted")
+        self.assertEqual(repeated.json()["status"], "duplicate")
+        self.assertEqual(unavailable.json()["status"], "accepted")
+        self.assertEqual(ignored.json()["status"], "ignored")
+
+        with SessionLocal() as db:
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == original_id,
+                )
+            )
+            message_count = db.scalar(
+                select(func.count(Message.id)).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id.in_(
+                        [
+                            original_id,
+                            "incoming-edit-plaintext",
+                            "incoming-edit-encrypted",
+                            "incoming-reaction-removed",
+                        ]
+                    ),
+                )
+            )
+            revision_count = db.scalar(
+                select(func.count(MessageRevision.id)).where(
+                    MessageRevision.tenant_id == self.tenant_a.tenant_id,
+                    MessageRevision.message_id == message.id,
+                )
+            )
+
+        self.assertEqual(message.body, "Texto depois da edição")
+        self.assertIsNotNone(message.edited_at)
+        self.assertTrue(message.edit_content_unavailable)
+        self.assertEqual(message_count, 1)
+        self.assertEqual(revision_count, 2)
+
+    def test_edit_is_reconciled_when_it_arrives_before_the_message(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        target_id = "incoming-after-edit"
+        pending = self.client.post(
+            webhook_url,
+            json=self.edit_payload(
+                "incoming-edit-before-original",
+                target_id,
+                "Texto já corrigido",
+            ),
+        )
+        self.assertEqual(pending.status_code, 202, pending.text)
+        self.assertEqual(pending.json()["status"], "pending")
+
+        created = self.client.post(
+            webhook_url,
+            json=self.incoming_payload(target_id, "Texto original atrasado"),
+        )
+        self.assertEqual(created.status_code, 202, created.text)
+
+        with SessionLocal() as db:
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == target_id,
+                )
+            )
+
+        self.assertEqual(message.body, "Texto já corrigido")
+        self.assertIsNotNone(message.edited_at)
+        self.assertFalse(message.edit_content_unavailable)
+
+    def test_edit_target_cannot_cross_tenant_or_channel(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        pending = self.client.post(
+            webhook_url,
+            json=self.edit_payload(
+                "incoming-cross-tenant-edit",
+                "seed-b",
+                "Tentativa cruzada",
+            ),
+        )
+        self.assertEqual(pending.status_code, 202, pending.text)
+        self.assertEqual(pending.json()["status"], "pending")
+
+        with SessionLocal() as db:
+            tenant_b_message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_b.tenant_id,
+                    Message.provider_message_id == "seed-b",
+                )
+            )
+            revision_count = db.scalar(
+                select(func.count(MessageRevision.id)).where(
+                    MessageRevision.tenant_id == self.tenant_b.tenant_id,
+                    MessageRevision.message_id == tenant_b_message.id,
+                )
+            )
+
+        self.assertEqual(tenant_b_message.body, "Mensagem do tenant B")
+        self.assertIsNone(tenant_b_message.edited_at)
+        self.assertEqual(revision_count, 0)

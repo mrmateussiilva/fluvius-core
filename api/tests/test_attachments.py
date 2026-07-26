@@ -1,4 +1,6 @@
 import asyncio
+import base64
+from hashlib import sha256
 import unittest
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -6,8 +8,10 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from app.attachments.service import (
+    UnsupportedAttachmentError,
     message_type_for_upload,
     persist_incoming_attachment,
+    validate_outgoing_attachment,
 )
 from app.common.enums import MessageType
 from app.providers.base import IncomingMessageResult
@@ -33,16 +37,76 @@ class AttachmentTest(unittest.TestCase):
             MessageType.DOCUMENT,
         )
 
+    def test_validates_file_signature_and_integrity_hash(self) -> None:
+        content = b"\x89PNG\r\n\x1a\nvalid-image"
+        validated = validate_outgoing_attachment(
+            "image/png",
+            "foto.png",
+            content,
+        )
+
+        self.assertEqual(validated.message_type, MessageType.IMAGE)
+        self.assertEqual(validated.content_type, "image/png")
+        self.assertEqual(validated.content_sha256, sha256(content).hexdigest())
+
+    def test_validates_each_supported_media_category(self) -> None:
+        cases = (
+            ("foto.jpg", "image/jpeg", b"\xff\xd8\xffimage", MessageType.IMAGE),
+            ("voz.mp3", "audio/mpeg", b"ID3audio", MessageType.AUDIO),
+            (
+                "video.mp4",
+                "video/mp4",
+                b"\x00\x00\x00\x18ftypisomvideo",
+                MessageType.VIDEO,
+            ),
+            ("arquivo.pdf", "application/pdf", b"%PDF-1.7 document", MessageType.DOCUMENT),
+            (
+                "planilha.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                b"PK\x03\x04spreadsheet",
+                MessageType.DOCUMENT,
+            ),
+        )
+        for file_name, content_type, content, expected in cases:
+            with self.subTest(file_name=file_name):
+                validated = validate_outgoing_attachment(
+                    content_type,
+                    file_name,
+                    content,
+                )
+                self.assertEqual(validated.message_type, expected)
+
+    def test_rejects_a_file_disguised_with_another_extension(self) -> None:
+        with self.assertRaisesRegex(
+            UnsupportedAttachmentError,
+            "não corresponde à extensão",
+        ):
+            validate_outgoing_attachment(
+                "image/jpeg",
+                "foto.jpg",
+                b"%PDF-1.7 disguised",
+            )
+
+    def test_rejects_an_unknown_binary_format(self) -> None:
+        with self.assertRaisesRegex(UnsupportedAttachmentError, "Formato não suportado"):
+            validate_outgoing_attachment(
+                "application/octet-stream",
+                "arquivo.bin",
+                b"\x00\x01\x02\x03",
+            )
+
     def test_persists_incoming_base64_media(self) -> None:
         tenant_id = uuid4()
         message = SimpleNamespace(id=uuid4())
+        content = b"\x89PNG\r\n\x1a\nincoming-image"
         incoming = IncomingMessageResult(
             provider_message_id="MEDIA-123",
             from_number="5527999999999",
             to_number="instance",
             message_type=MessageType.IMAGE,
-            media_base64="aW1hZ2Vt",
-            media_content_type="image/jpeg",
+            media_base64=base64.b64encode(content).decode(),
+            media_content_type="image/png",
+            media_file_name="imagem.png",
             timestamp=datetime.now(UTC),
             raw_payload={},
         )
@@ -53,7 +117,7 @@ class AttachmentTest(unittest.TestCase):
                 return_value=StoredFile(
                     key="tenant/image.jpg",
                     public_url="http://localhost:8000/storage/tenant/image.jpg",
-                    size_bytes=6,
+                    size_bytes=len(content),
                 )
             ),
         ):
@@ -67,8 +131,9 @@ class AttachmentTest(unittest.TestCase):
             )
         self.assertIsNone(error)
         self.assertIsNotNone(attachment)
-        self.assertEqual(attachment.content_type, "image/jpeg")
-        self.assertEqual(attachment.size_bytes, 6)
+        self.assertEqual(attachment.content_type, "image/png")
+        self.assertEqual(attachment.size_bytes, len(content))
+        self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
         self.assertEqual(db.added, [attachment])
 
 

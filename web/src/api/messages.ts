@@ -21,11 +21,13 @@ export const sendMessage = (
 export const sendAttachment = (
   conversationId: string,
   file: File,
+  clientMessageId: string,
   caption: string | null = null,
   replyToMessageId: string | null = null,
 ) => {
   const body = new FormData()
   body.append('file', file)
+  body.append('client_message_id', clientMessageId)
   if (caption) body.append('caption', caption)
   if (replyToMessageId) body.append('reply_to_message_id', replyToMessageId)
   return http<Message>(`/api/v1/conversations/${conversationId}/attachments`, {

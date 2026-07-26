@@ -175,7 +175,10 @@ export const useConversationStore = defineStore('conversations', {
         }
         const persisted = (
           this.messagesByConversation[conversationId] || []
-        ).some((message) => message.id === clientMessageId)
+        ).some(
+          (message) =>
+            message.id === clientMessageId && message !== optimisticMessage,
+        )
         if (persisted) return true
         this.removeMessage(conversationId, clientMessageId)
         this.sendErrorsByConversation[conversationId] =
@@ -201,12 +204,68 @@ export const useConversationStore = defineStore('conversations', {
         return false
       }
       const conversationId = this.selectedId
+      const clientMessageId = crypto.randomUUID()
+      const createdAt = new Date().toISOString()
+      const previewUrl = URL.createObjectURL(file)
+      const reply = (this.messagesByConversation[conversationId] || []).find(
+        (message) => message.id === replyToMessageId,
+      )
+      const normalizedType = file.type.toLowerCase()
+      const messageType: Message['message_type'] =
+        normalizedType === 'image/webp' || file.name.toLowerCase().endsWith('.webp')
+          ? 'sticker'
+          : normalizedType.startsWith('image/')
+            ? 'image'
+            : normalizedType.startsWith('audio/')
+              ? 'audio'
+              : normalizedType.startsWith('video/')
+                ? 'video'
+                : 'document'
+      const optimisticMessage: Message = {
+        id: clientMessageId,
+        conversation_id: conversationId,
+        direction: 'outgoing',
+        message_type: messageType,
+        status: 'pending',
+        body: caption,
+        reply_to_message_id: replyToMessageId,
+        reply_to_provider_message_id: reply?.provider_message_id || null,
+        reply_to: reply
+          ? {
+              id: reply.id,
+              direction: reply.direction,
+              message_type: reply.message_type,
+              body: reply.body,
+            }
+          : null,
+        attachments: [
+          {
+            id: crypto.randomUUID(),
+            file_name: file.name || 'anexo',
+            content_type: file.type || 'application/octet-stream',
+            size_bytes: file.size,
+            public_url: previewUrl,
+          },
+        ],
+        provider_message_id: null,
+        error: null,
+        attempt_count: 1,
+        last_attempt_at: createdAt,
+        sent_at: null,
+        delivered_at: null,
+        read_at: null,
+        edited_at: null,
+        edit_content_unavailable: false,
+        created_at: createdAt,
+      }
       this.sendingConversationIds.push(conversationId)
       this.sendErrorsByConversation[conversationId] = null
+      this.upsertMessage(conversationId, optimisticMessage)
       try {
         const message = await messageApi.sendAttachment(
           conversationId,
           file,
+          clientMessageId,
           caption,
           replyToMessageId,
         )
@@ -214,10 +273,27 @@ export const useConversationStore = defineStore('conversations', {
         this.updateConversationPreview(conversationId, message)
         return true
       } catch (error) {
+        try {
+          await this.refreshMessages(conversationId)
+        } catch {
+          // Preserve the original request error below.
+        }
+        const persisted = (
+          this.messagesByConversation[conversationId] || []
+        ).some(
+          (message) =>
+            message.id === clientMessageId &&
+            message.attachments.every(
+              (attachment) => attachment.public_url !== previewUrl,
+            ),
+        )
+        if (persisted) return true
+        this.removeMessage(conversationId, clientMessageId)
         this.sendErrorsByConversation[conversationId] =
           error instanceof Error ? error.message : 'Não foi possível enviar o anexo'
         return false
       } finally {
+        URL.revokeObjectURL(previewUrl)
         this.sendingConversationIds = this.sendingConversationIds.filter(
           (id) => id !== conversationId,
         )

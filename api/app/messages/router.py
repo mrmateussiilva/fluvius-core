@@ -1,12 +1,16 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.attachments.models import MessageAttachment
-from app.attachments.service import MAX_MEDIA_BYTES, message_type_for_upload
+from app.attachments.service import (
+    MAX_MEDIA_BYTES,
+    UnsupportedAttachmentError,
+    validate_outgoing_attachment,
+)
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
@@ -387,6 +391,7 @@ async def send_attachment(
     file: UploadFile = File(...),
     caption: str | None = Form(default=None),
     reply_to_message_id: UUID | None = Form(default=None),
+    client_message_id: UUID | None = Form(default=None),
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
@@ -406,31 +411,87 @@ async def send_attachment(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
             )
-    content = await file.read()
+    content = await file.read(MAX_MEDIA_BYTES + 1)
     if not content or len(content) > MAX_MEDIA_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Anexo deve ter até 25 MB",
         )
-    content_type = file.content_type or "application/octet-stream"
-    message_type = message_type_for_upload(
-        content_type,
-        file.filename or "anexo",
+    file_name = file.filename or "anexo"
+    try:
+        validated = validate_outgoing_attachment(
+            file.content_type or "application/octet-stream",
+            file_name,
+            content,
+        )
+    except UnsupportedAttachmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=str(exc),
+        ) from exc
+
+    normalized_caption = (
+        None if validated.message_type == MessageType.STICKER else caption
     )
+    message_id = client_message_id or uuid4()
+    existing = db.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.tenant_id == context.tenant_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    if existing is not None:
+        existing_attachment = db.scalar(
+            select(MessageAttachment).where(
+                MessageAttachment.tenant_id == context.tenant_id,
+                MessageAttachment.message_id == existing.id,
+            )
+        )
+        same_content = bool(
+            existing_attachment
+            and (
+                existing_attachment.content_sha256 == validated.content_sha256
+                or (
+                    existing_attachment.content_sha256 is None
+                    and existing_attachment.size_bytes == len(content)
+                    and existing_attachment.file_name == file_name
+                )
+            )
+        )
+        if (
+            existing.direction == MessageDirection.OUTGOING
+            and existing.message_type == validated.message_type
+            and existing.body == normalized_caption
+            and existing.reply_to_message_id == reply_to_message_id
+            and same_content
+        ):
+            return message_response(
+                db,
+                context.tenant_id,
+                existing,
+                attachments=[existing_attachment],
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Identificador de mensagem já utilizado",
+        )
+
     stored = await LocalStorageProvider().save(
-        str(context.tenant_id), file.filename or "anexo", content
+        str(context.tenant_id), file_name, content
     )
     attempted_at = datetime.now(UTC)
     message = Message(
+        id=message_id,
         tenant_id=context.tenant_id,
         conversation_id=conversation_id,
         sender_user_id=context.user.id,
         reply_to_message_id=reply_to.id if reply_to else None,
         reply_to_provider_message_id=reply_to.provider_message_id if reply_to else None,
         direction=MessageDirection.OUTGOING,
-        message_type=message_type,
+        message_type=validated.message_type,
         status=MessageStatus.PENDING,
-        body=caption,
+        body=normalized_caption,
         attempt_count=1,
         last_attempt_at=attempted_at,
     )
@@ -441,9 +502,10 @@ async def send_attachment(
         MessageAttachment(
             tenant_id=context.tenant_id,
             message_id=message.id,
-            file_name=file.filename or "anexo",
-            content_type=content_type,
+            file_name=file_name,
+            content_type=validated.content_type,
             size_bytes=stored.size_bytes,
+            content_sha256=validated.content_sha256,
             storage_key=stored.key,
             public_url=stored.public_url,
         )

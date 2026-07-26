@@ -19,5 +19,6 @@ class MessageAttachment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
     public_url: Mapped[str] = mapped_column(String(1000), nullable=False)
