@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { LogOut, MessageCircle, Settings, UserRoundCog, Zap } from 'lucide-vue-next'
+import {
+  Columns3,
+  LogOut,
+  MessageCircle,
+  Settings,
+  UserRoundCog,
+  Zap,
+} from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
 import { useRealtimeStore } from '../stores/realtimeStore'
@@ -34,6 +41,14 @@ function logout() {
         title="Conversas"
       >
         <MessageCircle class="h-5 w-5" />
+      </RouterLink>
+      <RouterLink
+        class="mb-1.5 rounded-xl p-3 transition hover:bg-white/10 hover:text-white"
+        active-class="bg-white/15 text-white shadow-sm"
+        to="/app/team-board"
+        title="Quadro da equipe"
+      >
+        <Columns3 class="h-5 w-5" />
       </RouterLink>
       <RouterLink
         class="mb-1.5 rounded-xl p-3 transition hover:bg-white/10 hover:text-white"

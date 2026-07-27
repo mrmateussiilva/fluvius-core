@@ -79,6 +79,8 @@ O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A 
 
 Desativar uma membership invalida imediatamente o acesso porque toda requisição e WebSocket revalidam a associação ativa. Conversas `open` atribuídas ao usuário desativado voltam para `new` e ficam sem responsável, dentro do mesmo tenant. O próprio administrador não pode remover seu papel administrativo nem desativar seu acesso.
 
+O quadro operacional consulta `/api/v1/users/active`, que expõe somente ID, nome e papel dos usuários ativos do tenant autenticado, sem e-mail ou dados de acesso. As colunas são calculadas no navegador a partir das conversas existentes. Drag-and-drop e o seletor dos cards chamam exclusivamente os endpoints tenant-scoped de atribuição ou liberação; somente administradores podem alterar a distribuição. Liberar move uma conversa `open` para `new`, remove o responsável e registra `conversation.released` em `audit_logs`.
+
 Mensagens criadas pela API guardam uma cópia de `User.name` em
 `Message.sender_name`. O corpo interno permanece sem decoração, enquanto o
 conteúdo entregue ao WhatsApp recebe `*Nome do atendente:*\n` antes do texto ou

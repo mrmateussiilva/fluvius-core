@@ -51,7 +51,7 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 4. `sent` exige confirmação positiva e `provider_message_id`.
 5. Falha confirmada ou resposta sem confirmação muda para `failed`; não mascarar como sucesso.
 6. Canal diferente de `connected` bloqueia envio antes de criar a mensagem.
-7. Atribuir uma conversa bloqueia sua linha durante a transição. Atendentes podem assumir para si apenas conversas livres ou finalizadas; administradores também podem tomar uma conversa ativa ou transferi-la para outro usuário ativo do mesmo tenant. A mudança efetiva de responsável registra estado anterior, novo responsável e administrador autor em `AuditLog`.
+7. Atribuir ou liberar uma conversa bloqueia sua linha durante a transição. Atendentes podem assumir para si apenas conversas livres ou finalizadas; administradores também podem tomar uma conversa ativa, transferi-la para outro usuário ativo do mesmo tenant ou devolvê-la à fila `new`. Cada mudança registra estado anterior, novo responsável e autor em `AuditLog`.
 8. Enviar texto/anexo, reenviar falha e finalizar exigem conversa `open` atribuída ao usuário autenticado.
 9. Finalizar move a conversa para `closed`, mas não separa seu histórico. A próxima incoming reabre a mesma conversa como `new`, sem atendente; o operador precisa assumi-la novamente antes de responder.
 10. Payload bruto de provider pode conter dado pessoal; produção precisa de retenção, mascaramento e controles LGPD.

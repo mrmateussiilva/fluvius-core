@@ -21,6 +21,12 @@ export interface TenantUser {
   created_at: string
 }
 
+export interface ActiveTenantUser {
+  id: string
+  name: string
+  role: UserRole
+}
+
 export interface Channel {
   id: string
   name: string

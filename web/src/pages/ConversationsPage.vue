@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import type { TenantUser } from '../api/types'
 import { listUsers } from '../api/users'
 import ConversationChat from '../components/ConversationChat.vue'
@@ -11,6 +12,7 @@ import { useRealtimeStore } from '../stores/realtimeStore'
 const store = useConversationStore()
 const auth = useAuthStore()
 const realtime = useRealtimeStore()
+const route = useRoute()
 const assignableUsers = ref<TenantUser[]>([])
 
 async function sendMessage(
@@ -54,7 +56,20 @@ onMounted(async () => {
           })
       : Promise.resolve(),
   ])
-  if (store.selectedId) await store.selectConversation(store.selectedId)
+  const requestedConversationId =
+    typeof route.query.conversation === 'string'
+      ? route.query.conversation
+      : null
+  if (
+    requestedConversationId &&
+    store.conversations.some(
+      (conversation) => conversation.id === requestedConversationId,
+    )
+  ) {
+    await store.selectConversation(requestedConversationId)
+  } else if (store.selectedId) {
+    await store.selectConversation(store.selectedId)
+  }
   realtime.connect()
   document.addEventListener('visibilitychange', refreshVisibleConversation)
 })

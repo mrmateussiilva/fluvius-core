@@ -82,7 +82,7 @@ de desenvolvimento.
 
 ## Escopo do MVP
 
-O MVP cobre login, canais WhatsApp, filas de conversas, assumir/finalizar atendimento, mensagens de texto e anexos básicos, respostas rápidas, perfil operacional básico do contato, webhook, status/QR e realtime em uma única réplica da API.
+O MVP cobre login, canais WhatsApp, filas de conversas, quadro operacional da equipe, assumir/finalizar atendimento, mensagens de texto e anexos básicos, respostas rápidas, perfil operacional básico do contato, webhook, status/QR e realtime em uma única réplica da API.
 
 Não entram agora: dashboard, CRM, IA, billing, campanhas, Meta Cloud completa, BSP completo, automações avançadas e arquitetura herdada do Chatwoot. Veja [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md).
 
@@ -94,6 +94,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 
 - Os endpoints iniciais existem e são tenant-scoped.
 - Assumir uma conversa é atômico; atendentes não podem sobrescrever a atribuição ativa. Administradores podem assumir ou transferir o atendimento para outro usuário ativo da própria empresa, com registro em auditoria.
+- O **Quadro da equipe** organiza a fila aguardando e os atendimentos de cada usuário ativo. Todos podem acompanhar a distribuição; administradores arrastam os cards, usam o seletor para transferir ou devolvem uma conversa à fila, sempre pela API auditada.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.

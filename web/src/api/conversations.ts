@@ -8,6 +8,10 @@ export const assignConversation = (id: string, userId?: string) =>
     method: 'POST',
     body: JSON.stringify(userId ? { user_id: userId } : {}),
   })
+export const releaseConversation = (id: string) =>
+  http<Conversation>(`/api/v1/conversations/${id}/release`, {
+    method: 'POST',
+  })
 export const closeConversation = (id: string) =>
   http<Conversation>(`/api/v1/conversations/${id}/close`, { method: 'POST' })
 export const markConversationRead = (id: string, throughMessageId: string) =>

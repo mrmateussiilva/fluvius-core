@@ -4,6 +4,7 @@ import ChannelsPage from './pages/ChannelsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
+import TeamBoardPage from './pages/TeamBoardPage.vue'
 import UsersPage from './pages/UsersPage.vue'
 
 export const router = createRouter({
@@ -16,6 +17,7 @@ export const router = createRouter({
       component: AppLayout,
       children: [
         { path: 'conversations', component: ConversationsPage },
+        { path: 'team-board', component: TeamBoardPage },
         { path: 'quick-replies', component: QuickRepliesPage },
         { path: 'settings/channels', component: ChannelsPage },
         { path: 'settings/users', component: UsersPage },

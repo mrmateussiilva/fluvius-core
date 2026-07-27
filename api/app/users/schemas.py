@@ -53,3 +53,9 @@ class TenantUserResponse(BaseModel):
     role: UserRole
     is_active: bool
     created_at: datetime
+
+
+class ActiveTenantUserResponse(BaseModel):
+    id: UUID
+    name: str
+    role: UserRole

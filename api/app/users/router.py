@@ -13,7 +13,12 @@ from app.database import get_db
 from app.realtime.manager import realtime_manager
 from app.security import hash_password
 from app.users.models import TenantUser, User
-from app.users.schemas import TenantUserResponse, UserCreate, UserUpdate
+from app.users.schemas import (
+    ActiveTenantUserResponse,
+    TenantUserResponse,
+    UserCreate,
+    UserUpdate,
+)
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -69,6 +74,31 @@ def get_tenant_user(
             detail="Usuário não encontrado",
         )
     return result[0], result[1]
+
+
+@router.get("/active", response_model=list[ActiveTenantUserResponse])
+def list_active_users(
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> list[ActiveTenantUserResponse]:
+    rows = db.execute(
+        select(User, TenantUser)
+        .join(
+            TenantUser,
+            (TenantUser.user_id == User.id)
+            & (TenantUser.tenant_id == context.tenant_id),
+        )
+        .where(
+            TenantUser.tenant_id == context.tenant_id,
+            TenantUser.is_active.is_(True),
+            User.is_active.is_(True),
+        )
+        .order_by(User.name, User.id)
+    ).all()
+    return [
+        ActiveTenantUserResponse(id=user.id, name=user.name, role=membership.role)
+        for user, membership in rows
+    ]
 
 
 @router.get("", response_model=list[TenantUserResponse])

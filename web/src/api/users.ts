@@ -1,5 +1,5 @@
 import { http } from './http'
-import type { TenantUser, UserRole } from './types'
+import type { ActiveTenantUser, TenantUser, UserRole } from './types'
 
 export interface CreateUserPayload {
   name: string
@@ -16,6 +16,9 @@ export interface UpdateUserPayload {
 }
 
 export const listUsers = () => http<TenantUser[]>('/api/v1/users')
+
+export const listActiveUsers = () =>
+  http<ActiveTenantUser[]>('/api/v1/users/active')
 
 export const createUser = (payload: CreateUserPayload) =>
   http<TenantUser>('/api/v1/users', {

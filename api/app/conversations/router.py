@@ -26,6 +26,7 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 ASSIGNMENT_REQUIRED = "Assuma o atendimento antes de continuar"
 ASSIGNED_TO_ANOTHER_AGENT = "Atendimento já assumido por outro agente"
 ADMIN_TRANSFER_REQUIRED = "Apenas administradores podem transferir atendimentos"
+ADMIN_RELEASE_REQUIRED = "Apenas administradores podem liberar atendimentos"
 
 
 def conversation_query(tenant_id: UUID, user_id: UUID):
@@ -332,6 +333,60 @@ async def assign_conversation(
                 "assigned_user_id": str(conversation.assigned_user_id),
             },
         )
+    return get_conversation(conversation_id, context, db)
+
+
+@router.post("/{conversation_id}/release", response_model=ConversationResponse)
+async def release_conversation(
+    conversation_id: UUID,
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> ConversationResponse:
+    conversation = get_tenant_conversation_for_update(
+        db, context.tenant_id, conversation_id
+    )
+    if context.membership.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ADMIN_RELEASE_REQUIRED,
+        )
+    if conversation.status != ConversationStatus.OPEN:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Somente atendimentos abertos podem voltar para a fila",
+        )
+
+    previous_assignee_id = conversation.assigned_user_id
+    previous_status = conversation.status
+    conversation.assigned_user_id = None
+    conversation.status = ConversationStatus.NEW
+    db.add(
+        AuditLog(
+            tenant_id=context.tenant_id,
+            user_id=context.user.id,
+            action="conversation.released",
+            entity_type="conversation",
+            entity_id=conversation.id,
+            metadata_={
+                "previous_assigned_user_id": (
+                    str(previous_assignee_id) if previous_assignee_id else None
+                ),
+                "assigned_user_id": None,
+                "previous_status": previous_status.value,
+                "status": conversation.status.value,
+            },
+        )
+    )
+    db.commit()
+    await realtime_manager.broadcast(
+        context.tenant_id,
+        "conversation.updated",
+        {
+            "id": str(conversation.id),
+            "status": conversation.status.value,
+            "assigned_user_id": None,
+        },
+    )
     return get_conversation(conversation_id, context, db)
 
 

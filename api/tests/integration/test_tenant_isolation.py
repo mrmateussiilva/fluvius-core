@@ -61,6 +61,29 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         agent_headers = {
             "Authorization": f"Bearer {login.json()['access_token']}"
         }
+        active_team = self.client.get(
+            "/api/v1/users/active",
+            headers=agent_headers,
+        )
+        self.assertEqual(active_team.status_code, 200, active_team.text)
+        self.assertEqual(
+            {user["id"] for user in active_team.json()},
+            {str(self.tenant_a.user_id), str(created_user_id)},
+        )
+        self.assertTrue(
+            all(
+                set(user) == {"id", "name", "role"}
+                for user in active_team.json()
+            )
+        )
+        tenant_b_active_team = self.client.get(
+            "/api/v1/users/active",
+            headers=self.headers_b,
+        )
+        self.assertEqual(
+            {user["id"] for user in tenant_b_active_team.json()},
+            {str(self.tenant_b.user_id)},
+        )
         self.assertEqual(
             self.client.get("/api/v1/users", headers=agent_headers).status_code,
             403,
@@ -116,6 +139,14 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         self.assertEqual(
             inactive_assignment.json()["detail"],
             "Atendente fora do tenant",
+        )
+        active_team_after_deactivation = self.client.get(
+            "/api/v1/users/active",
+            headers=self.headers_a,
+        )
+        self.assertEqual(
+            {user["id"] for user in active_team_after_deactivation.json()},
+            {str(self.tenant_a.user_id)},
         )
         with SessionLocal() as db:
             conversation = db.scalar(
@@ -376,6 +407,10 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                 json={},
             ),
             self.client.post(
+                f"/api/v1/conversations/{tenant_b.conversation_id}/release",
+                headers=headers,
+            ),
+            self.client.post(
                 f"/api/v1/conversations/{tenant_b.conversation_id}/close",
                 headers=headers,
             ),
@@ -520,6 +555,15 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             forbidden_transfer.json()["detail"],
             "Apenas administradores podem transferir atendimentos",
         )
+        forbidden_release = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/release",
+            headers=second_headers,
+        )
+        self.assertEqual(forbidden_release.status_code, 403)
+        self.assertEqual(
+            forbidden_release.json()["detail"],
+            "Apenas administradores podem liberar atendimentos",
+        )
 
         admin_takeover = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
@@ -562,6 +606,13 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             forbidden_close.json()["detail"],
             "Atendimento já assumido por outro agente",
         )
+        released = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/release",
+            headers=self.headers_a,
+        )
+        self.assertEqual(released.status_code, 200, released.text)
+        self.assertEqual(released.json()["status"], "new")
+        self.assertIsNone(released.json()["assigned_user_id"])
         with SessionLocal() as db:
             assignment_logs = list(
                 db.scalars(
@@ -569,17 +620,28 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                     .where(
                         AuditLog.tenant_id == self.tenant_a.tenant_id,
                         AuditLog.entity_id == self.tenant_a.conversation_id,
-                        AuditLog.action == "conversation.assigned",
                     )
                     .order_by(AuditLog.created_at)
                 )
             )
         self.assertEqual(
-            [log.metadata_["mode"] for log in assignment_logs],
+            [
+                log.metadata_["mode"]
+                for log in assignment_logs
+                if log.action == "conversation.assigned"
+            ],
             ["transfer", "takeover"],
         )
         self.assertTrue(
             all(log.user_id == self.tenant_a.user_id for log in assignment_logs)
+        )
+        self.assertEqual(
+            [log.action for log in assignment_logs],
+            [
+                "conversation.assigned",
+                "conversation.assigned",
+                "conversation.released",
+            ],
         )
 
     def test_websocket_revalidates_membership_instead_of_trusting_token_claim(self) -> None:
