@@ -14,6 +14,7 @@ class SendResult(BaseModel):
     provider_message_id: str | None = None
     status: MessageStatus = MessageStatus.FAILED
     error: str | None = None
+    retryable: bool = False
 
 
 class ChannelStatusResult(BaseModel):

@@ -14,6 +14,8 @@
 - Quadro operacional exclusivo para administradores, com fila aguardando, colunas por atendente, atualização realtime e redistribuição por drag-and-drop ou seletor.
 - Sincronização operacional exclusiva para administradores: atualização limitada dos contatos conhecidos e reconciliação de edições/recibos recentes já recebidos.
 - Receber e enviar texto.
+- Entrega assíncrona de texto e mídia por worker exclusivo, com outbox
+  persistente, ordem por conversa e retry conservador.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.
 - Anexos de imagem, documento, áudio, vídeo e figurinha nativa, com limite local de 25 MB, validação do conteúdo e envio idempotente. PNG e JPG escolhidos como figurinha são convertidos para WebP 512×512 antes do envio.
@@ -45,7 +47,8 @@
 4. Capturar fixtures reais de status, QR e envio de texto; ajustar o adapter.
 5. Capturar webhooks reais de incoming, ACK e conexão; garantir idempotência.
 6. Cobrir máquina de estados de mensagens e canal com testes de integração.
-7. Enfileirar envio/retry no RQ com idempotency key e política de backoff.
+7. Validar em uma sessão real a outbox, o worker de entrega e a chave
+   idempotente usada no retry já implementado.
 8. Integrar upload de mídia ponta a ponta e definir MinIO/S3 para o ambiente seguinte.
 9. Refinar UX operacional de filas, erros e reconexão sem criar dashboard/CRM.
 10. Executar teste de atendimento completo, registrar riscos e congelar o escopo do MVP.

@@ -92,8 +92,14 @@ class EvolutionGoProvider(WhatsAppProvider):
             return SendResult(
                 success=True, provider_message_id=message_id, status=MessageStatus.SENT
             )
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
-            return SendResult(success=False, status=MessageStatus.FAILED, error=str(exc))
+        except httpx.HTTPError as exc:
+            return self._send_error_result(exc)
+        except (ValueError, KeyError):
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error="Evolution Go retornou uma confirmação de texto inválida.",
+            )
 
     async def send_media(
         self,
@@ -141,8 +147,14 @@ class EvolutionGoProvider(WhatsAppProvider):
             return SendResult(
                 success=True, provider_message_id=message_id, status=MessageStatus.SENT
             )
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
-            return SendResult(success=False, status=MessageStatus.FAILED, error=str(exc))
+        except httpx.HTTPError as exc:
+            return self._send_error_result(exc)
+        except (ValueError, KeyError):
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error="Evolution Go retornou uma confirmação de mídia inválida.",
+            )
 
     async def get_status(self, channel: WhatsAppChannel) -> ChannelStatusResult:
         try:
@@ -719,6 +731,44 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "Configure EVOLUTION_GO_API_KEY e reinicie a API."
             )
         return f"Evolution Go respondeu com HTTP {status_code}"
+
+    @classmethod
+    def _send_error_result(cls, exc: httpx.HTTPError) -> SendResult:
+        if isinstance(
+            exc,
+            (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout),
+        ):
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error="Evolution Go está temporariamente indisponível.",
+                retryable=True,
+            )
+        if isinstance(exc, httpx.HTTPStatusError):
+            status_code = exc.response.status_code
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error=cls._http_error_message(exc),
+                retryable=status_code == 429,
+            )
+        if isinstance(
+            exc,
+            (httpx.ReadTimeout, httpx.WriteTimeout, httpx.RemoteProtocolError),
+        ):
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error=(
+                    "A resposta do Evolution Go ficou incerta; o reenvio "
+                    "automático foi bloqueado."
+                ),
+            )
+        return SendResult(
+            success=False,
+            status=MessageStatus.FAILED,
+            error="Falha segura ao comunicar com o Evolution Go.",
+        )
 
     @classmethod
     def _message_text(

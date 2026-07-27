@@ -11,6 +11,8 @@ from app.config import settings
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.database import SessionLocal
+from app.delivery.models import MessageDelivery
+from app.delivery.tasks import run_delivery
 from app.messages.models import Message, MessageRevision
 from app.providers.base import SendResult
 from app.storage.base import StoredFile
@@ -205,7 +207,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
 
         provider = ConfirmingProvider("outgoing-integration-1")
         client_message_id = str(uuid4())
-        with patch("app.messages.router.get_provider", return_value=provider):
+        with patch("app.delivery.service.get_provider", return_value=provider):
             outgoing = self.client.post(
                 f"/api/v1/conversations/{conversation_id}/messages",
                 headers=self.headers_a,
@@ -230,9 +232,18 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                     "client_message_id": client_message_id,
                 },
             )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
 
-        self.assertEqual(outgoing.status_code, 201, outgoing.text)
-        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(outgoing.status_code, 202, outgoing.text)
+        self.assertEqual(repeated.status_code, 202, repeated.text)
         self.assertEqual(conflicting.status_code, 409, conflicting.text)
         self.assertEqual(
             conflicting.json()["detail"],
@@ -242,6 +253,16 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(outgoing_message["id"], client_message_id)
         self.assertEqual(repeated.json()["id"], client_message_id)
         self.assertEqual(outgoing_message["sender_name"], "Agente A")
+        self.assertEqual(outgoing_message["status"], "pending")
+        messages_after_delivery = self.client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=self.headers_a,
+        )
+        outgoing_message = next(
+            message
+            for message in messages_after_delivery.json()
+            if message["id"] == client_message_id
+        )
         self.assertEqual(outgoing_message["status"], "sent")
         self.assertEqual(
             outgoing_message["provider_message_id"],
@@ -358,7 +379,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             },
         }
         with (
-            patch("app.messages.router.get_provider", return_value=provider),
+            patch("app.delivery.service.get_provider", return_value=provider),
             patch(
                 "app.messages.router.LocalStorageProvider.save",
                 new=AsyncMock(return_value=stored),
@@ -389,14 +410,23 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                     "client_message_id": client_message_id,
                 },
             )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
 
-        self.assertEqual(created.status_code, 201, created.text)
-        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(repeated.status_code, 202, repeated.text)
         self.assertEqual(conflicting.status_code, 409, conflicting.text)
         self.assertEqual(created.json()["id"], client_message_id)
         self.assertEqual(created.json()["message_type"], "image")
         self.assertEqual(created.json()["sender_name"], "Agente A")
-        self.assertEqual(created.json()["status"], "sent")
+        self.assertEqual(created.json()["status"], "pending")
         self.assertEqual(repeated.json()["id"], client_message_id)
         self.assertEqual(len(provider.calls), 1)
         self.assertEqual(
@@ -448,7 +478,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             },
         }
         with (
-            patch("app.messages.router.get_provider", return_value=provider),
+            patch("app.delivery.service.get_provider", return_value=provider),
             patch(
                 "app.messages.router.LocalStorageProvider.save",
                 new=AsyncMock(return_value=stored),
@@ -464,9 +494,18 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                 headers=self.headers_a,
                 **request,
             )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
 
-        self.assertEqual(created.status_code, 201, created.text)
-        self.assertEqual(repeated.status_code, 201, repeated.text)
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(repeated.status_code, 202, repeated.text)
         self.assertEqual(created.json()["message_type"], "sticker")
         self.assertEqual(created.json()["sender_name"], "Agente A")
         self.assertIsNone(created.json()["body"])

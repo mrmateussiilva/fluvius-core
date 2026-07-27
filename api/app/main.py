@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -8,17 +11,39 @@ from app.config import settings
 from app.contacts.router import router as contacts_router
 from app.conversations.router import router as conversations_router
 from app.database import load_all_models
+from app.delivery.dispatcher import delivery_dispatcher_loop
 from app.messages.router import router as messages_router
 from app.providers.webhook_router import router as webhook_router
 from app.quick_replies.router import router as quick_replies_router
 from app.realtime.router import router as realtime_router
+from app.realtime.broker import consume_realtime_events
 from app.sync.router import router as sync_router
 from app.users.router import router as users_router
 
 
 load_all_models()
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    stop_event = asyncio.Event()
+    tasks: list[asyncio.Task] = []
+    if settings.environment != "test":
+        tasks = [
+            asyncio.create_task(delivery_dispatcher_loop(stop_event)),
+            asyncio.create_task(consume_realtime_events(stop_event)),
+        ]
+    try:
+        yield
+    finally:
+        stop_event.set()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

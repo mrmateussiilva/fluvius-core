@@ -24,23 +24,37 @@ Os módulos em `api/app` são separados pelo domínio de negócio. Não há repo
 4. A API exige que a conversa esteja `open` e atribuída ao usuário autenticado. Atribuir usa bloqueio de linha no PostgreSQL: atendentes não sobrescrevem uma posse ativa, enquanto administradores podem assumir ou transferir para outro usuário ativo do mesmo tenant. Toda alteração efetiva de responsável gera `conversation.assigned` em `audit_logs`.
 5. Se `channel.status != connected`, a API retorna `409` com: “WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.”
 6. Para texto, o frontend gera `client_message_id`, mostra imediatamente a bolha `pending` e a API usa esse UUID como ID local e chave idempotente. Repetir o mesmo ID e conteúdo devolve a mensagem existente sem chamar novamente o provider.
-7. A mensagem outgoing é persistida como `pending` antes do efeito externo.
-8. A factory cria o adapter correspondente a `channel.provider`.
-9. O adapter chama o gateway.
-10. Apenas uma resposta positiva com ID do provider muda o status para `sent`. A API
-   reaplica essa invariante mesmo que um adapter retorne um resultado contraditório. Falha ou
-   resposta ambígua muda para `failed`.
-11. A API emite `message.created` no tenant.
+7. A API persiste `Message(pending)` e `MessageDelivery(queued)` na mesma
+   transação. A resposta HTTP `202` não depende da latência do gateway.
+8. A API emite `message.created`; o dispatcher encontra a outbox persistida e
+   envia somente `delivery_id` e `tenant_id` à fila `fluvius-delivery`.
+9. O delivery worker bloqueia a entrega, reconsulta mensagem, conversa, canal e
+   contato com filtro de tenant e preserva a ordem das mensagens da conversa.
+10. O worker registra a tentativa antes do efeito externo, resolve o adapter
+    correspondente a `channel.provider` e chama o gateway com o UUID da mensagem
+    como chave idempotente.
+11. Apenas uma resposta positiva com ID do provider muda a mensagem para
+    `sent`. Falha confirmada ou resposta ambígua muda para `failed`.
+12. O worker persiste o resultado e publica `message.updated` pelo Redis; a API
+    repassa o evento ao WebSocket do tenant.
 
-Depois do `sent`, webhooks `Receipt` podem avançar a mensagem para `delivered` e `read`. A atualização é monotônica, limitada a mensagens outgoing do mesmo tenant/canal e emite `message.updated`. Recibos que chegam antes do ID de envio ficam pendentes em `provider_events` para reconciliação após a resposta síncrona do gateway.
+Depois do `sent`, webhooks `Receipt` podem avançar a mensagem para `delivered` e `read`. A atualização é monotônica, limitada a mensagens outgoing do mesmo tenant/canal e emite `message.updated`. Recibos que chegam antes do ID de envio ficam pendentes em `provider_events` para reconciliação após a confirmação do gateway.
 
-Uma resposta valida a mensagem citada no mesmo tenant/conversa, persiste a referência local e envia apenas os identificadores externos necessários pelo adapter. Webhooks recebidos extraem a referência de `ContextInfo.StanzaID`. O reenvio manual aceita somente outgoing em `failed`, reutiliza o UUID local como chave do provider, incrementa a tentativa e repete o ciclo `pending` antes da chamada externa.
+Uma resposta valida a mensagem citada no mesmo tenant/conversa, persiste a referência local e envia apenas os identificadores externos necessários pelo adapter. Webhooks recebidos extraem a referência de `ContextInfo.StanzaID`. O reenvio manual aceita somente outgoing em `failed`, reinicia a outbox e reutiliza o UUID local; `attempt_count` avança somente quando o worker realmente inicia outra chamada.
+
+Falhas claramente anteriores à aceitação pelo provider — conexão recusada,
+timeout de conexão, falta de conexão no pool ou HTTP 429 — usam backoff de 5,
+30 e 120 segundos, até quatro tentativas. Timeout de resposta, erro de protocolo
+ou worker interrompido durante a chamada são ambíguos e nunca geram retry
+automático: a mensagem vira `failed` para evitar envio duplicado.
 
 Carregar ou receber mensagens por realtime não marca a conversa como lida. O frontend emite a leitura somente quando a aba está visível, o histórico terminou de carregar e o operador alcançou o final da conversa. A requisição informa a última mensagem incoming realmente visível; a API valida tenant e conversa e avança o marcador exatamente até o `created_at` dela. Fora do final, novas mensagens preservam a posição atual e aparecem em um indicador explícito.
 
 Rascunhos de texto ficam somente no `localStorage`, sob chave composta por usuário e conversa. Eles não são enviados à API antes do envio, são removidos quando o composer fica vazio e não incluem arquivos selecionados. Anexos recebem um UUID no navegador, aparecem imediatamente como `pending` e reutilizam esse identificador no multipart e no provider. Repetir o mesmo UUID e o mesmo SHA-256 devolve a mensagem existente sem duplicar o envio; reutilizá-lo com outro conteúdo retorna conflito.
 
-O envio é síncrono nesta fundação. A evolução natural é enfileirar tentativas e retries no RQ com idempotency key, mantendo a mesma máquina de estados.
+Se Redis estiver indisponível depois do commit, a entrega permanece `queued` no
+PostgreSQL e o dispatcher tenta novamente. Um job RQ duplicado é inofensivo
+porque somente uma transição bloqueada da outbox pode chegar ao provider.
 
 ## Fluxo de recebimento
 
@@ -125,7 +139,10 @@ memória do tenant. Eventos planejados:
 - `contact.updated`
 - `channel.status.updated`
 
-O gerenciador atual funciona em uma única réplica. Com duas ou mais réplicas da API, Redis Pub/Sub é obrigatório para propagar eventos entre processos; presença, replay e cursor continuam fora desta etapa.
+Eventos produzidos pelo delivery worker atravessam Redis Pub/Sub até a API. Os
+demais eventos ainda usam o gerenciador em memória; portanto, duas ou mais
+réplicas da API exigem migrar toda a emissão para o broker. Presença, replay e
+cursor continuam fora desta etapa.
 
 O cliente trata o tipo e a conversa informados em cada evento. Mensagens da conversa selecionada
 são conciliadas por ID, evitando duplicação entre a resposta HTTP e o WebSocket. A contagem de não
@@ -134,11 +151,11 @@ sincronizada novamente.
 
 ## Fila
 
-Redis e uma fila RQ chamada `fluvius` sobem no Compose. O worker executa as
-sincronizações administrativas de contatos e de eventos pendentes; os jobs
-recebem IDs e reconsultam dados com `tenant_id`, em vez de serializar objetos
-ORM. O envio de mensagens continua síncrono. Futuros candidatos: retries de
-provider, download/processamento de mídia e notificações.
+Redis e duas filas RQ sobem no Compose. `fluvius-delivery` tem um
+`delivery-worker` exclusivo para texto e mídia; `fluvius-maintenance` mantém
+sincronizações administrativas fora do caminho crítico. Os jobs recebem IDs e
+reconsultam dados com `tenant_id`, em vez de serializar objetos ORM. A outbox no
+PostgreSQL é a fonte da verdade; Redis apenas transporta a execução.
 
 ## Storage
 
@@ -147,7 +164,8 @@ provider, download/processamento de mídia e notificações.
 ## Limites atuais
 
 - Um processo da API para realtime consistente.
-- Sem retry automático de envio.
+- Retry automático conservador apenas para falhas comprovadamente transitórias;
+  respostas ambíguas exigem reenvio manual.
 - Sem criptografia de `provider_config`; apenas configurações não secretas devem ser armazenadas ali.
 - Storage local e upload de até 25 MB.
 - Contrato webhook do Evolution Go ainda precisa de fixtures reais e testes de compatibilidade por versão.

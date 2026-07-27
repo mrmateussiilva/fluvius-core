@@ -65,13 +65,20 @@ removidos antes de `provider_events`.
 
 Respostas a botões legados podem gerar os eventos `ButtonClick` e `Message` para a mesma interação. O adapter ignora `ButtonClick` com sucesso HTTP e usa apenas `Message` como fonte canônica, evitando retries e duplicidade. Botões interativos continuam fora do escopo do MVP.
 
-O envio de texto retorna `{"message": "success", "data": {...}}`; a confirmação positiva é o identificador em `data.Info.ID`. Sem esse campo, o Fluvius mantém a regra conservadora e marca o envio como `failed`. Na 0.7.2, respostas usam `quoted.messageId` e `quoted.participant`; o adapter também envia o UUID local em `id`, mantendo a mesma chave em uma tentativa manual de reenvio.
+O envio de texto retorna `{"message": "success", "data": {...}}`; a confirmação positiva é o identificador em `data.Info.ID`. Sem esse campo, o Fluvius mantém a regra conservadora e marca o envio como `failed`. Na 0.7.2, respostas usam `quoted.messageId` e `quoted.participant`; o delivery worker também envia o UUID local em `id`, mantendo a mesma chave em todas as tentativas.
 
 Mídia usa `/send/media` com `type` igual a `image`, `audio`, `video` ou `document`. Figurinhas são normalizadas como WebP 512×512 pelo composer, persistidas com `message_type=sticker`, enviadas sem legenda por `/send/sticker` no campo `sticker` e renderizadas sem o balão de mídia comum. WebP recebido do WhatsApp segue o mesmo tipo nativo e pode ser animado. A URL armazenada para o navegador é convertida para a URL interna da API antes da chamada ao gateway. Respostas citadas também são encaminhadas nos dois endpoints. O UUID criado pelo navegador acompanha o multipart como `client_message_id`, nasce como ID local `pending` e é reutilizado como chave idempotente no provider; o SHA-256 do conteúdo impede que o mesmo UUID seja aceito para outro arquivo.
 
 Com `WEBHOOK_FILES=true`, mensagens de mídia chegam com o arquivo em `data.Message.base64` e metadados no objeto `imageMessage`, `audioMessage`, `videoMessage`, `documentMessage` ou `stickerMessage`. O adapter normaliza esses dados, a API valida a assinatura do arquivo, salva o conteúdo e seu SHA-256 em `MessageAttachment` e remove o base64 da cópia guardada em `provider_events`.
 
-Recibos chegam como evento `Receipt`, com o estado em `state`, os IDs em `data.MessageIDs` e o instante em `data.Timestamp`. `Delivered` e `Read` avançam mensagens outgoing do mesmo tenant e canal, preenchem `delivered_at`/`read_at` e nunca regridem. `ReadSelf` é ignorado porque representa leitura local de uma mensagem recebida, não leitura pelo cliente. Se o recibo chegar antes da confirmação síncrona do envio, ele permanece não processado em `provider_events` e é reconciliado assim que o ID do provider for persistido.
+Recibos chegam como evento `Receipt`, com o estado em `state`, os IDs em `data.MessageIDs` e o instante em `data.Timestamp`. `Delivered` e `Read` avançam mensagens outgoing do mesmo tenant e canal, preenchem `delivered_at`/`read_at` e nunca regridem. `ReadSelf` é ignorado porque representa leitura local de uma mensagem recebida, não leitura pelo cliente. Se o recibo chegar antes da confirmação assíncrona do envio, ele permanece não processado em `provider_events` e é reconciliado assim que o worker persistir o ID do provider.
+
+O adapter classifica como retryable somente falhas seguras antes de uma
+confirmação: conexão recusada, timeout de conexão, timeout do pool e HTTP 429.
+Timeout de resposta, falha de escrita e erro de protocolo têm resultado
+ambíguo e bloqueiam retry automático para evitar uma segunda mensagem no
+WhatsApp. Confirmar em sessão real que a Evolution deduplica o campo `id`
+continua sendo requisito antes de ampliar essa política.
 
 O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter normaliza confirmação do número, nome exibido/comercial/verificado, recado e URL da foto. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 

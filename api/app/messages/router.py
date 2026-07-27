@@ -1,3 +1,4 @@
+import asyncio
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -33,59 +34,24 @@ from app.conversations.router import (
     get_tenant_conversation_for_update,
 )
 from app.database import get_db
+from app.delivery.dispatcher import create_delivery, dispatch_delivery
+from app.delivery.models import MessageDelivery
+from app.delivery.service import (
+    apply_send_result as apply_send_result,
+    format_outgoing_content as format_outgoing_content,
+    normalized_sender_name,
+)
 from app.messages.models import Message
 from app.messages.schemas import MessageCreate
-from app.providers.base import SendResult
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
 )
-from app.providers.factory import get_provider
-from app.providers.status_updates import reconcile_pending_status_events
 from app.realtime.manager import realtime_manager
 from app.storage.local import LocalStorageProvider
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
-
-
-def normalized_sender_name(value: str | None) -> str | None:
-    normalized = " ".join((value or "").split())
-    return normalized or None
-
-
-def format_outgoing_content(
-    sender_name: str | None,
-    content: str | None,
-) -> str | None:
-    if not content:
-        return content
-    normalized_name = normalized_sender_name(sender_name)
-    if not normalized_name:
-        return content
-    return f"*{normalized_name}:*\n{content}"
-
-
-def apply_send_result(
-    message: Message,
-    result: SendResult,
-    *,
-    confirmed_at: datetime | None = None,
-) -> None:
-    """Apply the delivery invariant independently of provider behavior."""
-    if result.success and result.provider_message_id:
-        message.status = MessageStatus.SENT
-        message.provider_message_id = result.provider_message_id
-        message.error = None
-        message.sent_at = confirmed_at or datetime.now(UTC)
-        return
-
-    message.status = MessageStatus.FAILED
-    message.provider_message_id = None
-    message.error = result.error or "Provider não confirmou o envio com um identificador"
-    message.sent_at = None
-
-
 def conversation_delivery_context(
     db: Session, tenant_id: UUID, conversation_id: UUID, user_id: UUID
 ) -> tuple[Conversation, WhatsAppChannel, Contact]:
@@ -223,87 +189,33 @@ def message_list_response(
     ]
 
 
-async def deliver_message(
+def ensure_delivery(
     db: Session,
-    *,
     message: Message,
-    channel: WhatsAppChannel,
-    contact: Contact,
-) -> list[Message]:
-    reply_to = (
-        get_tenant_message(
-            db,
-            message.tenant_id,
-            message.conversation_id,
-            message.reply_to_message_id,
+    *,
+    reset: bool = False,
+) -> MessageDelivery:
+    delivery = db.scalar(
+        select(MessageDelivery).where(
+            MessageDelivery.message_id == message.id,
+            MessageDelivery.tenant_id == message.tenant_id,
         )
-        if message.reply_to_message_id
-        else None
     )
-    try:
-        provider = get_provider(channel.provider, channel)
-        participant = None
-        if reply_to:
-            participant = (
-                contact.phone_number
-                if reply_to.direction == MessageDirection.INCOMING
-                else channel.phone_number or contact.phone_number
-            )
-        if message.message_type == MessageType.TEXT:
-            result = await provider.send_text(
-                channel,
-                contact.phone_number,
-                format_outgoing_content(
-                    message.sender_name,
-                    message.body,
-                )
-                or "",
-                reply_to_provider_message_id=(
-                    reply_to.provider_message_id if reply_to else None
-                ),
-                reply_to_participant=participant,
-                idempotency_key=str(message.id),
-            )
-        else:
-            attachment = db.scalar(
-                select(MessageAttachment).where(
-                    MessageAttachment.tenant_id == message.tenant_id,
-                    MessageAttachment.message_id == message.id,
-                )
-            )
-            if attachment is None:
-                message.status = MessageStatus.FAILED
-                message.error = "Anexo da mensagem não foi encontrado"
-                return []
-            result = await provider.send_media(
-                channel,
-                contact.phone_number,
-                attachment.public_url,
-                (
-                    None
-                    if message.message_type == MessageType.STICKER
-                    else format_outgoing_content(
-                        message.sender_name,
-                        message.body,
-                    )
-                ),
-                reply_to_provider_message_id=(
-                    reply_to.provider_message_id if reply_to else None
-                ),
-                reply_to_participant=participant,
-                idempotency_key=str(message.id),
-            )
-        apply_send_result(message, result)
-    except (NotImplementedError, ProviderConfigurationError) as exc:
-        message.status = MessageStatus.FAILED
-        message.error = str(exc)
-        message.sent_at = None
-    db.flush()
-    return reconcile_pending_status_events(
-        db,
-        channel=channel,
-        provider_message_id=message.provider_message_id,
-    )
+    if delivery is None:
+        delivery = create_delivery(
+            tenant_id=message.tenant_id,
+            message_id=message.id,
+        )
+        db.add(delivery)
+    elif reset:
+        delivery.status = "queued"
+        delivery.attempt_count = 0
+        delivery.next_attempt_at = datetime.now(UTC)
+        delivery.locked_at = None
+        delivery.rq_job_id = None
+        delivery.last_error = None
+        delivery.completed_at = None
+    return delivery
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
@@ -329,7 +241,7 @@ def list_messages(
 @router.post(
     "/conversations/{conversation_id}/messages",
     response_model=MessageResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def send_message(
     conversation_id: UUID,
@@ -337,7 +249,7 @@ async def send_message(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    conversation, channel, contact = conversation_delivery_context(
+    conversation, _, _ = conversation_delivery_context(
         db, context.tenant_id, conversation_id, context.user.id
     )
     existing = db.scalar(
@@ -355,6 +267,14 @@ async def send_message(
             and existing.body == payload.text
             and existing.reply_to_message_id == payload.reply_to_message_id
         ):
+            if existing.status == MessageStatus.PENDING:
+                delivery = ensure_delivery(db, existing)
+                db.commit()
+                await asyncio.to_thread(
+                    dispatch_delivery,
+                    delivery.id,
+                    context.tenant_id,
+                )
             return message_response(db, context.tenant_id, existing)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -373,7 +293,7 @@ async def send_message(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
             )
-    attempted_at = datetime.now(UTC)
+    created_at = datetime.now(UTC)
     message = Message(
         id=payload.client_message_id,
         tenant_id=context.tenant_id,
@@ -386,15 +306,17 @@ async def send_message(
         message_type=MessageType.TEXT,
         status=MessageStatus.PENDING,
         body=payload.text,
-        attempt_count=1,
-        last_attempt_at=attempted_at,
+        attempt_count=0,
     )
     db.add(message)
-    conversation.last_message_at = attempted_at
-    db.commit()  # Persist pending before performing an external side effect.
-    reconciled = await deliver_message(
-        db, message=message, channel=channel, contact=contact
+    conversation.last_message_at = created_at
+    db.flush()
+    delivery = create_delivery(
+        tenant_id=context.tenant_id,
+        message_id=message.id,
+        now=created_at,
     )
+    db.add(delivery)
     db.commit()
     db.refresh(message)
     await realtime_manager.broadcast(
@@ -402,20 +324,18 @@ async def send_message(
         "message.created",
         message_response(db, context.tenant_id, message).model_dump(mode="json"),
     )
-    for updated in reconciled:
-        if updated.id != message.id:
-            await realtime_manager.broadcast(
-                context.tenant_id,
-                "message.updated",
-                message_response(db, context.tenant_id, updated).model_dump(mode="json"),
-            )
+    await asyncio.to_thread(
+        dispatch_delivery,
+        delivery.id,
+        context.tenant_id,
+    )
     return message_response(db, context.tenant_id, message, reply_to)
 
 
 @router.post(
     "/conversations/{conversation_id}/attachments",
     response_model=MessageResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def send_attachment(
     conversation_id: UUID,
@@ -426,7 +346,7 @@ async def send_attachment(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    conversation, channel, contact = conversation_delivery_context(
+    conversation, _, _ = conversation_delivery_context(
         db, context.tenant_id, conversation_id, context.user.id
     )
     reply_to = None
@@ -498,6 +418,14 @@ async def send_attachment(
             and existing.reply_to_message_id == reply_to_message_id
             and same_content
         ):
+            if existing.status == MessageStatus.PENDING:
+                delivery = ensure_delivery(db, existing)
+                db.commit()
+                await asyncio.to_thread(
+                    dispatch_delivery,
+                    delivery.id,
+                    context.tenant_id,
+                )
             return message_response(
                 db,
                 context.tenant_id,
@@ -512,7 +440,7 @@ async def send_attachment(
     stored = await LocalStorageProvider().save(
         str(context.tenant_id), file_name, content
     )
-    attempted_at = datetime.now(UTC)
+    created_at = datetime.now(UTC)
     message = Message(
         id=message_id,
         tenant_id=context.tenant_id,
@@ -525,11 +453,10 @@ async def send_attachment(
         message_type=validated.message_type,
         status=MessageStatus.PENDING,
         body=normalized_caption,
-        attempt_count=1,
-        last_attempt_at=attempted_at,
+        attempt_count=0,
     )
     db.add(message)
-    conversation.last_message_at = attempted_at
+    conversation.last_message_at = created_at
     db.flush()
     db.add(
         MessageAttachment(
@@ -543,10 +470,12 @@ async def send_attachment(
             public_url=stored.public_url,
         )
     )
-    db.commit()
-    reconciled = await deliver_message(
-        db, message=message, channel=channel, contact=contact
+    delivery = create_delivery(
+        tenant_id=context.tenant_id,
+        message_id=message.id,
+        now=created_at,
     )
+    db.add(delivery)
     db.commit()
     db.refresh(message)
     await realtime_manager.broadcast(
@@ -554,19 +483,18 @@ async def send_attachment(
         "message.created",
         message_response(db, context.tenant_id, message).model_dump(mode="json"),
     )
-    for updated in reconciled:
-        if updated.id != message.id:
-            await realtime_manager.broadcast(
-                context.tenant_id,
-                "message.updated",
-                message_response(db, context.tenant_id, updated).model_dump(mode="json"),
-            )
+    await asyncio.to_thread(
+        dispatch_delivery,
+        delivery.id,
+        context.tenant_id,
+    )
     return message_response(db, context.tenant_id, message, reply_to)
 
 
 @router.post(
     "/conversations/{conversation_id}/messages/{message_id}/retry",
     response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def retry_message(
     conversation_id: UUID,
@@ -574,7 +502,7 @@ async def retry_message(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    conversation, channel, contact = conversation_delivery_context(
+    conversation, _, _ = conversation_delivery_context(
         db, context.tenant_id, conversation_id, context.user.id
     )
     message = get_tenant_message(db, context.tenant_id, conversation_id, message_id)
@@ -591,14 +519,8 @@ async def retry_message(
     message.sent_at = None
     message.delivered_at = None
     message.read_at = None
-    message.attempt_count += 1
-    message.last_attempt_at = attempted_at
     conversation.last_message_at = attempted_at
-    db.commit()  # Persist the retry intent before calling the provider.
-
-    reconciled = await deliver_message(
-        db, message=message, channel=channel, contact=contact
-    )
+    delivery = ensure_delivery(db, message, reset=True)
     db.commit()
     db.refresh(message)
     await realtime_manager.broadcast(
@@ -606,11 +528,9 @@ async def retry_message(
         "message.updated",
         message_response(db, context.tenant_id, message).model_dump(mode="json"),
     )
-    for updated in reconciled:
-        if updated.id != message.id:
-            await realtime_manager.broadcast(
-                context.tenant_id,
-                "message.updated",
-                message_response(db, context.tenant_id, updated).model_dump(mode="json"),
-            )
+    await asyncio.to_thread(
+        dispatch_delivery,
+        delivery.id,
+        context.tenant_id,
+    )
     return message_response(db, context.tenant_id, message)

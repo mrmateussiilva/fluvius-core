@@ -46,7 +46,7 @@ Antes de usar o gateway, ajuste os segredos do `.env` e conclua a ativação exi
 ```bash
 docker compose up --build
 docker compose down
-docker compose logs -f api worker evolution-go
+docker compose logs -f api delivery-worker worker evolution-go
 docker compose exec api alembic current
 docker compose exec api alembic upgrade head
 docker compose exec web npm run build
@@ -88,7 +88,7 @@ Não entram agora: dashboard, CRM, IA, billing, campanhas, Meta Cloud completa, 
 
 ## Arquitetura em uma frase
 
-O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider configurado no canal, valida tenant e estado do canal, e só então chama o gateway. Veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/PROVIDERS.md](docs/PROVIDERS.md).
+O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e atendimento, persiste a outbox e o delivery worker resolve o provider antes de chamar o gateway. Veja [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e [docs/PROVIDERS.md](docs/PROVIDERS.md).
 
 ## Estado desta fundação
 
@@ -97,7 +97,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 - O **Quadro da equipe** é exclusivo para administradores e organiza a fila aguardando e os atendimentos de cada usuário ativo. O admin arrasta os cards, usa o seletor para transferir ou devolve uma conversa à fila, sempre pela API auditada.
 - A tela **Sincronização** é exclusiva para administradores e executa no worker a atualização de até 50 contatos conhecidos, a reconciliação de até 500 edições/recibos recentes já persistidos ou ambas. Ela mostra progresso auditável por canal e não promete importar o histórico completo do WhatsApp.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
-- A mensagem outgoing é persistida como `pending` antes da chamada externa.
+- A mensagem outgoing e sua outbox são persistidas juntas antes da chamada externa. A API responde `202/pending`, e um delivery worker exclusivo processa a fila sem concorrer com sincronizações administrativas.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
 - Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, redefinem senha e desativam memberships sem atravessar tenants. Os números disponíveis continuam sendo exclusivamente os canais cadastrados naquela empresa.
@@ -106,5 +106,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
   uma bolha `[text]`; reações ficam fora do MVP.
 - O composer e a API bloqueiam envio com o canal offline.
 - O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia, seletor de emojis, botão dedicado para figurinha e um menu de anexos separado em fotos/vídeos, documentos e áudio, além de colagem e arrastar e soltar. PNG/JPG escolhidos como figurinha são convertidos para WebP 512×512 e enviados pelo fluxo nativo de sticker, sem legenda. Áudios usam player próprio com progresso e velocidades `1x`, `1,5x` e `2x`.
-- O worker RQ executa as sincronizações administrativas; o envio continua síncrono para manter simples a confirmação nesta etapa.
+- Redis possui filas separadas de entrega e manutenção. O PostgreSQL recupera
+  uma entrega que não chegou ao Redis, preserva a ordem por conversa e limita
+  retries automáticos a falhas comprovadamente transitórias.
 - Payloads e rotas exatas do Evolution Go devem ser validados contra o Swagger da imagem escolhida antes de produção.

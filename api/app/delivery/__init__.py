@@ -1,0 +1,1 @@
+"""Reliable outgoing message delivery."""

@@ -271,6 +271,21 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(body["quoted"]["messageId"], "ORIGINAL-123")
         self.assertEqual(body["quoted"]["participant"], "5527999999999@s.whatsapp.net")
 
+    def test_retries_only_failures_that_are_safe_before_delivery(self) -> None:
+        request = httpx.Request("POST", "http://evolution-go:8080/send/text")
+        connect_failure = self.provider._send_error_result(
+            httpx.ConnectError("connection refused", request=request)
+        )
+        uncertain_failure = self.provider._send_error_result(
+            httpx.ReadTimeout("response timeout", request=request)
+        )
+
+        self.assertFalse(connect_failure.success)
+        self.assertTrue(connect_failure.retryable)
+        self.assertFalse(uncertain_failure.success)
+        self.assertFalse(uncertain_failure.retryable)
+        self.assertIn("incerta", uncertain_failure.error)
+
     def test_sends_video_using_internal_storage_url(self) -> None:
         response = httpx.Response(
             200,

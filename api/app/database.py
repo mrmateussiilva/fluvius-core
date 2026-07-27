@@ -29,6 +29,7 @@ def load_all_models() -> None:
     from app.common import audit_models as _audit  # noqa: F401
     from app.contacts import models as _contacts  # noqa: F401
     from app.conversations import models as _conversations  # noqa: F401
+    from app.delivery import models as _deliveries  # noqa: F401
     from app.messages import models as _messages  # noqa: F401
     from app.providers import models as _provider_events  # noqa: F401
     from app.quick_replies import models as _quick_replies  # noqa: F401
