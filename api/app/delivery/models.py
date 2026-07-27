@@ -1,7 +1,15 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.models import TimestampMixin, UUIDPrimaryKeyMixin
@@ -11,6 +19,14 @@ from app.database import Base
 class MessageDelivery(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "message_deliveries"
     __table_args__ = (
+        UniqueConstraint(
+            "message_id",
+            name="uq_message_deliveries_message_id",
+        ),
+        Index(
+            "ix_message_deliveries_message_id",
+            "message_id",
+        ),
         Index(
             "ix_message_deliveries_tenant_due",
             "tenant_id",
@@ -29,8 +45,6 @@ class MessageDelivery(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Uuid,
         ForeignKey("messages.id", ondelete="CASCADE"),
         nullable=False,
-        unique=True,
-        index=True,
     )
     status: Mapped[str] = mapped_column(
         String(24),
