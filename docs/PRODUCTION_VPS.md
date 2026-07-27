@@ -6,16 +6,18 @@ Este ambiente foi dimensionado para a primeira implantação em:
 - 8 vCPU e 8 GB de RAM;
 - SSD de 400 GB expansível;
 - domínio `fluvius.finderbit.com.br`;
+- domínio administrativo `evolution.finderbit.com.br`;
 - Caddy instalado no host como único serviço exposto;
 - dados e mídias persistidos em `/srv/fluvius`.
 
 ## Topologia
 
 Somente o serviço Caddy do Ubuntu publica `80/tcp`, `443/tcp` e `443/udp`. A
-API, o servidor estático e o Manager da Evolution são publicados pelo Docker
+API, o servidor estático e o Manager da Evolution são vinculados pelo Docker
 apenas em `127.0.0.1:18000`, `127.0.0.1:18080` e `127.0.0.1:18081`;
-nunca ficam acessíveis pela interface pública. A porta `18081` existe somente
-para a ativação operacional por túnel SSH. PostgreSQL, Redis e workers
+nunca ficam acessíveis diretamente pela interface pública. O Caddy encaminha
+`evolution.finderbit.com.br` para a porta `18081` com HTTPS; o Manager exige a
+chave administrativa forte da instalação. PostgreSQL, Redis e workers
 permanecem somente nas redes Docker privadas.
 
 O Caddy do host termina HTTPS/WSS, encaminha `/api`, `/health` e `/ws` para a
@@ -67,6 +69,7 @@ O gerador cria segredos URL-safe independentes e protege
   `EVOLUTION_GO_MANAGER_PORT=18081` livres no loopback;
 - nenhuma chave vazia fora dos campos legados;
 - DNS `A` apontando para o IPv4 da VPS;
+- DNS `A` de `evolution.finderbit.com.br` apontando para o mesmo IPv4;
 - portas 80 e 443 liberadas no firewall do provedor.
 
 Em `production`, a API recusa iniciar com segredo curto/reutilizado, URL HTTP,
@@ -81,21 +84,16 @@ para criação de instâncias. Isso é diferente da chave administrativa
 `EVOLUTION_GO_GLOBAL_API_KEY`, que protege as chamadas entre Fluvius e
 Evolution.
 
-O Manager não é publicado no domínio nem no firewall. Depois de subir a stack,
-confirme o estado na VPS:
+O Manager não publica uma porta própria no firewall. Ele é acessado por HTTPS
+através do Caddy em `https://evolution.finderbit.com.br`. Depois de subir a
+stack, confirme o estado na VPS:
 
 ```bash
 curl -fsS http://127.0.0.1:18081/license/status
 ```
 
-Na sua máquina, mantenha um túnel SSH aberto:
-
-```bash
-ssh -N -L 18081:127.0.0.1:18081 root@IP_DA_VPS
-```
-
-Abra `http://localhost:18081/manager/login`, use
-`http://localhost:18081` como URL da API e informe a
+Abra `https://evolution.finderbit.com.br/manager/login`, use
+`https://evolution.finderbit.com.br` como URL da API e informe a
 `EVOLUTION_GO_GLOBAL_API_KEY` guardada na `.env.production`. Não envie essa
 chave por chat nem a coloque em histórico de comandos. Conclua o registro
 solicitado pela Evolution Foundation e valide novamente:
@@ -106,8 +104,8 @@ curl -fsS http://127.0.0.1:18081/license/status
 
 O resultado deve conter `"status":"active"`. A licença fica persistida no banco
 `evogo_auth`; reiniciar ou recriar o container não exige novo registro. Feche o
-túnel ao terminar. A partir daí, empresas criam e reconectam suas instâncias
-somente pela tela **Canais do WhatsApp**, sem acessar o Manager.
+navegador ao terminar. A partir daí, empresas criam e reconectam suas
+instâncias somente pela tela **Canais do WhatsApp**, sem acessar o Manager.
 
 ## Primeiro administrador da plataforma
 

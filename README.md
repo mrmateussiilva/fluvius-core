@@ -60,8 +60,9 @@ desenvolvimento. Instalação, firewall, backups, restauração e operação est
 
 Antes de usar o gateway, ajuste os segredos únicos da instalação no `.env` e
 conclua a ativação única exigida pela versão do Evolution Go. Em produção, o
-Manager fica disponível somente em `127.0.0.1:18081` e deve ser acessado por
-túnel SSH conforme [docs/PRODUCTION_VPS.md](docs/PRODUCTION_VPS.md). O Compose
+Manager fica vinculado a `127.0.0.1:18081` e o Caddy o disponibiliza com HTTPS
+em `evolution.finderbit.com.br`, conforme
+[docs/PRODUCTION_VPS.md](docs/PRODUCTION_VPS.md). O Compose
 compila uma imagem derivada do Evolution Go 0.7.2, fixada no commit oficial
 `9337afc47e10b86cc896a6f432240e40fee95dd1`, com o patch mínimo que decripta
 edições `SecretEncryptedMessage` antes do webhook.
