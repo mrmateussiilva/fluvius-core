@@ -14,7 +14,12 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/app/conversations' },
-    { path: '/login', component: LoginPage, meta: { public: true } },
+    {
+      path: '/login/:tenantSlug?',
+      name: 'login',
+      component: LoginPage,
+      meta: { public: true },
+    },
     {
       path: '/app',
       component: AppLayout,
@@ -54,14 +59,22 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (to.meta.public) {
-    if (to.path === '/login' && !auth.user) {
+    if (to.name === 'login' && !auth.user) {
       try {
         await auth.restore()
       } catch {
         auth.clearSession()
       }
     }
-    if (to.path === '/login' && auth.user) return '/app/conversations'
+    if (to.name === 'login' && auth.user) {
+      const targetSlug =
+        typeof to.params.tenantSlug === 'string'
+          ? to.params.tenantSlug
+          : undefined
+      if (!targetSlug || targetSlug === auth.user.tenant_slug) {
+        return '/app/conversations'
+      }
+    }
     return
   }
   try {

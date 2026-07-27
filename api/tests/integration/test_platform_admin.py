@@ -101,6 +101,19 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
 
+        active_email = self.client.post(
+            "/api/v1/platform/tenants",
+            headers=self.headers_a,
+            json={
+                "name": "E-mail Duplicado",
+                "slug": "email-duplicado",
+                "admin_name": "Admin Existente",
+                "admin_email": self.tenant_b.email,
+                "admin_password": "outra-senha-segura",
+            },
+        )
+        self.assertEqual(active_email.status_code, 409, active_email.text)
+
         with SessionLocal() as db:
             audit = db.scalar(
                 select(AuditLog).where(
@@ -110,6 +123,117 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
                 )
             )
             self.assertIsNotNone(audit)
+
+    def test_company_login_link_forces_the_selected_tenant(self) -> None:
+        identity = self.client.get("/api/v1/auth/tenant-login/tenant-a")
+        self.assertEqual(identity.status_code, 200, identity.text)
+        self.assertEqual(
+            identity.json(),
+            {"name": "Tenant A", "slug": "tenant-a"},
+        )
+
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_a.email,
+                "password": TEST_PASSWORD,
+                "tenant_slug": "tenant-a",
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        me = self.client.get(
+            "/api/v1/auth/me",
+            headers={
+                "Authorization": f"Bearer {login.json()['access_token']}",
+            },
+        )
+        self.assertEqual(me.status_code, 200, me.text)
+        self.assertEqual(me.json()["tenant_id"], str(self.tenant_a.tenant_id))
+
+        wrong_company = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_a.email,
+                "password": TEST_PASSWORD,
+                "tenant_slug": "tenant-b",
+            },
+        )
+        self.assertEqual(wrong_company.status_code, 403, wrong_company.text)
+
+        ambiguous = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_a.email,
+                "password": TEST_PASSWORD,
+                "tenant_id": str(self.tenant_a.tenant_id),
+                "tenant_slug": "tenant-a",
+            },
+        )
+        self.assertEqual(ambiguous.status_code, 422, ambiguous.text)
+
+    def test_reuses_user_only_after_all_memberships_are_inactive(self) -> None:
+        with SessionLocal() as db:
+            membership = db.scalar(
+                select(TenantUser).where(
+                    TenantUser.tenant_id == self.tenant_b.tenant_id,
+                    TenantUser.user_id == self.tenant_b.user_id,
+                )
+            )
+            membership.is_active = False
+            db.commit()
+
+        created = self.client.post(
+            "/api/v1/platform/tenants",
+            headers=self.headers_a,
+            json={
+                "name": "Cliente Teste",
+                "slug": "cliente-teste",
+                "admin_name": "Cliente Reaproveitado",
+                "admin_email": self.tenant_b.email,
+                "admin_password": "nova-senha-inicial-segura",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_b.email,
+                "password": "nova-senha-inicial-segura",
+                "tenant_slug": "cliente-teste",
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+
+        old_company = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_b.email,
+                "password": "nova-senha-inicial-segura",
+                "tenant_slug": "tenant-b",
+            },
+        )
+        self.assertEqual(old_company.status_code, 403, old_company.text)
+
+        with SessionLocal() as db:
+            users = list(
+                db.scalars(
+                    select(User).where(User.email == self.tenant_b.email)
+                )
+            )
+            new_tenant = db.scalar(
+                select(Tenant).where(Tenant.slug == "cliente-teste")
+            )
+            new_membership = db.scalar(
+                select(TenantUser).where(
+                    TenantUser.tenant_id == new_tenant.id,
+                    TenantUser.user_id == self.tenant_b.user_id,
+                )
+            )
+            self.assertEqual(len(users), 1)
+            self.assertEqual(users[0].name, "Cliente Reaproveitado")
+            self.assertIsNotNone(new_membership)
+            self.assertTrue(new_membership.is_active)
 
     def test_support_access_is_audited_and_protected_from_tenant_admin(self) -> None:
         access = self.client.post(
@@ -213,6 +337,8 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(inactive_login.status_code, 403, inactive_login.text)
+        tenant_link = self.client.get("/api/v1/auth/tenant-login/tenant-b")
+        self.assertEqual(tenant_link.status_code, 404, tenant_link.text)
 
         reactivated = self.client.patch(
             f"/api/v1/platform/tenants/{self.tenant_b.tenant_id}",

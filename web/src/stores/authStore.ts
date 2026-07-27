@@ -13,10 +13,10 @@ export const useAuthStore = defineStore('auth', {
     loading: false,
   }),
   actions: {
-    async signIn(email: string, password: string) {
+    async signIn(email: string, password: string, tenantSlug?: string) {
       this.loading = true
       try {
-        await login(email, password)
+        await login(email, password, tenantSlug)
         this.user = await getMe()
       } finally {
         this.loading = false

@@ -14,6 +14,7 @@ from app.auth.schemas import (
     AvailableTenantResponse,
     CurrentUserResponse,
     LoginRequest,
+    TenantLoginResponse,
     TenantSwitchRequest,
     TokenResponse,
 )
@@ -59,6 +60,8 @@ def login(
     )
     if payload.tenant_id:
         membership_query = membership_query.where(TenantUser.tenant_id == payload.tenant_id)
+    if payload.tenant_slug:
+        membership_query = membership_query.where(Tenant.slug == payload.tenant_slug)
     membership = db.scalar(membership_query.order_by(TenantUser.created_at))
     if membership is None:
         record_login_failure(payload.email, client_ip)
@@ -71,6 +74,28 @@ def login(
         extra={"user_id": str(user.id), "tenant_id": str(membership.tenant_id)},
     )
     return TokenResponse(access_token=token)
+
+
+@router.get(
+    "/tenant-login/{tenant_slug}",
+    response_model=TenantLoginResponse,
+)
+def tenant_login(
+    tenant_slug: str,
+    db: Session = Depends(get_db),
+) -> TenantLoginResponse:
+    tenant = db.scalar(
+        select(Tenant).where(
+            Tenant.slug == tenant_slug.lower(),
+            Tenant.is_active.is_(True),
+        )
+    )
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Empresa não encontrada ou indisponível",
+        )
+    return TenantLoginResponse(name=tenant.name, slug=tenant.slug)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

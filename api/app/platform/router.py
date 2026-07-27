@@ -177,22 +177,39 @@ def create_platform_tenant(
             status_code=status.HTTP_409_CONFLICT,
             detail="Este identificador de empresa já está em uso",
         )
-    if db.scalar(select(User.id).where(User.email == email)) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="O e-mail do administrador já está cadastrado",
+    existing_admin = db.scalar(select(User).where(User.email == email))
+    if existing_admin is not None:
+        has_active_membership = db.scalar(
+            select(TenantUser.id).where(
+                TenantUser.user_id == existing_admin.id,
+                TenantUser.is_active.is_(True),
+            )
         )
+        if existing_admin.is_platform_admin or has_active_membership is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "O e-mail já possui acesso ativo. Desative a associação "
+                    "anterior ou use outro e-mail."
+                ),
+            )
     try:
         tenant = Tenant(name=payload.name, slug=payload.slug)
         db.add(tenant)
         db.flush()
-        admin = User(
-            name=payload.admin_name,
-            email=email,
-            password_hash=hash_password(payload.admin_password),
-        )
-        db.add(admin)
-        db.flush()
+        if existing_admin is None:
+            admin = User(
+                name=payload.admin_name,
+                email=email,
+                password_hash=hash_password(payload.admin_password),
+            )
+            db.add(admin)
+            db.flush()
+        else:
+            admin = existing_admin
+            admin.name = payload.admin_name
+            admin.password_hash = hash_password(payload.admin_password)
+            admin.is_active = True
         db.add(
             TenantUser(
                 tenant_id=tenant.id,
@@ -210,6 +227,7 @@ def create_platform_tenant(
                 metadata_={
                     "slug": tenant.slug,
                     "initial_admin_id": str(admin.id),
+                    "reused_inactive_user": existing_admin is not None,
                 },
             )
         )

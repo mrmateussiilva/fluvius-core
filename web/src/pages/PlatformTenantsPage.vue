@@ -4,7 +4,11 @@ import {
   ArrowRight,
   Building2,
   CheckCircle2,
+  ClipboardCopy,
+  ExternalLink,
+  KeyRound,
   LoaderCircle,
+  Mail,
   Plus,
   RefreshCw,
   ShieldCheck,
@@ -36,6 +40,13 @@ const loading = ref(true)
 const detailLoading = ref(false)
 const createOpen = ref(false)
 const creating = ref(false)
+const initialAccess = ref<{
+  companyName: string
+  loginUrl: string
+  email: string
+  password: string
+} | null>(null)
+const accessCopied = ref(false)
 const actionTenantId = ref<string | null>(null)
 const error = ref('')
 const notice = ref('')
@@ -85,6 +96,41 @@ function resetForm() {
   })
 }
 
+function tenantLoginUrl(slug: string) {
+  return `${window.location.origin}/login/${slug}`
+}
+
+async function copyText(value: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(value)
+    error.value = ''
+    notice.value = successMessage
+  } catch {
+    error.value = 'O navegador não permitiu copiar. Selecione o conteúdo manualmente.'
+  }
+}
+
+async function copyInitialAccess() {
+  if (!initialAccess.value) return
+  const access = initialAccess.value
+  error.value = ''
+  await copyText(
+    [
+      `Acesso Fluvius — ${access.companyName}`,
+      `Link: ${access.loginUrl}`,
+      `E-mail: ${access.email}`,
+      `Senha inicial: ${access.password}`,
+    ].join('\n'),
+    'Dados de acesso copiados.',
+  )
+  accessCopied.value = !error.value
+}
+
+function closeInitialAccess() {
+  initialAccess.value = null
+  accessCopied.value = false
+}
+
 async function loadTenants() {
   loading.value = true
   error.value = ''
@@ -128,9 +174,20 @@ async function submitTenant() {
   notice.value = ''
   normalizeSlug()
   try {
+    const credentials = {
+      email: form.admin_email,
+      password: form.admin_password,
+    }
     const created = await createPlatformTenant({ ...form })
     await loadTenants()
     createOpen.value = false
+    initialAccess.value = {
+      companyName: created.name,
+      loginUrl: tenantLoginUrl(created.slug),
+      email: credentials.email,
+      password: credentials.password,
+    }
+    accessCopied.value = false
     resetForm()
     notice.value = `${created.name} foi criada com o administrador inicial.`
     await selectTenant(created.id)
@@ -415,6 +472,39 @@ onMounted(async () => {
               </div>
             </div>
 
+            <div class="mt-5 rounded-xl border border-fluvius-100 bg-fluvius-50 p-3">
+              <p class="text-xs font-semibold uppercase tracking-wider text-fluvius-700">
+                Link exclusivo de acesso
+              </p>
+              <p class="mt-1 break-all text-xs text-slate-600">
+                {{ tenantLoginUrl(selected.slug) }}
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-fluvius-200 bg-white px-3 py-2 text-xs font-medium text-fluvius-800 hover:bg-fluvius-100"
+                  @click="
+                    copyText(
+                      tenantLoginUrl(selected.slug),
+                      'Link de acesso copiado.',
+                    )
+                  "
+                >
+                  <ClipboardCopy class="h-3.5 w-3.5" />
+                  Copiar link
+                </button>
+                <a
+                  :href="tenantLoginUrl(selected.slug)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-fluvius-800 hover:bg-fluvius-100"
+                >
+                  <ExternalLink class="h-3.5 w-3.5" />
+                  Abrir
+                </a>
+              </div>
+            </div>
+
             <h3 class="mt-6 text-xs font-semibold uppercase tracking-wider text-slate-400">
               Usuários
             </h3>
@@ -574,6 +664,89 @@ onMounted(async () => {
           </button>
         </div>
       </form>
+    </div>
+
+    <div
+      v-if="initialAccess"
+      class="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 p-4"
+      @click.self="closeInitialAccess"
+    >
+      <section class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-emerald-700">
+              <CheckCircle2 class="h-5 w-5" />
+              <span class="text-xs font-semibold uppercase tracking-wider">
+                Empresa criada
+              </span>
+            </div>
+            <h2 class="mt-1 text-xl font-semibold text-slate-900">
+              Envie este acesso ao cliente
+            </h2>
+            <p class="mt-1 text-sm leading-6 text-slate-500">
+              A senha é exibida somente agora. Depois de fechar, ela não poderá
+              ser consultada nesta tela.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            aria-label="Fechar"
+            @click="closeInitialAccess"
+          >
+            <X class="h-5 w-5" />
+          </button>
+        </div>
+
+        <dl class="mt-5 space-y-3">
+          <div class="rounded-xl border border-slate-200 p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <ExternalLink class="h-3.5 w-3.5" />
+              Link da empresa
+            </dt>
+            <dd class="mt-1 break-all text-sm font-medium text-slate-800">
+              {{ initialAccess.loginUrl }}
+            </dd>
+          </div>
+          <div class="rounded-xl border border-slate-200 p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <Mail class="h-3.5 w-3.5" />
+              E-mail
+            </dt>
+            <dd class="mt-1 break-all text-sm font-medium text-slate-800">
+              {{ initialAccess.email }}
+            </dd>
+          </div>
+          <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
+              <KeyRound class="h-3.5 w-3.5" />
+              Senha inicial
+            </dt>
+            <dd class="mt-1 break-all font-mono text-sm font-semibold text-amber-950">
+              {{ initialAccess.password }}
+            </dd>
+          </div>
+        </dl>
+
+        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            @click="closeInitialAccess"
+          >
+            Fechar
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center gap-2 rounded-xl bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800"
+            @click="copyInitialAccess"
+          >
+            <CheckCircle2 v-if="accessCopied" class="h-4 w-4" />
+            <ClipboardCopy v-else class="h-4 w-4" />
+            {{ accessCopied ? 'Acesso copiado' : 'Copiar acesso completo' }}
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>

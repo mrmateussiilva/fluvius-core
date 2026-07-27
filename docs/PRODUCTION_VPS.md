@@ -91,8 +91,12 @@ docker compose \
 O navegador usa cookie `HttpOnly`, `Secure` e `SameSite=Strict`; o JWT não fica
 persistido em `localStorage`. O login é limitado por conta e IP usando Redis.
 Depois do login, o ícone **Administração Fluvius** permite criar as empresas e
-seus primeiros administradores sem shell. Se o primeiro usuário já existia
-antes desta migration, promova a conta existente sem alterar sua senha:
+seus primeiros administradores sem shell. Ao criar, copie o cartão de acesso
+antes de fechá-lo: ele contém `https://SEU_DOMINIO/login/{slug}`, o e-mail e a
+senha inicial, que não fica disponível para consulta posterior. O cliente deve
+usar esse link para que a autenticação seja limitada à empresa dele. Se o
+primeiro usuário já existia antes desta migration, promova a conta existente
+sem alterar sua senha:
 
 ```bash
 docker compose \

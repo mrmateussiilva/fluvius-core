@@ -36,9 +36,10 @@ onMounted(async () => {
 })
 
 async function logout() {
+  const tenantSlug = auth.user?.tenant_slug
   realtime.disconnect()
   await auth.signOut()
-  await router.push('/login')
+  await router.push(tenantSlug ? `/login/${tenantSlug}` : '/login')
 }
 
 async function selectTenant(tenantId: string) {

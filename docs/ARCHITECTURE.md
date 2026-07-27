@@ -122,6 +122,14 @@ mostra usuários e canais, cria tenant com seu primeiro administrador e
 ativa/suspende a operação. Suspender um tenant invalida imediatamente login,
 requisições e WebSockets porque todos revalidam `Tenant.is_active`.
 
+Cada tenant ativo possui o endereço `/login/{slug}`. A tela consulta somente
+nome e slug públicos e envia `tenant_slug` junto das credenciais; a API exige
+uma membership ativa exatamente nessa empresa antes de emitir a sessão. Na
+criação, o frontend exibe link, e-mail e senha inicial uma única vez, mantendo a
+senha apenas em memória. Um e-mail existente só pode ser reaproveitado quando
+não é administrador da plataforma e não possui nenhuma membership ativa; as
+associações antigas permanecem inativas.
+
 O acesso de suporte não ignora as regras operacionais. A API cria ou reativa uma
 `TenantUser` administrativa para o operador da plataforma, troca o cookie para
 o tenant escolhido e grava `platform.support_access` no `AuditLog` dessa
