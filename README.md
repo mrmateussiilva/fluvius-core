@@ -93,7 +93,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 ## Estado desta fundação
 
 - Os endpoints iniciais existem e são tenant-scoped.
-- Assumir uma conversa é atômico; outro agente não pode sobrescrever a atribuição ativa.
+- Assumir uma conversa é atômico; atendentes não podem sobrescrever a atribuição ativa. Administradores podem assumir ou transferir o atendimento para outro usuário ativo da própria empresa, com registro em auditoria.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.

@@ -21,7 +21,7 @@ Os módulos em `api/app` são separados pelo domínio de negócio. Não há repo
 1. O frontend envia texto ou anexo à API com JWT.
 2. A API extrai `user_id` e `tenant_id` do JWT e revalida o membership no banco.
 3. A conversa, o contato e o canal são consultados com filtro de tenant.
-4. A API exige que a conversa esteja `open` e atribuída ao usuário autenticado. Assumir usa bloqueio de linha no PostgreSQL, impedindo que dois agentes sobrescrevam a posse ativa.
+4. A API exige que a conversa esteja `open` e atribuída ao usuário autenticado. Atribuir usa bloqueio de linha no PostgreSQL: atendentes não sobrescrevem uma posse ativa, enquanto administradores podem assumir ou transferir para outro usuário ativo do mesmo tenant. Toda alteração efetiva de responsável gera `conversation.assigned` em `audit_logs`.
 5. Se `channel.status != connected`, a API retorna `409` com: “WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.”
 6. Para texto, o frontend gera `client_message_id`, mostra imediatamente a bolha `pending` e a API usa esse UUID como ID local e chave idempotente. Repetir o mesmo ID e conteúdo devolve a mensagem existente sem chamar novamente o provider.
 7. A mensagem outgoing é persistida como `pending` antes do efeito externo.

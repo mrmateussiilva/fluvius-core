@@ -14,6 +14,7 @@ import {
   LockKeyhole,
   MessageCircle,
   RotateCcw,
+  ShieldCheck,
   UserPlus,
 } from 'lucide-vue-next'
 import type {
@@ -22,6 +23,8 @@ import type {
   Message,
   MessageAttachment,
   MessageType,
+  TenantUser,
+  UserRole,
 } from '../api/types'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ContactDetailsPanel from './ContactDetailsPanel.vue'
@@ -37,13 +40,15 @@ const props = defineProps<{
   contactError: string | null
   retryingMessageIds: string[]
   currentUserId: string | null
+  currentUserRole: UserRole | null
+  assignableUsers: TenantUser[]
   sending: boolean
   sendError: string | null
   operationLoading: boolean
   operationError: string | null
 }>()
 const emit = defineEmits<{
-  assign: []
+  assign: [userId?: string]
   close: []
   send: [
     text: string,
@@ -63,6 +68,7 @@ const emit = defineEmits<{
   refreshContact: []
 }>()
 const messageList = ref<HTMLElement | null>(null)
+const assignmentTargetId = ref('')
 const contactPanelOpen = ref(false)
 const replyingTo = ref<Message | null>(null)
 const highlightedMessageId = ref<string | null>(null)
@@ -96,6 +102,12 @@ const isAssignedToCurrentUser = computed(
     Boolean(props.currentUserId) &&
     props.conversation?.assigned_user_id === props.currentUserId,
 )
+const isAdmin = computed(() => props.currentUserRole === 'admin')
+const assignedUser = computed(() =>
+  props.assignableUsers.find(
+    (user) => user.id === props.conversation?.assigned_user_id,
+  ),
+)
 const canOperate = computed(
   () =>
     props.conversation?.status === 'open' &&
@@ -104,14 +116,27 @@ const canOperate = computed(
 const canClaim = computed(
   () =>
     props.conversation?.status !== 'open' ||
-    !props.conversation.assigned_user_id,
+    !props.conversation.assigned_user_id ||
+    (isAdmin.value && !isAssignedToCurrentUser.value),
 )
+const canApplyAssignment = computed(
+  () =>
+    Boolean(assignmentTargetId.value) &&
+    (props.conversation?.status !== 'open' ||
+      assignmentTargetId.value !== props.conversation.assigned_user_id),
+)
+const assignmentActionLabel = computed(() => {
+  if (props.conversation?.status === 'closed') return 'Atribuir e reabrir'
+  return props.conversation?.assigned_user_id ? 'Transferir' : 'Atribuir'
+})
 const ownershipLabel = computed(() => {
   if (!props.conversation) return ''
   if (props.conversation.status === 'closed') return 'Atendimento finalizado'
   if (!props.conversation.assigned_user_id) return 'Aguardando atendente'
   if (isAssignedToCurrentUser.value) return 'Em atendimento por você'
-  return 'Em atendimento por outro agente'
+  return assignedUser.value
+    ? `Em atendimento por ${assignedUser.value.name}`
+    : 'Em atendimento por outro agente'
 })
 const composerDisabledReason = computed(() => {
   if (!props.conversation) return 'Selecione uma conversa para responder.'
@@ -133,6 +158,25 @@ const draftStorageKey = computed(() =>
   props.currentUserId && props.conversation
     ? `fluvius_draft:${props.currentUserId}:${props.conversation.id}`
     : null,
+)
+
+watch(
+  () => [
+    props.conversation?.id,
+    props.conversation?.assigned_user_id,
+    props.assignableUsers.map((user) => user.id).join(','),
+  ],
+  () => {
+    const assignedUserIsAvailable = props.assignableUsers.some(
+      (user) => user.id === props.conversation?.assigned_user_id,
+    )
+    assignmentTargetId.value = assignedUserIsAvailable
+      ? props.conversation?.assigned_user_id || ''
+      : props.assignableUsers.find((user) => user.id === props.currentUserId)?.id ||
+        props.assignableUsers[0]?.id ||
+        ''
+  },
+  { immediate: true },
 )
 
 function dayKey(value: string) {
@@ -464,7 +508,13 @@ function previewMedia(
             v-if="canClaim"
             class="flex h-9 items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-2.5 text-xs font-medium text-[#3b4a54] shadow-sm transition hover:bg-[#f7f8f8] sm:px-3"
             :disabled="operationLoading"
-            :title="conversation.status === 'closed' ? 'Reabrir atendimento' : 'Assumir atendimento'"
+            :title="
+              conversation.status === 'closed'
+                ? 'Reabrir atendimento'
+                : isAdmin && conversation.assigned_user_id
+                  ? 'Assumir atendimento de outro agente'
+                  : 'Assumir atendimento'
+            "
             @click="emit('assign')"
           >
             <RotateCcw v-if="conversation.status === 'closed'" class="h-4 w-4" />
@@ -484,7 +534,7 @@ function previewMedia(
             <span class="hidden sm:inline">Finalizar</span>
           </button>
           <span
-            v-if="conversation.status === 'open' && !canOperate"
+            v-if="conversation.status === 'open' && !canOperate && !canClaim"
             class="flex h-9 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 text-xs font-medium text-amber-800 ring-1 ring-amber-100 sm:px-3"
             title="Atendimento atribuído a outro agente"
           >
@@ -493,6 +543,36 @@ function previewMedia(
           </span>
         </div>
       </header>
+      <div
+        v-if="isAdmin && assignableUsers.length"
+        class="z-10 flex min-h-12 items-center gap-2 border-b border-[#d8dcdf] bg-white px-3 py-2 shadow-sm shadow-slate-900/[0.02] sm:px-4"
+      >
+        <ShieldCheck class="h-4 w-4 shrink-0 text-fluvius-700" />
+        <span class="hidden shrink-0 text-xs font-medium text-[#54656f] lg:inline">
+          Responsável
+        </span>
+        <select
+          v-model="assignmentTargetId"
+          class="h-8 min-w-0 flex-1 rounded-lg border border-[#d1d7db] bg-white px-2 text-xs text-[#111b21] outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15 sm:max-w-64"
+          :disabled="operationLoading"
+          aria-label="Responsável pelo atendimento"
+        >
+          <option
+            v-for="user in assignableUsers"
+            :key="user.id"
+            :value="user.id"
+          >
+            {{ user.name }} · {{ user.role === 'admin' ? 'Administrador' : 'Atendente' }}
+          </option>
+        </select>
+        <button
+          class="h-8 shrink-0 rounded-lg bg-fluvius-700 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="operationLoading || !canApplyAssignment"
+          @click="emit('assign', assignmentTargetId)"
+        >
+          {{ assignmentActionLabel }}
+        </button>
+      </div>
       <p
         v-if="operationError"
         class="border-b border-rose-100 bg-rose-50 px-4 py-2 text-center text-xs text-rose-700"

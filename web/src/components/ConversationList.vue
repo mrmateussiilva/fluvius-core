@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { MessageSquareText, Search, X } from 'lucide-vue-next'
-import type { Conversation, ConversationStatus, MessageType } from '../api/types'
+import type {
+  Conversation,
+  ConversationStatus,
+  MessageType,
+  TenantUser,
+  UserRole,
+} from '../api/types'
 
 const props = defineProps<{
   conversations: Conversation[]
   selectedId: string | null
   currentUserId: string | null
+  currentUserRole: UserRole | null
+  assignableUsers: TenantUser[]
 }>()
 const emit = defineEmits<{ select: [id: string] }>()
 const activeStatus = ref<ConversationStatus>('new')
@@ -21,7 +29,18 @@ function belongsToTab(conversation: Conversation, status: ConversationStatus) {
   if (status !== 'open') return conversation.status === status
   return (
     conversation.status === 'open' &&
-    (!props.currentUserId || conversation.assigned_user_id === props.currentUserId)
+    (props.currentUserRole === 'admin' ||
+      !props.currentUserId ||
+      conversation.assigned_user_id === props.currentUserId)
+  )
+}
+
+function assigneeName(conversation: Conversation) {
+  if (!conversation.assigned_user_id) return null
+  return (
+    props.assignableUsers.find(
+      (user) => user.id === conversation.assigned_user_id,
+    )?.name || 'Outro agente'
   )
 }
 
@@ -187,6 +206,17 @@ function timeLabel(value: string | null) {
           <div class="mt-0.5 flex items-center gap-2">
             <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-[#667781]">
               {{ messagePreview(conversation) }}
+            </span>
+            <span
+              v-if="
+                currentUserRole === 'admin' &&
+                conversation.status === 'open' &&
+                conversation.assigned_user_id
+              "
+              class="max-w-28 shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600"
+              :title="`Responsável: ${assigneeName(conversation)}`"
+            >
+              {{ assigneeName(conversation) }}
             </span>
             <span
               v-if="conversation.unread_count"

@@ -10,7 +10,7 @@
 - Contatos criados a partir de mensagens recebidas.
 - Painel operacional do contato com perfil básico do WhatsApp e histórico de atendimentos.
 - Filas `new`, `open` e `closed`.
-- Assumir e finalizar atendimento.
+- Assumir e finalizar atendimento, com takeover e transferência por administradores para usuários ativos da própria empresa.
 - Receber e enviar texto.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.

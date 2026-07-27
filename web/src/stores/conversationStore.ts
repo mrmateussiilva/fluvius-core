@@ -352,16 +352,16 @@ export const useConversationStore = defineStore('conversations', {
         this.contactLoading = false
       }
     },
-    async assignSelected() {
+    async assignSelected(userId?: string) {
       if (!this.selectedId || this.operationLoading) return
       this.operationLoading = true
       this.operationError = null
       try {
-        const updated = await conversationApi.assignConversation(this.selectedId)
+        const updated = await conversationApi.assignConversation(this.selectedId, userId)
         this.replace(updated)
       } catch (error) {
         this.operationError =
-          error instanceof Error ? error.message : 'Não foi possível assumir o atendimento'
+          error instanceof Error ? error.message : 'Não foi possível atribuir o atendimento'
         await this.loadConversations()
       } finally {
         this.operationLoading = false

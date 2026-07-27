@@ -5,6 +5,7 @@ from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
 from app.channels.models import WhatsAppChannel
+from app.common.audit_models import AuditLog
 from app.common.enums import ChannelStatus, ConversationStatus
 from app.config import settings
 from app.conversations.models import Conversation, ConversationRead
@@ -105,6 +106,16 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         self.assertEqual(
             self.client.get("/api/v1/auth/me", headers=agent_headers).status_code,
             401,
+        )
+        inactive_assignment = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={"user_id": str(created_user_id)},
+        )
+        self.assertEqual(inactive_assignment.status_code, 400)
+        self.assertEqual(
+            inactive_assignment.json()["detail"],
+            "Atendente fora do tenant",
         )
         with SessionLocal() as db:
             conversation = db.scalar(
@@ -445,7 +456,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(wrong_membership.status_code, 403)
 
-    def test_assignment_cannot_be_stolen_and_only_assignee_can_operate(self) -> None:
+    def test_admin_can_transfer_and_take_over_but_agent_cannot_steal(self) -> None:
         unassigned_send = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages",
             headers=self.headers_a,
@@ -488,36 +499,47 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             "Authorization": f"Bearer {login.json()['access_token']}"
         }
 
-        unsupported_transfer = self.client.post(
+        transferred = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
             headers=self.headers_a,
             json={"user_id": str(second_user_id)},
         )
-        self.assertEqual(unsupported_transfer.status_code, 403)
+        self.assertEqual(transferred.status_code, 200, transferred.text)
         self.assertEqual(
-            unsupported_transfer.json()["detail"],
-            "Transferência de atendimento não disponível no MVP",
+            transferred.json()["assigned_user_id"],
+            str(second_user_id),
         )
 
-        assigned = self.client.post(
+        forbidden_transfer = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=second_headers,
+            json={"user_id": str(self.tenant_a.user_id)},
+        )
+        self.assertEqual(forbidden_transfer.status_code, 403)
+        self.assertEqual(
+            forbidden_transfer.json()["detail"],
+            "Apenas administradores podem transferir atendimentos",
+        )
+
+        admin_takeover = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
             headers=self.headers_a,
             json={},
         )
-        self.assertEqual(assigned.status_code, 200, assigned.text)
+        self.assertEqual(admin_takeover.status_code, 200, admin_takeover.text)
         self.assertEqual(
-            assigned.json()["assigned_user_id"],
+            admin_takeover.json()["assigned_user_id"],
             str(self.tenant_a.user_id),
         )
 
-        takeover = self.client.post(
+        forbidden_takeover = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
             headers=second_headers,
-            json={"user_id": str(second_user_id)},
+            json={},
         )
-        self.assertEqual(takeover.status_code, 409)
+        self.assertEqual(forbidden_takeover.status_code, 409)
         self.assertEqual(
-            takeover.json()["detail"],
+            forbidden_takeover.json()["detail"],
             "Atendimento já assumido por outro agente",
         )
 
@@ -539,6 +561,25 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         self.assertEqual(
             forbidden_close.json()["detail"],
             "Atendimento já assumido por outro agente",
+        )
+        with SessionLocal() as db:
+            assignment_logs = list(
+                db.scalars(
+                    select(AuditLog)
+                    .where(
+                        AuditLog.tenant_id == self.tenant_a.tenant_id,
+                        AuditLog.entity_id == self.tenant_a.conversation_id,
+                        AuditLog.action == "conversation.assigned",
+                    )
+                    .order_by(AuditLog.created_at)
+                )
+            )
+        self.assertEqual(
+            [log.metadata_["mode"] for log in assignment_logs],
+            ["transfer", "takeover"],
+        )
+        self.assertTrue(
+            all(log.user_id == self.tenant_a.user_id for log in assignment_logs)
         )
 
     def test_websocket_revalidates_membership_instead_of_trusting_token_claim(self) -> None:

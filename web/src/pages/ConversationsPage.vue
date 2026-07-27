@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import type { TenantUser } from '../api/types'
+import { listUsers } from '../api/users'
 import ConversationChat from '../components/ConversationChat.vue'
 import ConversationList from '../components/ConversationList.vue'
 import { useConversationStore } from '../stores/conversationStore'
@@ -9,6 +11,7 @@ import { useRealtimeStore } from '../stores/realtimeStore'
 const store = useConversationStore()
 const auth = useAuthStore()
 const realtime = useRealtimeStore()
+const assignableUsers = ref<TenantUser[]>([])
 
 async function sendMessage(
   text: string,
@@ -39,7 +42,18 @@ function backToConversationList() {
 
 onMounted(async () => {
   await auth.restore()
-  await store.loadConversations()
+  await Promise.all([
+    store.loadConversations(),
+    auth.user?.role === 'admin'
+      ? listUsers()
+          .then((users) => {
+            assignableUsers.value = users.filter((user) => user.is_active)
+          })
+          .catch(() => {
+            assignableUsers.value = []
+          })
+      : Promise.resolve(),
+  ])
   if (store.selectedId) await store.selectConversation(store.selectedId)
   realtime.connect()
   document.addEventListener('visibilitychange', refreshVisibleConversation)
@@ -57,6 +71,8 @@ onBeforeUnmount(() => {
       :conversations="store.conversations"
       :selected-id="store.selectedId"
       :current-user-id="auth.user?.id || null"
+      :current-user-role="auth.user?.role || null"
+      :assignable-users="assignableUsers"
       @select="store.selectConversation"
     />
     <ConversationChat
@@ -68,6 +84,8 @@ onBeforeUnmount(() => {
       :contact-error="store.contactError"
       :retrying-message-ids="store.retryingMessageIds"
       :current-user-id="auth.user?.id || null"
+      :current-user-role="auth.user?.role || null"
+      :assignable-users="assignableUsers"
       :sending="store.selectedSending"
       :send-error="store.selectedSendError"
       :operation-loading="store.operationLoading"

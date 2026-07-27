@@ -3,10 +3,10 @@ import type { Conversation } from './types'
 
 export const listConversations = () => http<Conversation[]>('/api/v1/conversations')
 export const getConversation = (id: string) => http<Conversation>(`/api/v1/conversations/${id}`)
-export const assignConversation = (id: string) =>
+export const assignConversation = (id: string, userId?: string) =>
   http<Conversation>(`/api/v1/conversations/${id}/assign`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify(userId ? { user_id: userId } : {}),
   })
 export const closeConversation = (id: string) =>
   http<Conversation>(`/api/v1/conversations/${id}/close`, { method: 'POST' })

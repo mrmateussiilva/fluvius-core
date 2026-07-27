@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
+from app.common.audit_models import AuditLog
 from app.common.enums import ConversationStatus, MessageDirection
 from app.contacts.models import Contact
 from app.conversations.models import Conversation, ConversationRead
@@ -18,12 +19,13 @@ from app.conversations.schemas import (
 from app.database import get_db
 from app.messages.models import Message
 from app.realtime.manager import realtime_manager
-from app.users.models import TenantUser
+from app.users.models import TenantUser, User
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 ASSIGNMENT_REQUIRED = "Assuma o atendimento antes de continuar"
 ASSIGNED_TO_ANOTHER_AGENT = "Atendimento já assumido por outro agente"
+ADMIN_TRANSFER_REQUIRED = "Apenas administradores podem transferir atendimentos"
 
 
 def conversation_query(tenant_id: UUID, user_id: UUID):
@@ -253,11 +255,20 @@ async def assign_conversation(
         db, context.tenant_id, conversation_id
     )
     assignee_id = payload.user_id or context.user.id
+    is_admin = context.membership.role == "admin"
+    if assignee_id != context.user.id and not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ADMIN_TRANSFER_REQUIRED,
+        )
     membership = db.scalar(
-        select(TenantUser).where(
+        select(TenantUser)
+        .join(User, User.id == TenantUser.user_id)
+        .where(
             TenantUser.tenant_id == context.tenant_id,
             TenantUser.user_id == assignee_id,
             TenantUser.is_active.is_(True),
+            User.is_active.is_(True),
         )
     )
     if membership is None:
@@ -265,32 +276,62 @@ async def assign_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Atendente fora do tenant",
         )
-    if assignee_id != context.user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Transferência de atendimento não disponível no MVP",
-        )
     if (
         conversation.status == ConversationStatus.OPEN
         and conversation.assigned_user_id is not None
         and conversation.assigned_user_id != assignee_id
+        and not is_admin
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=ASSIGNED_TO_ANOTHER_AGENT,
         )
+    previous_assignee_id = conversation.assigned_user_id
+    previous_status = conversation.status
     conversation.assigned_user_id = assignee_id
     conversation.status = ConversationStatus.OPEN
-    db.commit()
-    await realtime_manager.broadcast(
-        context.tenant_id,
-        "conversation.updated",
-        {
-            "id": str(conversation.id),
-            "status": conversation.status.value,
-            "assigned_user_id": str(conversation.assigned_user_id),
-        },
+    changed = (
+        previous_assignee_id != conversation.assigned_user_id
+        or previous_status != conversation.status
     )
+    if changed:
+        assignment_mode = (
+            "transfer"
+            if assignee_id != context.user.id
+            else "takeover"
+            if previous_assignee_id is not None
+            and previous_assignee_id != context.user.id
+            else "claim"
+        )
+        db.add(
+            AuditLog(
+                tenant_id=context.tenant_id,
+                user_id=context.user.id,
+                action="conversation.assigned",
+                entity_type="conversation",
+                entity_id=conversation.id,
+                metadata_={
+                    "mode": assignment_mode,
+                    "previous_assigned_user_id": (
+                        str(previous_assignee_id) if previous_assignee_id else None
+                    ),
+                    "assigned_user_id": str(assignee_id),
+                    "previous_status": previous_status.value,
+                    "status": conversation.status.value,
+                },
+            )
+        )
+    db.commit()
+    if changed:
+        await realtime_manager.broadcast(
+            context.tenant_id,
+            "conversation.updated",
+            {
+                "id": str(conversation.id),
+                "status": conversation.status.value,
+                "assigned_user_id": str(conversation.assigned_user_id),
+            },
+        )
     return get_conversation(conversation_id, context, db)
 
 
