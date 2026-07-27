@@ -49,6 +49,23 @@ router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
 
 
+def normalized_sender_name(value: str | None) -> str | None:
+    normalized = " ".join((value or "").split())
+    return normalized or None
+
+
+def format_outgoing_content(
+    sender_name: str | None,
+    content: str | None,
+) -> str | None:
+    if not content:
+        return content
+    normalized_name = normalized_sender_name(sender_name)
+    if not normalized_name:
+        return content
+    return f"{normalized_name}:\n{content}"
+
+
 def apply_send_result(
     message: Message,
     result: SendResult,
@@ -142,6 +159,7 @@ def message_response(
             direction=reply_to.direction,
             message_type=reply_to.message_type,
             body=reply_to.body,
+            sender_name=reply_to.sender_name,
         )
         if reply_to
         else None
@@ -235,7 +253,11 @@ async def deliver_message(
             result = await provider.send_text(
                 channel,
                 contact.phone_number,
-                message.body or "",
+                format_outgoing_content(
+                    message.sender_name,
+                    message.body,
+                )
+                or "",
                 reply_to_provider_message_id=(
                     reply_to.provider_message_id if reply_to else None
                 ),
@@ -257,7 +279,14 @@ async def deliver_message(
                 channel,
                 contact.phone_number,
                 attachment.public_url,
-                message.body,
+                (
+                    None
+                    if message.message_type == MessageType.STICKER
+                    else format_outgoing_content(
+                        message.sender_name,
+                        message.body,
+                    )
+                ),
                 reply_to_provider_message_id=(
                     reply_to.provider_message_id if reply_to else None
                 ),
@@ -322,6 +351,7 @@ async def send_message(
         if (
             existing.direction == MessageDirection.OUTGOING
             and existing.message_type == MessageType.TEXT
+            and existing.sender_user_id == context.user.id
             and existing.body == payload.text
             and existing.reply_to_message_id == payload.reply_to_message_id
         ):
@@ -349,6 +379,7 @@ async def send_message(
         tenant_id=context.tenant_id,
         conversation_id=conversation_id,
         sender_user_id=context.user.id,
+        sender_name=normalized_sender_name(context.user.name),
         reply_to_message_id=reply_to.id if reply_to else None,
         reply_to_provider_message_id=reply_to.provider_message_id if reply_to else None,
         direction=MessageDirection.OUTGOING,
@@ -462,6 +493,7 @@ async def send_attachment(
         if (
             existing.direction == MessageDirection.OUTGOING
             and existing.message_type == validated.message_type
+            and existing.sender_user_id == context.user.id
             and existing.body == normalized_caption
             and existing.reply_to_message_id == reply_to_message_id
             and same_content
@@ -486,6 +518,7 @@ async def send_attachment(
         tenant_id=context.tenant_id,
         conversation_id=conversation_id,
         sender_user_id=context.user.id,
+        sender_name=normalized_sender_name(context.user.name),
         reply_to_message_id=reply_to.id if reply_to else None,
         reply_to_provider_message_id=reply_to.provider_message_id if reply_to else None,
         direction=MessageDirection.OUTGOING,

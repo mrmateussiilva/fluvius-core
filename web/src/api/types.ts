@@ -79,8 +79,10 @@ export interface Message {
     direction: 'incoming' | 'outgoing'
     message_type: MessageType
     body: string | null
+    sender_name: string | null
   } | null
   attachments: MessageAttachment[]
+  sender_name: string | null
   provider_message_id: string | null
   error: string | null
   attempt_count: number

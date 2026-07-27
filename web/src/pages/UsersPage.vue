@@ -246,7 +246,8 @@ onMounted(async () => {
           <div>
             <h2 class="font-semibold text-slate-900">Cadastrar usuário</h2>
             <p class="mt-0.5 text-xs text-slate-500">
-              Informe uma senha temporária para o primeiro acesso.
+              O nome será usado para identificar o atendente nas mensagens enviadas.
+              Informe também uma senha temporária para o primeiro acesso.
             </p>
           </div>
           <button
@@ -260,14 +261,14 @@ onMounted(async () => {
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-2">
           <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
-            Nome
+            Nome de exibição
             <input
               v-model="createForm.name"
               required
               minlength="2"
               maxlength="160"
               autocomplete="off"
-              placeholder="Nome do atendente"
+              placeholder="Ex.: Mateus Vendedor"
               class="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-100"
             />
           </label>
@@ -433,7 +434,7 @@ onMounted(async () => {
       </div>
       <div class="mt-5 grid gap-4">
         <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
-          Nome
+          Nome de exibição
           <input
             v-model="editForm.name"
             required

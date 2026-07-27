@@ -26,6 +26,7 @@
 - `ConversationRead` relaciona conversa e usuário e é único por `(tenant_id, conversation_id, user_id)`.
 - `TenantUser` usa os papéis `admin` e `agent`. A membership, não o cadastro global do usuário, controla se a pessoa pode acessar cada empresa.
 - `Message` pertence a tenant e conversa; mensagens outgoing podem apontar para o usuário remetente e qualquer mensagem pode referenciar outra mensagem da mesma conversa como resposta.
+- `Message.sender_name` preserva o nome de exibição usado no envio, sem depender de alterações futuras no cadastro do usuário.
 - `MessageRevision` pertence à mensagem, preserva o corpo anterior, o conteúdo
   novo quando disponível e o ID idempotente do evento externo.
 - `MessageAttachment` pertence à mensagem, repete o tenant e guarda nome, MIME type, tamanho, chave de storage e URL pública controlada pelo Fluvius.
@@ -67,10 +68,13 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 21. Edição atualiza a mensagem original e registra uma revisão; nunca cria uma
     segunda `Message`. A associação exige `tenant_id`, canal e
     `provider_message_id`. Reação não gera mensagem no MVP.
+22. Texto e legenda outgoing são enviados ao WhatsApp com o prefixo
+    `sender_name:\n`; o corpo persistido continua limpo. Retry reutiliza o mesmo
+    snapshot de nome e conteúdo.
 
 ## Migration inicial
 
-`api/alembic/versions/20260721_0001_initial.py` cria as onze tabelas iniciais, enums, chaves estrangeiras, constraints de deduplicação e índices de tenant. `20260722_0002_conversation_reads.py` adiciona os marcadores de leitura por usuário. `20260722_0003_contact_profiles.py` adiciona o cache de perfil WhatsApp aos contatos. `20260722_0004_message_replies_delivery_times.py` adiciona citações, contagem de tentativas e timestamps de envio/entrega/leitura. `20260722_0005_single_conversation_per_contact.py` consolida conversas duplicadas sem apagar mensagens e impede novas duplicatas por contato/canal. `20260722_0006_video_and_sticker_messages.py` adiciona vídeo e figurinha ao enum. `20260724_0007_channel_credential_claims.py` adiciona o fingerprint e impede que uma credencial de provider seja reutilizada por outro canal. `20260726_0008_message_edits.py` adiciona revisões/estado de edição, remove mensagens artificiais geradas por edição/reação e sanitiza material criptográfico legado. `20260726_0009_attachment_integrity.py` adiciona o SHA-256 do conteúdo para validar a idempotência exata dos anexos novos. Defaults de UUID e estados são aplicados pela camada ORM; integrações que escrevam SQL diretamente devem fornecê-los explicitamente.
+`api/alembic/versions/20260721_0001_initial.py` cria as onze tabelas iniciais, enums, chaves estrangeiras, constraints de deduplicação e índices de tenant. `20260722_0002_conversation_reads.py` adiciona os marcadores de leitura por usuário. `20260722_0003_contact_profiles.py` adiciona o cache de perfil WhatsApp aos contatos. `20260722_0004_message_replies_delivery_times.py` adiciona citações, contagem de tentativas e timestamps de envio/entrega/leitura. `20260722_0005_single_conversation_per_contact.py` consolida conversas duplicadas sem apagar mensagens e impede novas duplicatas por contato/canal. `20260722_0006_video_and_sticker_messages.py` adiciona vídeo e figurinha ao enum. `20260724_0007_channel_credential_claims.py` adiciona o fingerprint e impede que uma credencial de provider seja reutilizada por outro canal. `20260726_0008_message_edits.py` adiciona revisões/estado de edição, remove mensagens artificiais geradas por edição/reação e sanitiza material criptográfico legado. `20260726_0009_attachment_integrity.py` adiciona o SHA-256 do conteúdo para validar a idempotência exata dos anexos novos. `20260726_0010_message_sender_name.py` preserva o nome de exibição do atendente em cada mensagem outgoing e preenche o histórico que ainda referencia um usuário. Defaults de UUID e estados são aplicados pela camada ORM; integrações que escrevam SQL diretamente devem fornecê-los explicitamente.
 
 A `20260722_0005` é uma migration de dados e consulta as conversas existentes para escolher e
 consolidar registros. Por isso, a cadeia completa deve ser validada com `alembic upgrade head`

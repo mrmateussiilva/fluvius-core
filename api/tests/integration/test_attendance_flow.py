@@ -241,12 +241,17 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         outgoing_message = outgoing.json()
         self.assertEqual(outgoing_message["id"], client_message_id)
         self.assertEqual(repeated.json()["id"], client_message_id)
+        self.assertEqual(outgoing_message["sender_name"], "Agente A")
         self.assertEqual(outgoing_message["status"], "sent")
         self.assertEqual(
             outgoing_message["provider_message_id"],
             "outgoing-integration-1",
         )
         self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(
+            provider.calls[0]["text"],
+            "Agente A:\nOlá! Como posso ajudar?",
+        )
         self.assertEqual(
             provider.calls[0]["idempotency_key"],
             outgoing_message["id"],
@@ -390,9 +395,14 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(conflicting.status_code, 409, conflicting.text)
         self.assertEqual(created.json()["id"], client_message_id)
         self.assertEqual(created.json()["message_type"], "image")
+        self.assertEqual(created.json()["sender_name"], "Agente A")
         self.assertEqual(created.json()["status"], "sent")
         self.assertEqual(repeated.json()["id"], client_message_id)
         self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(
+            provider.calls[0]["caption"],
+            "Agente A:\nImagem validada",
+        )
         self.assertEqual(provider.calls[0]["idempotency_key"], client_message_id)
         self.assertEqual(save.await_count, 1)
 
@@ -458,6 +468,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(created.status_code, 201, created.text)
         self.assertEqual(repeated.status_code, 201, repeated.text)
         self.assertEqual(created.json()["message_type"], "sticker")
+        self.assertEqual(created.json()["sender_name"], "Agente A")
         self.assertIsNone(created.json()["body"])
         self.assertEqual(repeated.json()["id"], client_message_id)
         self.assertEqual(len(provider.calls), 1)

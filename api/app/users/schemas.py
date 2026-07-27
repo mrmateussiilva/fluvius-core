@@ -17,7 +17,7 @@ class UserCreate(BaseModel):
     @field_validator("name")
     @classmethod
     def normalize_name(cls, value: str) -> str:
-        normalized = value.strip()
+        normalized = " ".join(value.split())
         if len(normalized) < 2:
             raise ValueError("Nome deve ter ao menos 2 caracteres")
         return normalized
@@ -34,7 +34,7 @@ class UserUpdate(BaseModel):
     def normalize_name(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        normalized = value.strip()
+        normalized = " ".join(value.split())
         if len(normalized) < 2:
             raise ValueError("Nome deve ter ao menos 2 caracteres")
         return normalized

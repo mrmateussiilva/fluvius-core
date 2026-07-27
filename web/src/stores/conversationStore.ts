@@ -3,6 +3,7 @@ import * as contactApi from '../api/contacts'
 import * as conversationApi from '../api/conversations'
 import * as messageApi from '../api/messages'
 import type { ContactDetail, Conversation, Message } from '../api/types'
+import { useAuthStore } from './authStore'
 
 const messageStatusRank: Record<Message['status'], number> = {
   pending: 0,
@@ -122,6 +123,8 @@ export const useConversationStore = defineStore('conversations', {
       const conversationId = this.selectedId
       const clientMessageId = crypto.randomUUID()
       const createdAt = new Date().toISOString()
+      const senderName =
+        useAuthStore().user?.name?.trim().replace(/\s+/g, ' ') || null
       const reply = (this.messagesByConversation[conversationId] || []).find(
         (message) => message.id === replyToMessageId,
       )
@@ -140,9 +143,11 @@ export const useConversationStore = defineStore('conversations', {
               direction: reply.direction,
               message_type: reply.message_type,
               body: reply.body,
+              sender_name: reply.sender_name,
             }
           : null,
         attachments: [],
+        sender_name: senderName,
         provider_message_id: null,
         error: null,
         attempt_count: 1,
@@ -206,6 +211,8 @@ export const useConversationStore = defineStore('conversations', {
       const conversationId = this.selectedId
       const clientMessageId = crypto.randomUUID()
       const createdAt = new Date().toISOString()
+      const senderName =
+        useAuthStore().user?.name?.trim().replace(/\s+/g, ' ') || null
       const previewUrl = URL.createObjectURL(file)
       const reply = (this.messagesByConversation[conversationId] || []).find(
         (message) => message.id === replyToMessageId,
@@ -236,6 +243,7 @@ export const useConversationStore = defineStore('conversations', {
               direction: reply.direction,
               message_type: reply.message_type,
               body: reply.body,
+              sender_name: reply.sender_name,
             }
           : null,
         attachments: [
@@ -247,6 +255,7 @@ export const useConversationStore = defineStore('conversations', {
             public_url: previewUrl,
           },
         ],
+        sender_name: senderName,
         provider_message_id: null,
         error: null,
         attempt_count: 1,

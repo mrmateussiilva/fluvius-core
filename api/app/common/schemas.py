@@ -13,6 +13,7 @@ class QuotedMessageResponse(BaseModel):
     direction: str
     message_type: str
     body: str | None
+    sender_name: str | None
 
 
 class MessageAttachmentResponse(ORMModel):
@@ -30,6 +31,7 @@ class MessageResponse(ORMModel):
     message_type: str
     status: str
     body: str | None
+    sender_name: str | None
     reply_to_message_id: UUID | None
     reply_to_provider_message_id: str | None
     reply_to: QuotedMessageResponse | None = None

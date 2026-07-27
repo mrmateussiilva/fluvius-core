@@ -79,6 +79,14 @@ O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A 
 
 Desativar uma membership invalida imediatamente o acesso porque toda requisição e WebSocket revalidam a associação ativa. Conversas `open` atribuídas ao usuário desativado voltam para `new` e ficam sem responsável, dentro do mesmo tenant. O próprio administrador não pode remover seu papel administrativo nem desativar seu acesso.
 
+Mensagens criadas pela API guardam uma cópia de `User.name` em
+`Message.sender_name`. O corpo interno permanece sem decoração, enquanto o
+conteúdo entregue ao WhatsApp recebe `Nome do atendente:\n` antes do texto ou
+da legenda existente. A cópia torna retries determinísticos e preserva a
+autoria histórica mesmo após renomear ou desativar o usuário. Figurinhas e
+mídias sem suporte a legenda não geram uma segunda mensagem apenas para
+assinatura.
+
 ## Storage de mídia
 
 No ambiente local, arquivos ficam no volume `api_storage` e são servidos por `/storage`. A API retorna o endereço externo ao navegador; o adapter converte esse endereço para `http://api:8000/storage/...` ao enviar pela Evolution Go, pois `localhost` dentro do container apontaria para o próprio gateway. Imagens JPEG/PNG/GIF, WebP, áudios AAC/FLAC/M4A/MP3/OGG/WAV/WebM, vídeos MP4/MOV/WebM e documentos PDF/Office/texto/CSV/ZIP são limitados a 25 MB nesta etapa. Ao escolher a categoria figurinha, o navegador converte PNG/JPG para WebP 512×512 com fundo transparente; WebP recebido ou selecionado é preservado. A API valida o WebP e o persiste como `sticker`, sem legenda. A leitura do upload também é limitada a 25 MB + 1 byte, evitando aceitar corpos arbitrariamente grandes. Produção deverá substituir o storage local por S3/MinIO e URLs assinadas.

@@ -216,6 +216,18 @@ function showDetails() {
         </button>
       </div>
 
+      <p
+        v-if="message.direction === 'outgoing' && message.sender_name"
+        class="px-0.5 text-[11px] font-semibold"
+        :class="
+          isNativeSticker
+            ? 'absolute left-1 top-1 z-[1] rounded-full bg-black/55 px-2 py-0.5 text-white shadow-sm'
+            : 'mb-0.5 pr-7 text-emerald-700'
+        "
+      >
+        {{ message.sender_name }}
+      </p>
+
       <button
         v-if="message.reply_to"
         class="mb-1.5 block w-full min-w-44 rounded-md border-l-[3px] bg-black/[0.035] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.06] sm:min-w-48"
@@ -226,7 +238,11 @@ function showDetails() {
           class="block font-semibold"
           :class="message.reply_to.direction === 'incoming' ? 'text-sky-700' : 'text-fluvius-700'"
         >
-          {{ message.reply_to.direction === 'incoming' ? 'Cliente' : 'Você' }}
+          {{
+            message.reply_to.direction === 'incoming'
+              ? 'Cliente'
+              : message.reply_to.sender_name || 'Equipe'
+          }}
         </span>
         <span class="mt-0.5 block max-w-72 truncate text-[#54656f]">
           {{ message.reply_to.body || `[${message.reply_to.message_type}]` }}
@@ -428,6 +444,10 @@ function showDetails() {
           <div v-if="message.edited_at" class="flex justify-between gap-3">
             <dt class="text-[#667781]">Editada</dt>
             <dd class="text-right">{{ dateTimeLabel(message.edited_at) }}</dd>
+          </div>
+          <div v-if="message.sender_name" class="flex justify-between gap-3">
+            <dt class="text-[#667781]">Atendente</dt>
+            <dd class="text-right">{{ message.sender_name }}</dd>
           </div>
           <div class="flex justify-between gap-3 border-t border-[#e9edef] pt-2.5">
             <dt class="text-[#667781]">Tentativas</dt>

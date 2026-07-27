@@ -99,6 +99,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
 - Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, redefinem senha e desativam memberships sem atravessar tenants. Os números disponíveis continuam sendo exclusivamente os canais cadastrados naquela empresa.
+- Textos e legendas enviados pelo número compartilhado recebem automaticamente `Nome do atendente:` no WhatsApp. O nome usado fica preservado na mensagem para auditoria e retries.
 - Edições atualizam a mensagem original, aparecem como `editada` e nunca criam
   uma bolha `[text]`; reações ficam fora do MVP.
 - O composer e a API bloqueiam envio com o canal offline.

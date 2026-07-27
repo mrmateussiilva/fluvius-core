@@ -3,6 +3,7 @@
 ## Entra no MVP
 
 - Autenticação simples e gestão de administradores/atendentes associados a tenants. Administradores criam, atualizam senha, definem papel e desativam usuários da própria empresa.
+- Identificação automática do atendente em textos e legendas enviados pelo número compartilhado, usando o nome de exibição persistido no momento do envio.
 - Um ou mais canais WhatsApp por tenant.
 - Evolution Go como provider inicial plugável.
 - Estado e reconexão/QR do canal por meio da API.

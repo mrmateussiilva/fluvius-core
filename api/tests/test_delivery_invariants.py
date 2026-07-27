@@ -4,11 +4,25 @@ from uuid import uuid4
 
 from app.common.enums import MessageStatus
 from app.conversations.router import conversation_query
-from app.messages.router import apply_send_result
+from app.messages.router import apply_send_result, format_outgoing_content
 from app.providers.base import SendResult
 
 
 class DeliveryInvariantTest(unittest.TestCase):
+    def test_formats_outgoing_text_with_the_sender_snapshot(self) -> None:
+        self.assertEqual(
+            format_outgoing_content(
+                "  Mateus   Vendedor  ",
+                "Me manda uma mensagem caso tenha dúvida?",
+            ),
+            "Mateus Vendedor:\nMe manda uma mensagem caso tenha dúvida?",
+        )
+        self.assertEqual(
+            format_outgoing_content(None, "Mensagem sem identificação"),
+            "Mensagem sem identificação",
+        )
+        self.assertIsNone(format_outgoing_content("Mateus", None))
+
     def test_positive_confirmation_with_provider_id_marks_message_as_sent(self) -> None:
         message = SimpleNamespace(
             status=MessageStatus.PENDING,

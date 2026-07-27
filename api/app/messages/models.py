@@ -34,6 +34,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sender_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
+    sender_name: Mapped[str | None] = mapped_column(String(160))
     reply_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("messages.id", ondelete="SET NULL"), index=True
     )
