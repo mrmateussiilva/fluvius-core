@@ -63,7 +63,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         }
         active_team = self.client.get(
             "/api/v1/users/active",
-            headers=agent_headers,
+            headers=self.headers_a,
         )
         self.assertEqual(active_team.status_code, 200, active_team.text)
         self.assertEqual(
@@ -83,6 +83,13 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         self.assertEqual(
             {user["id"] for user in tenant_b_active_team.json()},
             {str(self.tenant_b.user_id)},
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/v1/users/active",
+                headers=agent_headers,
+            ).status_code,
+            403,
         )
         self.assertEqual(
             self.client.get("/api/v1/users", headers=agent_headers).status_code,

@@ -302,6 +302,10 @@ function refreshWhenVisible() {
 
 onMounted(async () => {
   await auth.restore()
+  if (auth.user?.role !== 'admin') {
+    await router.replace('/app/conversations')
+    return
+  }
   await loadBoard(true)
   realtime.connect()
   document.addEventListener('visibilitychange', refreshWhenVisible)

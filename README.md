@@ -94,7 +94,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 
 - Os endpoints iniciais existem e são tenant-scoped.
 - Assumir uma conversa é atômico; atendentes não podem sobrescrever a atribuição ativa. Administradores podem assumir ou transferir o atendimento para outro usuário ativo da própria empresa, com registro em auditoria.
-- O **Quadro da equipe** organiza a fila aguardando e os atendimentos de cada usuário ativo. Todos podem acompanhar a distribuição; administradores arrastam os cards, usam o seletor para transferir ou devolvem uma conversa à fila, sempre pela API auditada.
+- O **Quadro da equipe** é exclusivo para administradores e organiza a fila aguardando e os atendimentos de cada usuário ativo. O admin arrasta os cards, usa o seletor para transferir ou devolve uma conversa à fila, sempre pela API auditada.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.

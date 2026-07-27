@@ -11,7 +11,7 @@
 - Painel operacional do contato com perfil básico do WhatsApp e histórico de atendimentos.
 - Filas `new`, `open` e `closed`.
 - Assumir e finalizar atendimento, com takeover e transferência por administradores para usuários ativos da própria empresa.
-- Quadro operacional da equipe com fila aguardando, colunas por atendente, atualização realtime e redistribuição administrativa por drag-and-drop ou seletor.
+- Quadro operacional exclusivo para administradores, com fila aguardando, colunas por atendente, atualização realtime e redistribuição por drag-and-drop ou seletor.
 - Receber e enviar texto.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.

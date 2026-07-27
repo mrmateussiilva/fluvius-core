@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
 import TeamBoardPage from './pages/TeamBoardPage.vue'
 import UsersPage from './pages/UsersPage.vue'
+import { useAuthStore } from './stores/authStore'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -17,7 +18,11 @@ export const router = createRouter({
       component: AppLayout,
       children: [
         { path: 'conversations', component: ConversationsPage },
-        { path: 'team-board', component: TeamBoardPage },
+        {
+          path: 'team-board',
+          component: TeamBoardPage,
+          meta: { admin: true },
+        },
         { path: 'quick-replies', component: QuickRepliesPage },
         { path: 'settings/channels', component: ChannelsPage },
         { path: 'settings/users', component: UsersPage },
@@ -26,8 +31,17 @@ export const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const token = localStorage.getItem('fluvius_token')
   if (!to.meta.public && !token) return '/login'
   if (to.path === '/login' && token) return '/app/conversations'
+  if (to.meta.admin) {
+    const auth = useAuthStore()
+    try {
+      await auth.restore()
+    } catch {
+      return '/login'
+    }
+    if (auth.user?.role !== 'admin') return '/app/conversations'
+  }
 })

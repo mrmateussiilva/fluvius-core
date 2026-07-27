@@ -78,7 +78,7 @@ def get_tenant_user(
 
 @router.get("/active", response_model=list[ActiveTenantUserResponse])
 def list_active_users(
-    context: AuthContext = Depends(get_auth_context),
+    context: AuthContext = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> list[ActiveTenantUserResponse]:
     rows = db.execute(
