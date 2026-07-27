@@ -250,7 +250,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(len(provider.calls), 1)
         self.assertEqual(
             provider.calls[0]["text"],
-            "Agente A:\nOlá! Como posso ajudar?",
+            "*Agente A:*\nOlá! Como posso ajudar?",
         )
         self.assertEqual(
             provider.calls[0]["idempotency_key"],
@@ -401,7 +401,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(len(provider.calls), 1)
         self.assertEqual(
             provider.calls[0]["caption"],
-            "Agente A:\nImagem validada",
+            "*Agente A:*\nImagem validada",
         )
         self.assertEqual(provider.calls[0]["idempotency_key"], client_message_id)
         self.assertEqual(save.await_count, 1)

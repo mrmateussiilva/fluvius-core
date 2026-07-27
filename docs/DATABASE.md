@@ -68,8 +68,8 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 21. Edição atualiza a mensagem original e registra uma revisão; nunca cria uma
     segunda `Message`. A associação exige `tenant_id`, canal e
     `provider_message_id`. Reação não gera mensagem no MVP.
-22. Texto e legenda outgoing são enviados ao WhatsApp com o prefixo
-    `sender_name:\n`; o corpo persistido continua limpo. Retry reutiliza o mesmo
+22. Texto e legenda outgoing são enviados ao WhatsApp com o prefixo em negrito
+    `*sender_name:*\n`; o corpo persistido continua limpo. Retry reutiliza o mesmo
     snapshot de nome e conteúdo.
 
 ## Migration inicial

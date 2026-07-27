@@ -15,7 +15,7 @@ class DeliveryInvariantTest(unittest.TestCase):
                 "  Mateus   Vendedor  ",
                 "Me manda uma mensagem caso tenha dúvida?",
             ),
-            "Mateus Vendedor:\nMe manda uma mensagem caso tenha dúvida?",
+            "*Mateus Vendedor:*\nMe manda uma mensagem caso tenha dúvida?",
         )
         self.assertEqual(
             format_outgoing_content(None, "Mensagem sem identificação"),

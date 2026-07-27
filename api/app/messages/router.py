@@ -63,7 +63,7 @@ def format_outgoing_content(
     normalized_name = normalized_sender_name(sender_name)
     if not normalized_name:
         return content
-    return f"{normalized_name}:\n{content}"
+    return f"*{normalized_name}:*\n{content}"
 
 
 def apply_send_result(

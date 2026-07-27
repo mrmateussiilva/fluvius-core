@@ -81,7 +81,7 @@ Desativar uma membership invalida imediatamente o acesso porque toda requisiçã
 
 Mensagens criadas pela API guardam uma cópia de `User.name` em
 `Message.sender_name`. O corpo interno permanece sem decoração, enquanto o
-conteúdo entregue ao WhatsApp recebe `Nome do atendente:\n` antes do texto ou
+conteúdo entregue ao WhatsApp recebe `*Nome do atendente:*\n` antes do texto ou
 da legenda existente. A cópia torna retries determinísticos e preserva a
 autoria histórica mesmo após renomear ou desativar o usuário. Figurinhas e
 mídias sem suporte a legenda não geram uma segunda mensagem apenas para
