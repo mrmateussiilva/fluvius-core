@@ -37,7 +37,11 @@ const notice = ref('')
 const loadingChannels = ref(true)
 const creating = ref(false)
 const showCreateForm = ref(false)
-const form = reactive({ name: '', phone_number: '', instance_name: '' })
+const form = reactive({
+  name: '',
+  phone_number: '',
+  provisioning_key: crypto.randomUUID(),
+})
 const connection = reactive<{
   channel: Channel | null
   status: ChannelStatus
@@ -207,23 +211,28 @@ async function submit() {
       name: form.name,
       phone_number: form.phone_number || undefined,
       provider: 'evolution_go',
-      provider_config: { instance_name: form.instance_name },
+      provisioning_key: form.provisioning_key,
     })
     const existingChannel = channels.value.find((item) => item.id === channel.id)
     const targetChannel = existingChannel || channel
     if (existingChannel) {
       Object.assign(existingChannel, channel)
-      notice.value =
-        `Essa credencial já pertence ao canal “${existingChannel.name}”. ` +
-        'Abrimos o canal existente para você.'
+      notice.value = `O canal “${existingChannel.name}” foi recuperado com segurança.`
     } else {
       channels.value.push(channel)
     }
-    Object.assign(form, { name: '', phone_number: '', instance_name: '' })
+    Object.assign(form, {
+      name: '',
+      phone_number: '',
+      provisioning_key: crypto.randomUUID(),
+    })
     showCreateForm.value = false
     await openConnection(targetChannel)
   } catch (exception) {
-    error.value = exception instanceof Error ? exception.message : 'Falha ao criar canal'
+    const message =
+      exception instanceof Error ? exception.message : 'Falha ao criar canal'
+    await refresh()
+    error.value = message
   } finally {
     creating.value = false
   }
@@ -303,8 +312,8 @@ onBeforeUnmount(() => {
       <div>
         <p class="font-semibold text-sky-950">Seu canal já está cadastrado</p>
         <p class="mt-1 max-w-2xl text-sm leading-5 text-sky-800">
-          Use Conectar ou Verificar no canal abaixo. Outro nome não cria outra instância:
-          um canal adicional precisa de outro token configurado na API.
+          Use Conectar ou Verificar no canal abaixo. Você pode adicionar outros números
+          sem abrir o Evolution Manager ou configurar tokens manualmente.
         </p>
       </div>
       <button
@@ -318,7 +327,7 @@ onBeforeUnmount(() => {
 
     <form
       v-if="!loadingChannels && (!channels.length || showCreateForm)"
-      class="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3"
+      class="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2"
       @submit.prevent="submit"
     >
       <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
@@ -340,20 +349,10 @@ onBeforeUnmount(() => {
           class="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-100"
         />
       </label>
-      <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
-        Referência da instância
-        <input
-          v-model="form.instance_name"
-          required
-          placeholder="Ex.: pessoal"
-          class="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-100"
-        />
-      </label>
-      <div class="sm:col-span-3 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="sm:col-span-2 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p class="max-w-2xl text-xs leading-5 text-slate-500">
-          A referência identifica uma credencial configurada na API. Mudar apenas esse
-          nome não cria uma nova instância Evolution; cada canal adicional precisa de
-          outro token.
+          O Fluvius criará uma instância isolada, protegerá a credencial e abrirá o
+          QR Code. Nenhum acesso ao Manager é necessário.
         </p>
         <div class="flex items-center justify-end gap-2">
           <button
@@ -370,7 +369,7 @@ onBeforeUnmount(() => {
           >
             <LoaderCircle v-if="creating" class="h-4 w-4 animate-spin" />
             <Smartphone v-else class="h-4 w-4" />
-            {{ creating ? 'Verificando…' : 'Criar e conectar' }}
+            {{ creating ? 'Criando instância…' : 'Criar e conectar' }}
           </button>
         </div>
       </div>

@@ -6,12 +6,22 @@ from uuid import uuid4
 from app.channels.schemas import ChannelResponse
 from app.common.enums import ChannelProvider, ChannelStatus
 from app.config import settings
-from app.providers.evolution_credentials import ProviderConfigurationError
+from app.providers.evolution_credentials import (
+    ProviderConfigurationError,
+    decrypt_provider_secret,
+    encrypt_provider_secret,
+)
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.factory import get_provider
 
 
 class ProviderFactoryTest(unittest.TestCase):
+    def test_provider_secret_is_encrypted_and_can_be_opened(self) -> None:
+        encrypted = encrypt_provider_secret("instance-secret")
+
+        self.assertNotIn(b"instance-secret", encrypted)
+        self.assertEqual(decrypt_provider_secret(encrypted), "instance-secret")
+
     def test_channel_response_never_exposes_stored_provider_secrets(self) -> None:
         response = ChannelResponse.model_validate(
             SimpleNamespace(

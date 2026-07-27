@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     evolution_go_base_url: str = "http://evolution-go:8080"
     evolution_go_webhook_base_url: str = "http://api:8000"
     evolution_go_api_key: str = ""
+    evolution_go_global_api_key: str = ""
     evolution_go_instance_tokens: dict[str, str] = Field(default_factory=dict)
+    provider_credentials_key: str = ""
     webhook_secret: str = ""
 
     model_config = SettingsConfigDict(

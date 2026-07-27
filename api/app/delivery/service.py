@@ -75,7 +75,7 @@ async def call_provider(
                 error="A mensagem citada não está disponível para envio.",
             )
 
-    provider = get_provider(channel.provider, channel)
+    provider = get_provider(channel.provider, channel, db)
     participant = None
     if reply_to:
         participant = (

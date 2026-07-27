@@ -16,6 +16,11 @@ class WhatsAppChannel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "credential_fingerprint",
             name="uq_whatsapp_channels_provider_credential",
         ),
+        UniqueConstraint(
+            "tenant_id",
+            "provisioning_key",
+            name="uq_whatsapp_channels_tenant_provisioning_key",
+        ),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -43,3 +48,4 @@ class WhatsAppChannel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     provider_config: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     credential_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    provisioning_key: Mapped[uuid.UUID | None] = mapped_column(Uuid)

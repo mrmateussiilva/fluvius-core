@@ -52,7 +52,7 @@ async def backfill_media() -> None:
             )
             if channel is None:
                 continue
-            provider = get_provider(event.provider, channel)
+            provider = get_provider(event.provider, channel, db)
             try:
                 incoming = await provider.handle_webhook(event.payload)
                 attachment, error = await persist_incoming_attachment(

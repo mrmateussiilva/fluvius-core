@@ -121,7 +121,7 @@ async def whatsapp_webhook(
     try:
         if channel.provider == ChannelProvider.EVOLUTION_GO:
             claim_evolution_credential(db, channel)
-        provider_adapter = get_provider(provider, channel)
+        provider_adapter = get_provider(provider, channel, db)
     except ProviderConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -427,7 +427,7 @@ async def _process_channel_status(channel: WhatsAppChannel, payload: dict, db: S
     elif event_name in {"disconnected", "loggedout"}:
         channel.status = ChannelStatus.DISCONNECTED
     elif raw:
-        mapper = get_provider(channel.provider, channel)
+        mapper = get_provider(channel.provider, channel, db)
         map_status = getattr(mapper, "_map_status", None)
         channel.status = map_status(raw) if map_status else ChannelStatus.DISCONNECTED
     await realtime_manager.broadcast(

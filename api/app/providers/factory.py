@@ -1,3 +1,5 @@
+from sqlalchemy.orm import Session
+
 from app.channels.models import WhatsAppChannel
 from app.common.enums import ChannelProvider
 from app.providers.base import WhatsAppProvider
@@ -10,10 +12,17 @@ from app.providers.meta_cloud import MetaCloudProvider
 def get_provider(
     provider: ChannelProvider | str,
     channel: WhatsAppChannel | None = None,
+    db: Session | None = None,
 ) -> WhatsAppProvider:
     provider = ChannelProvider(provider)
     if provider == ChannelProvider.EVOLUTION_GO and channel is not None:
-        return EvolutionGoProvider(api_key=evolution_api_key(channel.provider_config))
+        return EvolutionGoProvider(
+            api_key=evolution_api_key(
+                channel.provider_config,
+                db=db,
+                channel=channel,
+            )
+        )
     providers: dict[ChannelProvider, type[WhatsAppProvider]] = {
         ChannelProvider.EVOLUTION_GO: EvolutionGoProvider,
         ChannelProvider.META_CLOUD: MetaCloudProvider,

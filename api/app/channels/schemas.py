@@ -10,14 +10,12 @@ class ChannelCreate(BaseModel):
     phone_number: str | None = Field(default=None, max_length=32)
     provider: ChannelProvider = ChannelProvider.EVOLUTION_GO
     provider_config: dict = Field(default_factory=dict)
+    provisioning_key: UUID | None = None
 
     @model_validator(mode="after")
     def validate_provider_config(self) -> "ChannelCreate":
         if self.provider != ChannelProvider.EVOLUTION_GO:
             return self
-        instance_name = self.provider_config.get("instance_name")
-        if not isinstance(instance_name, str) or not instance_name.strip():
-            raise ValueError("Informe a instância Evolution configurada")
         forbidden_keys = {
             "api_key",
             "apikey",
@@ -27,6 +25,12 @@ class ChannelCreate(BaseModel):
         }
         if forbidden_keys.intersection(key.lower() for key in self.provider_config):
             raise ValueError("Credenciais do provider não podem ser enviadas pelo navegador")
+        instance_name = self.provider_config.get("instance_name")
+        if instance_name is None:
+            self.provider_config = {}
+            return self
+        if not isinstance(instance_name, str) or not instance_name.strip():
+            raise ValueError("A referência da instância Evolution é inválida")
         self.provider_config = {"instance_name": instance_name.strip()}
         return self
 

@@ -18,7 +18,7 @@ async def synchronize_contact_profile(
 ) -> ContactProfileResult:
     if channel.provider == ChannelProvider.EVOLUTION_GO:
         claim_evolution_credential(db, channel)
-    profile = await get_provider(channel.provider, channel).get_contact_profile(
+    profile = await get_provider(channel.provider, channel, db).get_contact_profile(
         channel,
         contact.phone_number,
     )

@@ -18,9 +18,13 @@ Os DTOs normalizam confirmação de envio, status do canal, QR/pairing code e me
 
 ## EvolutionGoProvider
 
-É a implementação inicial. Usa `httpx`, `EVOLUTION_GO_BASE_URL` e credenciais mantidas no ambiente. `EVOLUTION_GO_INSTANCE_TOKENS` é um mapa JSON entre `provider_config.instance_name` e o token da instância; `EVOLUTION_GO_API_KEY` permanece como fallback compatível para uma única instância. A chave resolvida é enviada no header `apikey` e nunca deve aparecer em logs ou respostas. Na versão 0.7.2, as rotas de dados confirmadas são `/send/text`, `/send/media`, `/instance/status` e `/instance/qr`; o middleware resolve a instância pelo token do header.
+É a implementação inicial. Usa `httpx`, `EVOLUTION_GO_BASE_URL` e uma credencial por instância. Canais novos são provisionados pela API com `POST /instance/create`: o Fluvius gera o identificador e o token, cifra o token em `provider_credentials` e usa `EVOLUTION_GO_GLOBAL_API_KEY` somente no cliente administrativo. `PROVIDER_CREDENTIALS_KEY` protege esse cofre; quando ausente, instalações existentes derivam a chave de `SECRET_KEY`. O segredo resolvido é enviado no header `apikey` e nunca aparece em logs ou respostas.
 
-A mesma credencial não pode ser associada a canais diferentes, mesmo quando referências distintas apontam por engano para o mesmo token. O banco guarda somente o fingerprint SHA-256 do token e aplica unicidade por provider; o segredo continua apenas no ambiente. `ChannelResponse` filtra `provider_config` e devolve somente `instance_name`, inclusive para registros antigos.
+A mesma credencial não pode ser associada a canais diferentes. O banco guarda o ciphertext autenticado e o fingerprint SHA-256, aplicando unicidade por provider. Toda leitura de `provider_credentials` exige `tenant_id` e `channel_id`. `ChannelResponse` filtra `provider_config` e devolve somente `instance_name`.
+
+`EVOLUTION_GO_INSTANCE_TOKENS` e `EVOLUTION_GO_API_KEY` permanecem como fallback compatível para canais antigos, sem obrigar uma migração imediata. Canais gerenciados não exigem novas variáveis de ambiente nem acesso ao Manager. A chave global continua sendo um segredo único da infraestrutura e deve ser entregue somente à API.
+
+O cadastro recebe um `provisioning_key` gerado pelo navegador e é idempotente dentro do tenant. A instância usa o UUID persistido do canal; em timeout, conflito ou resposta ambígua, a API confirma sua existência com a credencial da instância antes de marcar o provisionamento como `active`. Sem confirmação positiva, o canal fica `failed`/`uncertain`, preservado para nova tentativa, e nunca é apagado automaticamente.
 
 A imagem local padrão é `fluvius/evolution-go:0.7.2-edit-fix.1`, compilada pelo Compose a partir do commit oficial 0.7.2 fixado em `EVOLUTION_GO_SOURCE_REF`. O patch mantido junto ao provider chama `DecryptSecretEncryptedMessage` para edições `MESSAGE_EDIT` e normaliza o resultado como `ProtocolMessage_MESSAGE_EDIT` antes do webhook. Isso disponibiliza o texto novo e o ID da mensagem original à API; se a chave original não estiver disponível, o gateway mantém o evento cifrado e a API registra a edição como conteúdo indisponível. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e pode exigir `EVOLUTION_OPERATOR_EMAIL` ou ativação pelo Manager.
 
@@ -48,7 +52,7 @@ O Evolution Go precisa resolver e acessar `web.whatsapp.com` para obter a versã
 
 Se a rede bloquear resolvedores públicos, configure esses valores no `.env` com os servidores permitidos pela infraestrutura. Erros contendo `lookup web.whatsapp.com on 127.0.0.11:53` indicam falha de DNS do Docker, não credencial ou número inválido.
 
-Ao apagar e recriar uma instância, atualize seu token em `EVOLUTION_GO_INSTANCE_TOKENS` — ou em `EVOLUTION_GO_API_KEY` no modo de instância única — e reinicie a API. O `provider_config.instance_name` do canal deve coincidir exatamente com a chave do mapa.
+Ao apagar manualmente uma instância legada, atualize seu token em `EVOLUTION_GO_INSTANCE_TOKENS` — ou em `EVOLUTION_GO_API_KEY` no modo de instância única — e reinicie a API. Instâncias gerenciadas devem ser recuperadas pelo fluxo administrativo do Fluvius.
 
 Essa versão não envia header customizado no webhook. Ela inclui `instanceToken` no corpo; o adapter compara esse valor com `EVOLUTION_GO_API_KEY` em tempo constante. O token é removido do payload antes de gravar `provider_events`. O header `X-Webhook-Secret` continua aceito como alternativa para providers capazes de configurá-lo.
 
@@ -95,7 +99,7 @@ confirmadas acima, mas não importa toda a agenda do WhatsApp.
 A documentação pública e o Swagger da linha Evolution Go estão evoluindo. Antes do primeiro teste integrado/produção, confirmar contra o Swagger da imagem efetivamente fixada:
 
 - compatibilidade das rotas ao trocar a imagem (0.7.2 usa `/send/text` e `/send/media`);
-- substituir o mapa de tokens no ambiente por referências a um cofre de segredos antes de permitir gestão dinâmica de credenciais;
+- validar rotação da chave mestra e exportação segura do cofre antes de produção;
 - schema exato de confirmação de `SendMedia`;
 - validade/cache das URLs de avatar e latência de `/user/info` em diferentes contas;
 - eventos de falha de entrega e os códigos de erro associados (os recibos `Delivered`/`Read` estão confirmados);

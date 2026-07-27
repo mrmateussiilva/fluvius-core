@@ -272,7 +272,7 @@ async def _reconcile_message_event(
         try:
             if channel.provider == ChannelProvider.EVOLUTION_GO:
                 claim_evolution_credential(db, channel)
-            adapter = get_provider(channel.provider, channel)
+            adapter = get_provider(channel.provider, channel, db)
             if event.processing_error == PENDING_MESSAGE_ERRORS[0]:
                 update = adapter.handle_message_status(event.payload)
                 if update is not None:

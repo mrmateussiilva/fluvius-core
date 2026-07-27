@@ -13,7 +13,8 @@ export const createChannel = (payload: {
   name: string
   phone_number?: string
   provider: Channel['provider']
-  provider_config: Record<string, unknown>
+  provider_config?: Record<string, unknown>
+  provisioning_key?: string
 }) => http<Channel>('/api/v1/channels', { method: 'POST', body: JSON.stringify(payload) })
 export const getChannelStatus = (id: string) =>
   http<{ status: ChannelStatus; raw_status: string | null; error: string | null }>(

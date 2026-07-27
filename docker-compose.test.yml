@@ -27,6 +27,8 @@ services:
       SECRET_KEY: integration-test-secret-key-with-at-least-32-bytes
       WEBHOOK_SECRET: integration-webhook-secret
       EVOLUTION_GO_API_KEY: integration-instance-token
+      EVOLUTION_GO_GLOBAL_API_KEY: integration-global-token
+      PROVIDER_CREDENTIALS_KEY: integration-provider-credentials-key
       LOCAL_STORAGE_PATH: /tmp/fluvius-test-storage
       RUN_INTEGRATION_TESTS: "1"
     volumes:

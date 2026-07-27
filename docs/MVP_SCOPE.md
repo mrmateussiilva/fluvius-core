@@ -6,7 +6,7 @@
 - Identificação automática do atendente em textos e legendas enviados pelo número compartilhado, usando o nome de exibição persistido no momento do envio.
 - Um ou mais canais WhatsApp por tenant.
 - Evolution Go como provider inicial plugável.
-- Estado e reconexão/QR do canal por meio da API.
+- Provisionamento administrativo de instâncias Evolution Go, estado e reconexão/QR inteiramente por meio da API, com credenciais cifradas e sem configuração por canal no frontend ou `.env`.
 - Contatos criados a partir de mensagens recebidas.
 - Painel operacional do contato com perfil básico do WhatsApp e histórico de atendimentos.
 - Filas `new`, `open` e `closed`.

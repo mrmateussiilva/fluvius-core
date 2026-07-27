@@ -12,6 +12,9 @@ from app.conversations.models import Conversation, ConversationRead
 from app.database import SessionLocal
 from app.messages.models import Message
 from app.providers.base import QRCodeResult
+from app.providers.evolution_credentials import decrypt_provider_secret
+from app.providers.factory import get_provider
+from app.providers.models import ProviderCredential
 from app.quick_replies.models import QuickReply
 from app.security import create_access_token
 from app.users.models import TenantUser, User
@@ -288,6 +291,116 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             )
             self.assertEqual(channel.tenant_id, self.tenant_a.tenant_id)
             self.assertEqual(quick_reply.tenant_id, self.tenant_a.tenant_id)
+
+    def test_admin_provisions_a_managed_evolution_channel_idempotently(self) -> None:
+        provisioning_key = "a0ca3990-b622-43f6-a8f9-f2ae70a587ee"
+        with patch(
+            "app.providers.evolution_provisioning.EvolutionGoAdminClient.create_instance",
+            new_callable=AsyncMock,
+        ) as create_instance:
+            first = self.client.post(
+                "/api/v1/channels",
+                headers=self.headers_a,
+                json={
+                    "name": "Comercial",
+                    "phone_number": "5527999999999",
+                    "provider": "evolution_go",
+                    "provisioning_key": provisioning_key,
+                },
+            )
+            second = self.client.post(
+                "/api/v1/channels",
+                headers=self.headers_a,
+                json={
+                    "name": "Comercial",
+                    "phone_number": "5527999999999",
+                    "provider": "evolution_go",
+                    "provisioning_key": provisioning_key,
+                },
+            )
+
+        self.assertEqual(first.status_code, 201, first.text)
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertEqual(first.json()["id"], second.json()["id"])
+        self.assertNotIn("token", first.text.lower())
+        create_instance.assert_awaited_once()
+        provisioned = create_instance.await_args.args[0]
+        self.assertEqual(provisioned.instance_id, first.json()["id"])
+
+        with SessionLocal() as db:
+            credential = db.scalar(
+                select(ProviderCredential).where(
+                    ProviderCredential.tenant_id == self.tenant_a.tenant_id,
+                    ProviderCredential.channel_id == UUID(first.json()["id"]),
+                )
+            )
+            self.assertIsNotNone(credential)
+            self.assertEqual(credential.provisioning_status, "active")
+            self.assertNotIn(provisioned.token.encode(), credential.encrypted_secret)
+            self.assertEqual(
+                decrypt_provider_secret(credential.encrypted_secret),
+                provisioned.token,
+            )
+            channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.tenant_id == self.tenant_a.tenant_id,
+                    WhatsAppChannel.id == UUID(first.json()["id"]),
+                )
+            )
+            self.assertEqual(
+                get_provider(channel.provider, channel, db).api_key,
+                provisioned.token,
+            )
+            audit = db.scalar(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == self.tenant_a.tenant_id,
+                    AuditLog.entity_id == UUID(first.json()["id"]),
+                    AuditLog.action == "channel.provisioned",
+                )
+            )
+            self.assertIsNotNone(audit)
+
+    def test_agent_cannot_create_or_connect_channels(self) -> None:
+        with SessionLocal() as db:
+            agent = User(
+                email="channel-agent@example.com",
+                name="Atendente",
+                password_hash=self.password_hash,
+            )
+            db.add(agent)
+            db.flush()
+            db.add(
+                TenantUser(
+                    tenant_id=self.tenant_a.tenant_id,
+                    user_id=agent.id,
+                    role="agent",
+                )
+            )
+            db.commit()
+            agent_id = agent.id
+
+        agent_headers = {
+            "Authorization": (
+                "Bearer "
+                + create_access_token(
+                    str(agent_id),
+                    str(self.tenant_a.tenant_id),
+                    role="agent",
+                )
+            )
+        }
+        created = self.client.post(
+            "/api/v1/channels",
+            headers=agent_headers,
+            json={"name": "Não autorizado", "provider": "evolution_go"},
+        )
+        connected = self.client.post(
+            f"/api/v1/channels/{self.tenant_a.channel_id}/connect",
+            headers=agent_headers,
+        )
+
+        self.assertEqual(created.status_code, 403, created.text)
+        self.assertEqual(connected.status_code, 403, connected.text)
 
     def test_reuses_the_channel_that_already_owns_the_evolution_credential(self) -> None:
         with patch.object(

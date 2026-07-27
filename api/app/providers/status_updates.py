@@ -92,7 +92,7 @@ def reconcile_pending_status_events(
     if not provider_message_id:
         return []
 
-    adapter = get_provider(channel.provider, channel)
+    adapter = get_provider(channel.provider, channel, db)
     events = list(
         db.scalars(
             select(ProviderEvent)

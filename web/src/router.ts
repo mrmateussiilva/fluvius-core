@@ -25,7 +25,11 @@ export const router = createRouter({
           meta: { admin: true },
         },
         { path: 'quick-replies', component: QuickRepliesPage },
-        { path: 'settings/channels', component: ChannelsPage },
+        {
+          path: 'settings/channels',
+          component: ChannelsPage,
+          meta: { admin: true },
+        },
         {
           path: 'settings/sync',
           component: AdminSyncPage,

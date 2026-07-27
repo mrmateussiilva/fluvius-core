@@ -79,9 +79,9 @@ Material criptográfico do envelope não é persistido.
 
 O status pode ser consultado pela API ou atualizado por webhook. Em ambos os casos, o valor externo é normalizado para `disconnected`, `connecting`, `connected`, `requires_qr` ou `failed`. A UI usa somente esse estado interno. Eventos de mudança emitem `channel.status.updated`.
 
-O assistente de conexão chama `POST /api/v1/channels/{id}/connect`, recebe somente QR/código de pareamento e consulta `GET /status` até a sessão ficar conectada. A solicitação inicial reaplica o webhook; as consultas periódicas de status são somente leitura no provider. O frontend nunca recebe URL ou token da Evolution. `provider_config.instance_name` funciona como referência não secreta para `EVOLUTION_GO_INSTANCE_TOKENS`; a API compara fingerprints dos tokens e rejeita a associação da mesma credencial a mais de um canal.
+Somente administradores criam ou reconectam canais. `POST /api/v1/channels` reserva o canal com uma chave idempotente, gera sua credencial, cria a instância por meio do cliente administrativo em `api/app/providers` e persiste somente o segredo cifrado. O assistente chama `POST /api/v1/channels/{id}/connect`, recebe somente QR/código de pareamento e consulta `GET /status` até a sessão ficar conectada. A solicitação inicial reaplica o webhook; as consultas periódicas de status são somente leitura. O frontend nunca recebe URL ou token da Evolution.
 
-O cadastro é idempotente por credencial dentro do tenant: se o usuário tentar criar novamente o canal que já possui aquele token, a API devolve o canal existente e a UI abre sua conexão. A constraint global continua bloqueando reutilização entre tenants sem revelar a qual conta a credencial pertence.
+O cadastro gerenciado é idempotente por `provisioning_key` dentro do tenant. Repetir uma solicitação recupera o mesmo canal e a mesma instância; uma resposta ambígua do gateway só vira sucesso após consulta positiva pela credencial da instância. Canais legados ainda resolvem referências de `EVOLUTION_GO_INSTANCE_TOKENS`, e a constraint global continua bloqueando reutilização de credenciais entre canais.
 
 ## Perfil do contato
 
