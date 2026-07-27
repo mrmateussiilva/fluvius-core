@@ -43,13 +43,14 @@ Serviços locais:
 
 ## Produção na VPS
 
-A implantação de produção usa Ubuntu, Caddy, HTTPS automático, frontend
-estático, serviços internos e dados persistentes sob `/srv/fluvius`. O domínio
-preparado é `fluvius.finderbit.com.br`.
+A implantação de produção usa Ubuntu, o Caddy do host para HTTPS/WSS, frontend
+estático em loopback, serviços internos e dados persistentes sob
+`/srv/fluvius`. O domínio preparado é `fluvius.finderbit.com.br`.
 
 ```bash
 sudo ./deploy/scripts/install-ubuntu.sh
 ./deploy/scripts/generate-production-env.sh
+# Instale deploy/Caddyfile.host no Caddy já executado pelo Ubuntu.
 ./deploy/scripts/production-deploy.sh
 ```
 

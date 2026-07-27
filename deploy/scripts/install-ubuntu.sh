@@ -38,11 +38,8 @@ install -d -m 0750 \
   "$DATA_DIR/postgres" \
   "$DATA_DIR/redis" \
   "$DATA_DIR/media" \
-  "$DATA_DIR/caddy/data" \
-  "$DATA_DIR/caddy/config" \
   "$DATA_DIR/backups"
 chown -R 999:999 "$DATA_DIR/postgres" "$DATA_DIR/redis"
-chown -R 1000:1000 "$DATA_DIR/caddy"
 chown -R 10001:10001 "$DATA_DIR/media"
 
 install -d -m 0700 /etc/fluvius
@@ -68,6 +65,10 @@ install -m 0644 \
   /etc/systemd/system/fluvius-backup.timer
 systemctl daemon-reload
 systemctl enable --now fluvius-backup.timer
+
+if ! command -v caddy >/dev/null 2>&1; then
+  echo "Caddy não encontrado no host. Instale-o antes do deploy público."
+fi
 
 if [[ "$ENABLE_FIREWALL" == "--enable-firewall" ]]; then
   ufw default deny incoming

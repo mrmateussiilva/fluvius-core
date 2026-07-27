@@ -1,44 +1,19 @@
 {
-	email {$ACME_EMAIL}
-	admin localhost:2019
+	auto_https off
+	admin off
 }
 
-{$APP_DOMAIN} {
+:8080 {
 	encode zstd gzip
-
-	log {
-		output stdout
-		format json
-	}
 
 	header {
 		-Server
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), geolocation=(), microphone=()"
-		Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss:; img-src 'self' data: blob: https:; media-src 'self' blob:; font-src 'self' data:"
 	}
 
-	@privateStorage path /storage/*
-	respond @privateStorage 404
-
-	handle /api/* {
-		reverse_proxy api:8000
-	}
-
-	handle /health* {
-		reverse_proxy api:8000
-	}
-
-	handle /ws {
-		reverse_proxy api:8000
-	}
-
-	handle {
-		root * /srv
-		try_files {path} /index.html
-		file_server
-	}
+	root * /srv
+	try_files {path} /index.html
+	file_server
 }

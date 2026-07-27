@@ -102,8 +102,8 @@ services:
     environment: *api-environment
     volumes:
       - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
-    expose:
-      - "8000"
+    ports:
+      - "127.0.0.1:${FLUVIUS_API_PORT:-18000}:8000"
     healthcheck:
       test:
         [
@@ -233,21 +233,13 @@ services:
     networks:
       - backend
 
-  caddy:
+  web:
     <<: *service-defaults
     build:
       context: .
       dockerfile: web/Dockerfile.prod
-    environment:
-      APP_DOMAIN: ${APP_DOMAIN:?configure APP_DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL:?configure ACME_EMAIL}
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/caddy/data:/data
-      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/caddy/config:/config
+      - "127.0.0.1:${FLUVIUS_WEB_PORT:-18080}:8080"
     healthcheck:
       test:
         [
@@ -256,7 +248,7 @@ services:
           "-q",
           "-O",
           "/dev/null",
-          "http://localhost:2019/config/",
+          "http://localhost:8080/",
         ]
       interval: 30s
       timeout: 5s

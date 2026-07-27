@@ -4,7 +4,6 @@ set -euo pipefail
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 TARGET_FILE=${1:-"$PROJECT_ROOT/.env.production"}
 APP_DOMAIN=${APP_DOMAIN:-fluvius.finderbit.com.br}
-ACME_EMAIL=${ACME_EMAIL:-admin@finderbit.com.br}
 
 if [[ -e "$TARGET_FILE" ]]; then
   echo "O arquivo $TARGET_FILE já existe; nenhum segredo foi sobrescrito." >&2
@@ -23,8 +22,9 @@ umask 077
 {
   echo "COMPOSE_PROJECT_NAME=fluvius-core-prod"
   echo "APP_DOMAIN=$APP_DOMAIN"
-  echo "ACME_EMAIL=$ACME_EMAIL"
   echo "FLUVIUS_DATA_DIR=/srv/fluvius"
+  echo "FLUVIUS_API_PORT=18000"
+  echo "FLUVIUS_WEB_PORT=18080"
   echo
   echo "POSTGRES_DB=fluvius"
   echo "POSTGRES_USER=fluvius"
@@ -45,4 +45,4 @@ umask 077
 
 chmod 600 "$TARGET_FILE"
 echo "Ambiente de produção criado em $TARGET_FILE."
-echo "Revise ACME_EMAIL e guarde uma cópia segura dos segredos antes do deploy."
+echo "Guarde uma cópia segura dos segredos antes do deploy."

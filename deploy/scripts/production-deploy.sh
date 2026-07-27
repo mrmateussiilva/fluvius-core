@@ -22,6 +22,13 @@ COMPOSE=(
 "${COMPOSE[@]}" exec -T api alembic current
 "${COMPOSE[@]}" ps
 
+curl -fsS \
+  "http://127.0.0.1:${FLUVIUS_API_PORT:-18000}/health/ready" \
+  >/dev/null
+curl -fsS \
+  "http://127.0.0.1:${FLUVIUS_WEB_PORT:-18080}/" \
+  >/dev/null
+
 for attempt in {1..30}; do
   if curl -fsS "https://$APP_DOMAIN/health/ready" >/dev/null; then
     echo "Deploy concluído: https://$APP_DOMAIN"
@@ -30,5 +37,6 @@ for attempt in {1..30}; do
   sleep 2
 done
 
-echo "A aplicação não ficou pronta. Consulte docker compose logs." >&2
+echo "Os containers estão prontos, mas o domínio não respondeu." >&2
+echo "Valide e recarregue o Caddy do host com deploy/Caddyfile.host." >&2
 exit 1

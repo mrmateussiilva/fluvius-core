@@ -33,7 +33,7 @@ if [[ -z "$DATABASE_DUMP" || ! -d "$MEDIA_SOURCE" ]]; then
   exit 1
 fi
 
-"${COMPOSE[@]}" stop api worker delivery-worker evolution-go caddy
+"${COMPOSE[@]}" stop api worker delivery-worker evolution-go web
 "${COMPOSE[@]}" up -d postgres redis
 gunzip -c "$DATABASE_DUMP" |
   "${COMPOSE[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres

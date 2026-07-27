@@ -6,15 +6,21 @@ Este ambiente foi dimensionado para a primeira implantação em:
 - 8 vCPU e 8 GB de RAM;
 - SSD de 400 GB expansível;
 - domínio `fluvius.finderbit.com.br`;
-- Caddy como único serviço exposto;
+- Caddy instalado no host como único serviço exposto;
 - dados e mídias persistidos em `/srv/fluvius`.
 
 ## Topologia
 
-Somente Caddy publica `80/tcp`, `443/tcp` e `443/udp`. API, PostgreSQL, Redis,
-workers e Evolution Go usam redes Docker privadas, sem portas no host. O Caddy
-serve o frontend compilado, termina HTTPS, encaminha `/api`, `/health` e `/ws`,
-e não encaminha `/storage`.
+Somente o serviço Caddy do Ubuntu publica `80/tcp`, `443/tcp` e `443/udp`. A
+API e o servidor estático do frontend são publicados pelo Docker apenas em
+`127.0.0.1:18000` e `127.0.0.1:18080`; nunca ficam acessíveis pela interface
+pública. PostgreSQL, Redis, workers e Evolution Go permanecem somente nas redes
+Docker privadas.
+
+O Caddy do host termina HTTPS/WSS, encaminha `/api`, `/health` e `/ws` para a
+API, encaminha o restante para o frontend e bloqueia `/storage`. O container
+`web` usa Caddy apenas como servidor estático HTTP interno, sem certificado e
+sem ocupar 80/443.
 
 Os anexos são entregues por
 `GET /api/v1/attachments/{id}/content`. A API revalida sessão, tenant e canal
@@ -32,8 +38,17 @@ cd /opt/fluvius-core
 sudo ./deploy/scripts/install-ubuntu.sh
 ./deploy/scripts/generate-production-env.sh
 nano .env.production
+sudo cp deploy/Caddyfile.host /etc/caddy/fluvius.caddy
+# Adicione uma única vez ao /etc/caddy/Caddyfile:
+# import /etc/caddy/*.caddy
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ./deploy/scripts/production-deploy.sh
 ```
+
+Se `fluvius.finderbit.com.br` já existir no Caddy, substitua o bloco antigo
+pelo conteúdo de `deploy/Caddyfile.host` em vez de adicionar um segundo bloco
+com o mesmo endereço. Depois, sempre valide antes de recarregar.
 
 O instalador não ativa o firewall automaticamente para evitar interromper uma
 sessão SSH que use porta não padrão. Depois de confirmar `SSH_PORT`:
@@ -47,7 +62,7 @@ O gerador cria segredos URL-safe independentes e protege
 `.env.production` com modo `0600`. Antes do deploy, conferir:
 
 - `APP_DOMAIN=fluvius.finderbit.com.br`;
-- um e-mail válido em `ACME_EMAIL`;
+- `FLUVIUS_API_PORT=18000` e `FLUVIUS_WEB_PORT=18080` livres no loopback;
 - nenhuma chave vazia fora dos campos legados;
 - DNS `A` apontando para o IPv4 da VPS;
 - portas 80 e 443 liberadas no firewall do provedor.
@@ -97,7 +112,12 @@ curl -fsS https://fluvius.finderbit.com.br/health/ready
 
 # Logs
 docker compose --env-file .env.production -f docker-compose.prod.yml \
-  logs -f api worker delivery-worker evolution-go caddy
+  logs -f api worker delivery-worker evolution-go web
+
+# Proxy do host
+sudo systemctl status caddy
+sudo journalctl -u caddy --since "10 minutes ago"
+sudo caddy validate --config /etc/caddy/Caddyfile
 
 # Migration
 docker compose --env-file .env.production -f docker-compose.prod.yml \
@@ -125,8 +145,6 @@ Diretórios persistentes:
 /srv/fluvius/postgres
 /srv/fluvius/redis
 /srv/fluvius/media
-/srv/fluvius/caddy/data
-/srv/fluvius/caddy/config
 /srv/fluvius/backups
 ```
 
@@ -167,8 +185,8 @@ sudo RESTIC_REPOSITORY=/srv/fluvius/backups/restic \
   RESTIC_PASSWORD_FILE=/etc/fluvius/restic-password restic snapshots
 ```
 
-A restauração para produção para API, workers, Evolution e Caddy, substitui
-banco e mídias e depois sobe a stack:
+A restauração para API, workers, Evolution e servidor web substitui banco e
+mídias e depois sobe a stack. O Caddy do host permanece ativo:
 
 ```bash
 sudo CONFIRM_RESTORE=YES \
