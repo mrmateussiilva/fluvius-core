@@ -4,6 +4,7 @@ import jwt
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import SessionLocal
 from app.realtime.manager import realtime_manager
 from app.security import decode_access_token
@@ -15,15 +16,29 @@ router = APIRouter()
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
+    origin = websocket.headers.get("origin")
+    if (
+        settings.environment == "production"
+        and origin not in settings.cors_origin_list
+    ):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     protocols = [
         value.strip()
         for value in websocket.headers.get("sec-websocket-protocol", "").split(",")
         if value.strip()
     ]
-    if len(protocols) != 2 or protocols[0] != "fluvius-auth":
+    selected_subprotocol: str | None = None
+    token = websocket.cookies.get(settings.auth_cookie_name)
+    if len(protocols) == 2 and protocols[0] == "fluvius-auth":
+        token = protocols[1]
+        selected_subprotocol = "fluvius-auth"
+    elif protocols:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    token = protocols[1]
+    if token is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     try:
         payload = decode_access_token(token)
         user_id = UUID(payload["sub"])
@@ -60,7 +75,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         tenant_id,
         websocket,
         user_id=user_id,
-        subprotocol="fluvius-auth",
+        subprotocol=selected_subprotocol,
         channel_ids=channel_ids,
     )
     try:

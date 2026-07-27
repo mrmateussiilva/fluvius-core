@@ -1,10 +1,9 @@
 import { defineStore } from 'pinia'
-import { getMe, login } from '../api/auth'
+import { getMe, login, logout } from '../api/auth'
 import type { CurrentUser } from '../api/types'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    token: localStorage.getItem('fluvius_token') as string | null,
     user: null as CurrentUser | null,
     loading: false,
   }),
@@ -12,20 +11,24 @@ export const useAuthStore = defineStore('auth', {
     async signIn(email: string, password: string) {
       this.loading = true
       try {
-        this.token = await login(email, password)
-        localStorage.setItem('fluvius_token', this.token)
+        await login(email, password)
         this.user = await getMe()
       } finally {
         this.loading = false
       }
     },
     async restore() {
-      if (this.token && !this.user) this.user = await getMe()
+      if (!this.user) this.user = await getMe()
     },
-    signOut() {
-      this.token = null
+    async signOut() {
+      try {
+        await logout()
+      } finally {
+        this.user = null
+      }
+    },
+    clearSession() {
       this.user = null
-      localStorage.removeItem('fluvius_token')
     },
   },
 })

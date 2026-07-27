@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || ''
 
 export class ApiError extends Error {
   constructor(
@@ -10,16 +10,21 @@ export class ApiError extends Error {
 }
 
 export async function http<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('fluvius_token')
   const headers = new Headers(options.headers)
   if (!(options.body instanceof FormData)) headers.set('Content-Type', 'application/json')
-  if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers })
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
-    if (response.status === 401 && path !== '/api/v1/auth/login') {
-      localStorage.removeItem('fluvius_token')
+    if (
+      response.status === 401 &&
+      path !== '/api/v1/auth/login' &&
+      path !== '/api/v1/auth/me'
+    ) {
       window.location.replace('/login?session=expired')
     }
     throw new ApiError(data.detail || 'Não foi possível concluir a operação', response.status)

@@ -18,8 +18,8 @@ Os módulos em `api/app` são separados pelo domínio de negócio. Não há repo
 
 ## Fluxo de envio
 
-1. O frontend envia texto ou anexo à API com JWT.
-2. A API extrai `user_id` e `tenant_id` do JWT e revalida o membership no banco.
+1. O frontend envia texto ou anexo à API com a sessão em cookie `HttpOnly`.
+2. A API valida o JWT do cookie, extrai `user_id` e `tenant_id` e revalida o membership no banco. O header Bearer permanece compatível para integrações controladas, mas o navegador não persiste o token em `localStorage`.
 3. A conversa, o contato e o canal são consultados com filtro de tenant.
 4. A API exige que a conversa esteja `open` e atribuída ao usuário autenticado. Atribuir usa bloqueio de linha no PostgreSQL: atendentes não sobrescrevem uma posse ativa, enquanto administradores podem assumir ou transferir para outro usuário ativo do mesmo tenant. Toda alteração efetiva de responsável gera `conversation.assigned` em `audit_logs`.
 5. Se `channel.status != connected`, a API retorna `409` com: “WhatsApp desconectado. Reconecte o canal antes de enviar mensagens.”
@@ -124,13 +124,14 @@ assinatura.
 
 ## Storage de mídia
 
-No ambiente local, arquivos ficam no volume `api_storage` e são servidos por `/storage`. A API retorna o endereço externo ao navegador; o adapter converte esse endereço para `http://api:8000/storage/...` ao enviar pela Evolution Go, pois `localhost` dentro do container apontaria para o próprio gateway. Imagens JPEG/PNG/GIF, WebP, áudios AAC/FLAC/M4A/MP3/OGG/WAV/WebM, vídeos MP4/MOV/WebM e documentos PDF/Office/texto/CSV/ZIP são limitados a 25 MB nesta etapa. Ao escolher a categoria figurinha, o navegador converte PNG/JPG para WebP 512×512 com fundo transparente; WebP recebido ou selecionado é preservado. A API valida o WebP e o persiste como `sticker`, sem legenda. A leitura do upload também é limitada a 25 MB + 1 byte, evitando aceitar corpos arbitrariamente grandes. Produção deverá substituir o storage local por S3/MinIO e URLs assinadas.
+No ambiente local, arquivos ficam no volume `api_storage`. Na VPS, o mesmo contrato usa `/srv/fluvius/media`, montado em `/app/storage`; o Caddy bloqueia acesso público direto a `/storage`. O navegador recebe `/api/v1/attachments/{id}/content`, e a API valida sessão, tenant e canal antes de entregar o arquivo. O adapter converte o endereço persistido para `http://api:8000/storage/...` ao enviar pela Evolution Go, mantendo essa leitura restrita à rede Docker. Imagens JPEG/PNG/GIF, WebP, áudios AAC/FLAC/M4A/MP3/OGG/WAV/WebM, vídeos MP4/MOV/WebM e documentos PDF/Office/texto/CSV/ZIP são limitados a 25 MB nesta etapa. Ao escolher a categoria figurinha, o navegador converte PNG/JPG para WebP 512×512 com fundo transparente; WebP recebido ou selecionado é preservado. A API valida o WebP e o persiste como `sticker`, sem legenda. A leitura do upload também é limitada a 25 MB + 1 byte, evitando aceitar corpos arbitrariamente grandes.
 
 ## Realtime
 
-`WS /ws` recebe o JWT pelo subprotocolo `fluvius-auth`, sem colocá-lo na URL ou
-no access log, e valida o membership antes de registrar a conexão na sala em
-memória do tenant. Eventos planejados:
+`WS /ws` recebe o cookie de sessão no navegador; o subprotocolo
+`fluvius-auth` permanece compatível para clientes controlados. Em produção, o
+endpoint também valida `Origin`, JWT, membership e canais antes de registrar a
+conexão na sala em memória do tenant. Eventos planejados:
 
 - `conversation.created`
 - `conversation.updated`

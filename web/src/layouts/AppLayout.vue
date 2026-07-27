@@ -22,10 +22,10 @@ onMounted(() => {
   void auth.restore().catch(() => undefined)
 })
 
-function logout() {
+async function logout() {
   realtime.disconnect()
-  auth.signOut()
-  router.push('/login')
+  await auth.signOut()
+  await router.push('/login')
 }
 </script>
 

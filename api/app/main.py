@@ -1,16 +1,21 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from redis import Redis
+from redis.exceptions import RedisError
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.attachments.router import router as attachments_router
 from app.auth.router import router as auth_router
 from app.channels.router import router as channels_router
 from app.config import settings
 from app.contacts.router import router as contacts_router
 from app.conversations.router import router as conversations_router
-from app.database import load_all_models
+from app.database import engine, load_all_models
 from app.delivery.dispatcher import delivery_dispatcher_loop
 from app.messages.router import router as messages_router
 from app.providers.webhook_router import router as webhook_router
@@ -59,7 +64,35 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/health/live", tags=["health"])
+def liveness() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready", tags=["health"])
+def readiness() -> dict[str, str]:
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        redis = Redis.from_url(
+            settings.redis_url,
+            socket_connect_timeout=1,
+            socket_timeout=2,
+        )
+        try:
+            redis.ping()
+        finally:
+            redis.close()
+    except (SQLAlchemyError, RedisError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Dependências indisponíveis",
+        ) from exc
+    return {"status": "ready"}
+
+
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
+app.include_router(attachments_router, prefix=settings.api_v1_prefix)
 app.include_router(channels_router, prefix=settings.api_v1_prefix)
 app.include_router(contacts_router, prefix=settings.api_v1_prefix)
 app.include_router(conversations_router, prefix=settings.api_v1_prefix)

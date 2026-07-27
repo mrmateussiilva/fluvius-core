@@ -1,11 +1,13 @@
 from datetime import UTC, datetime
 from hashlib import sha256
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
+from app.attachments.models import MessageAttachment
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
 from app.common.enums import (
@@ -33,6 +35,92 @@ from .base import TEST_PASSWORD, PostgresIntegrationTestCase
 
 
 class TenantIsolationTest(PostgresIntegrationTestCase):
+    def test_cookie_session_and_private_attachment_access(self) -> None:
+        self.client.cookies.clear()
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_a.email,
+                "password": TEST_PASSWORD,
+                "tenant_id": str(self.tenant_a.tenant_id),
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        set_cookie = login.headers["set-cookie"]
+        self.assertIn("HttpOnly", set_cookie)
+        self.assertIn("SameSite=strict", set_cookie)
+        self.assertEqual(
+            self.client.get("/api/v1/auth/me").status_code,
+            200,
+        )
+        with self.client.websocket_connect("/ws") as websocket:
+            websocket.send_text("ping")
+
+        content = b"%PDF-1.4\nprivate tenant attachment\n"
+        storage_key = (
+            f"{self.tenant_a.tenant_id}/{uuid4()}-private-document.pdf"
+        )
+        file_path = Path(settings.local_storage_path) / storage_key
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(content)
+        with SessionLocal() as db:
+            attachment = MessageAttachment(
+                tenant_id=self.tenant_a.tenant_id,
+                message_id=self.tenant_a.message_id,
+                file_name="documento privado.pdf",
+                content_type="application/pdf",
+                size_bytes=len(content),
+                content_sha256=sha256(content).hexdigest(),
+                storage_key=storage_key,
+                public_url=f"http://api:8000/storage/{storage_key}",
+            )
+            db.add(attachment)
+            db.commit()
+            attachment_id = attachment.id
+
+        messages = self.client.get(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages"
+        )
+        self.assertEqual(messages.status_code, 200, messages.text)
+        protected_url = messages.json()[0]["attachments"][0]["public_url"]
+        self.assertEqual(
+            protected_url,
+            (
+                f"{settings.public_api_url}/api/v1/attachments/"
+                f"{attachment_id}/content"
+            ),
+        )
+        downloaded = self.client.get(
+            f"/api/v1/attachments/{attachment_id}/content"
+        )
+        self.assertEqual(downloaded.status_code, 200, downloaded.text)
+        self.assertEqual(downloaded.content, content)
+        self.assertEqual(downloaded.headers["cache-control"], "private, max-age=300")
+
+        self.client.cookies.clear()
+        tenant_b_login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": self.tenant_b.email,
+                "password": TEST_PASSWORD,
+                "tenant_id": str(self.tenant_b.tenant_id),
+            },
+        )
+        self.assertEqual(tenant_b_login.status_code, 200, tenant_b_login.text)
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/attachments/{attachment_id}/content"
+            ).status_code,
+            404,
+        )
+
+        logged_out = self.client.post("/api/v1/auth/logout")
+        self.assertEqual(logged_out.status_code, 204, logged_out.text)
+        self.assertEqual(
+            self.client.get("/api/v1/auth/me").status_code,
+            401,
+        )
+
     def test_admin_manages_only_the_users_from_its_tenant(self) -> None:
         created = self.client.post(
             "/api/v1/users",

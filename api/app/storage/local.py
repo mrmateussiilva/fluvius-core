@@ -15,9 +15,27 @@ class LocalStorageProvider(StorageProvider):
         key = f"{tenant_id}/{uuid.uuid4()}-{safe_name}"
         target = self.root / key
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4()}.tmp")
+        try:
+            temporary.write_bytes(content)
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
         return StoredFile(
             key=key,
-            public_url=f"{settings.public_api_url}/storage/{key}",
+            public_url=self.public_url_for(key),
             size_bytes=len(content),
         )
+
+    def public_url_for(self, key: str) -> str:
+        return f"{settings.public_api_url.rstrip('/')}/storage/{key}"
+
+    def path_for(self, key: str) -> Path | None:
+        relative = Path(key)
+        if relative.is_absolute() or ".." in relative.parts:
+            return None
+        root = self.root.resolve()
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root):
+            return None
+        return target

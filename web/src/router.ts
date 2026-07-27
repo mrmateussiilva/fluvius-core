@@ -42,16 +42,25 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const token = localStorage.getItem('fluvius_token')
-  if (!to.meta.public && !token) return '/login'
-  if (to.path === '/login' && token) return '/app/conversations'
-  if (to.meta.admin) {
-    const auth = useAuthStore()
-    try {
-      await auth.restore()
-    } catch {
-      return '/login'
+  const auth = useAuthStore()
+  if (to.meta.public) {
+    if (to.path === '/login' && !auth.user) {
+      try {
+        await auth.restore()
+      } catch {
+        auth.clearSession()
+      }
     }
+    if (to.path === '/login' && auth.user) return '/app/conversations'
+    return
+  }
+  try {
+    await auth.restore()
+  } catch {
+    auth.clearSession()
+    return '/login'
+  }
+  if (to.meta.admin) {
     if (auth.user?.role !== 'admin') return '/app/conversations'
   }
 })

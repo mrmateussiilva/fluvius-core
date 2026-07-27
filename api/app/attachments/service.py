@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.attachments.models import MessageAttachment
 from app.common.enums import MessageType
+from app.config import settings
 from app.messages.models import Message
 from app.providers.base import IncomingMessageResult
 from app.storage.local import LocalStorageProvider
@@ -40,6 +41,13 @@ class ValidatedAttachment:
     message_type: MessageType
     content_type: str
     content_sha256: str
+
+
+def attachment_content_url(attachment_id: UUID) -> str:
+    return (
+        f"{settings.public_api_url.rstrip('/')}"
+        f"{settings.api_v1_prefix}/attachments/{attachment_id}/content"
+    )
 
 
 def message_type_for_upload(content_type: str, file_name: str) -> MessageType:

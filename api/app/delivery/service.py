@@ -12,6 +12,7 @@ from app.messages.models import Message
 from app.providers.base import SendResult
 from app.providers.factory import get_provider
 from app.providers.status_updates import reconcile_pending_status_events
+from app.storage.local import LocalStorageProvider
 
 
 def normalized_sender_name(value: str | None) -> str | None:
@@ -110,7 +111,7 @@ async def call_provider(
     return await provider.send_media(
         channel,
         contact.phone_number,
-        attachment.public_url,
+        LocalStorageProvider().public_url_for(attachment.storage_key),
         (
             None
             if message.message_type == MessageType.STICKER

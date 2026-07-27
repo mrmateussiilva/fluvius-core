@@ -10,6 +10,7 @@ from app.attachments.models import MessageAttachment
 from app.attachments.service import (
     MAX_MEDIA_BYTES,
     UnsupportedAttachmentError,
+    attachment_content_url,
     validate_outgoing_attachment,
 )
 from app.auth.dependencies import AuthContext, get_auth_context
@@ -51,6 +52,20 @@ from app.storage.local import LocalStorageProvider
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
+
+
+def attachment_response(
+    attachment: MessageAttachment,
+) -> MessageAttachmentResponse:
+    return MessageAttachmentResponse(
+        id=attachment.id,
+        file_name=attachment.file_name,
+        content_type=attachment.content_type,
+        size_bytes=attachment.size_bytes,
+        public_url=attachment_content_url(attachment.id),
+    )
+
+
 def conversation_delivery_context(
     db: Session,
     context: AuthContext,
@@ -150,7 +165,7 @@ def message_response(
         update={
             "reply_to": quoted,
             "attachments": [
-                MessageAttachmentResponse.model_validate(attachment)
+                attachment_response(attachment)
                 for attachment in attachments
             ],
         }

@@ -34,7 +34,7 @@
 - `Message.sender_name` preserva o nome de exibição usado no envio, sem depender de alterações futuras no cadastro do usuário.
 - `MessageRevision` pertence à mensagem, preserva o corpo anterior, o conteúdo
   novo quando disponível e o ID idempotente do evento externo.
-- `MessageAttachment` pertence à mensagem, repete o tenant e guarda nome, MIME type, tamanho, chave de storage e URL pública controlada pelo Fluvius.
+- `MessageAttachment` pertence à mensagem, repete o tenant e guarda nome, MIME type, tamanho, chave de storage e a referência usada internamente pelo provider.
 - `MessageDelivery` é único por mensagem e guarda somente estado da outbox, tentativas, próximo processamento e erro seguro.
 - `ProviderEvent` pertence ao canal e guarda o payload bruto.
 - `ProviderCredential` pertence a um canal e provider; guarda somente ciphertext autenticado, fingerprint, versão da cifra e estado seguro do provisionamento.
@@ -72,7 +72,7 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
     reinicia sua outbox e volta a persistir `pending`; `attempt_count` incrementa
     apenas quando o worker inicia a chamada externa.
 16. Para texto, `client_message_id` fornecido pelo frontend torna-se `Message.id`; repetir o mesmo ID, conteúdo e referência de resposta devolve a mensagem existente sem novo efeito externo.
-17. Mídia recebida é decodificada pelo adapter e copiada para o storage do Fluvius antes da resposta ao webhook. O frontend nunca usa diretamente a URL criptografada do WhatsApp.
+17. Mídia recebida é decodificada pelo adapter e copiada para o storage do Fluvius antes da resposta ao webhook. O frontend nunca usa diretamente a URL criptografada do WhatsApp nem a rota interna de storage; o download revalida sessão, tenant e canal pelo ID do anexo.
 18. Uploads locais têm limite de 25 MB. Figurinhas usam WebP; vídeo e áudio preservam o MIME type para reprodução no navegador.
 19. Somente administradores gerenciam memberships. Desativar um atendente libera suas conversas abertas para a fila `new`; um administrador não pode desativar ou rebaixar a si próprio.
 20. Uma credencial de provider pode pertencer a somente um canal. O fingerprint sustenta a constraint global e o segredo gerenciado permanece cifrado com uma chave exclusiva do backend. A consulta ao cofre sempre filtra `tenant_id`, canal e provider; o frontend nunca recebe ciphertext ou token. Canais antigos ainda podem resolver o segredo pelo ambiente.
