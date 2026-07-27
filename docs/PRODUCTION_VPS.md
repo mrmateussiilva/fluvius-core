@@ -12,10 +12,11 @@ Este ambiente foi dimensionado para a primeira implantação em:
 ## Topologia
 
 Somente o serviço Caddy do Ubuntu publica `80/tcp`, `443/tcp` e `443/udp`. A
-API e o servidor estático do frontend são publicados pelo Docker apenas em
-`127.0.0.1:18000` e `127.0.0.1:18080`; nunca ficam acessíveis pela interface
-pública. PostgreSQL, Redis, workers e Evolution Go permanecem somente nas redes
-Docker privadas.
+API, o servidor estático e o Manager da Evolution são publicados pelo Docker
+apenas em `127.0.0.1:18000`, `127.0.0.1:18080` e `127.0.0.1:18081`;
+nunca ficam acessíveis pela interface pública. A porta `18081` existe somente
+para a ativação operacional por túnel SSH. PostgreSQL, Redis e workers
+permanecem somente nas redes Docker privadas.
 
 O Caddy do host termina HTTPS/WSS, encaminha `/api`, `/health` e `/ws` para a
 API, encaminha o restante para o frontend e bloqueia `/storage`. O container
@@ -62,7 +63,8 @@ O gerador cria segredos URL-safe independentes e protege
 `.env.production` com modo `0600`. Antes do deploy, conferir:
 
 - `APP_DOMAIN=fluvius.finderbit.com.br`;
-- `FLUVIUS_API_PORT=18000` e `FLUVIUS_WEB_PORT=18080` livres no loopback;
+- `FLUVIUS_API_PORT=18000`, `FLUVIUS_WEB_PORT=18080` e
+  `EVOLUTION_GO_MANAGER_PORT=18081` livres no loopback;
 - nenhuma chave vazia fora dos campos legados;
 - DNS `A` apontando para o IPv4 da VPS;
 - portas 80 e 443 liberadas no firewall do provedor.
@@ -70,6 +72,42 @@ O gerador cria segredos URL-safe independentes e protege
 Em `production`, a API recusa iniciar com segredo curto/reutilizado, URL HTTP,
 CORS de localhost, cookie inseguro, rate limit desligado, storage relativo,
 banco com senha padrão ou Redis sem autenticação.
+
+## Ativação única da Evolution Go
+
+A versão fixada da Evolution Go exige uma licença da Evolution Foundation.
+Antes da ativação, o container fica no ar, mas responde `503 LICENSE_REQUIRED`
+para criação de instâncias. Isso é diferente da chave administrativa
+`EVOLUTION_GO_GLOBAL_API_KEY`, que protege as chamadas entre Fluvius e
+Evolution.
+
+O Manager não é publicado no domínio nem no firewall. Depois de subir a stack,
+confirme o estado na VPS:
+
+```bash
+curl -fsS http://127.0.0.1:18081/license/status
+```
+
+Na sua máquina, mantenha um túnel SSH aberto:
+
+```bash
+ssh -N -L 18081:127.0.0.1:18081 root@IP_DA_VPS
+```
+
+Abra `http://localhost:18081/manager/login`, use
+`http://localhost:18081` como URL da API e informe a
+`EVOLUTION_GO_GLOBAL_API_KEY` guardada na `.env.production`. Não envie essa
+chave por chat nem a coloque em histórico de comandos. Conclua o registro
+solicitado pela Evolution Foundation e valide novamente:
+
+```bash
+curl -fsS http://127.0.0.1:18081/license/status
+```
+
+O resultado deve conter `"status":"active"`. A licença fica persistida no banco
+`evogo_auth`; reiniciar ou recriar o container não exige novo registro. Feche o
+túnel ao terminar. A partir daí, empresas criam e reconectam suas instâncias
+somente pela tela **Canais do WhatsApp**, sem acessar o Manager.
 
 ## Primeiro administrador da plataforma
 

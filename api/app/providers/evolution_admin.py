@@ -78,7 +78,8 @@ class EvolutionGoAdminClient:
                 )
             if response.status_code == 503:
                 raise EvolutionGoProvisioningError(
-                    "A Evolution Go ainda não está ativada ou está indisponível."
+                    "A Evolution Go exige a ativação única da licença pelo "
+                    "operador da instalação antes de criar canais."
                 )
             raise EvolutionGoProvisioningError(
                 f"A Evolution Go recusou a criação da instância (HTTP {response.status_code})."

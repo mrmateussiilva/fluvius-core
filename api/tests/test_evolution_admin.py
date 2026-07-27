@@ -66,6 +66,34 @@ class EvolutionGoAdminClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(raised.exception.ambiguous)
         self.assertNotIn("instance-secret", str(raised.exception))
 
+    async def test_reports_license_activation_required(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                503,
+                json={
+                    "code": "LICENSE_REQUIRED",
+                    "error": "service not activated",
+                },
+            )
+
+        client = EvolutionGoAdminClient(
+            base_url="https://evolution.internal",
+            global_api_key="global-secret",
+            transport=httpx.MockTransport(handler),
+        )
+
+        with self.assertRaises(EvolutionGoProvisioningError) as raised:
+            await client.create_instance(
+                EvolutionInstance(
+                    instance_id="channel-id",
+                    name="fluvius-channel",
+                    token="instance-secret",
+                )
+            )
+
+        self.assertIn("ativação única da licença", str(raised.exception))
+        self.assertFalse(raised.exception.ambiguous)
+
 
 if __name__ == "__main__":
     unittest.main()

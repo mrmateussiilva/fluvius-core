@@ -25,6 +25,7 @@ umask 077
   echo "FLUVIUS_DATA_DIR=/srv/fluvius"
   echo "FLUVIUS_API_PORT=18000"
   echo "FLUVIUS_WEB_PORT=18080"
+  echo "EVOLUTION_GO_MANAGER_PORT=18081"
   echo
   echo "POSTGRES_DB=fluvius"
   echo "POSTGRES_USER=fluvius"

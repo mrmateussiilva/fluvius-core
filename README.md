@@ -58,7 +58,19 @@ Use `docker-compose.prod.yml`; o Compose local continua destinado ao
 desenvolvimento. Instalação, firewall, backups, restauração e operação estão em
 [docs/PRODUCTION_VPS.md](docs/PRODUCTION_VPS.md).
 
-Antes de usar o gateway, ajuste os segredos únicos da instalação no `.env` e conclua a ativação exigida pela versão do Evolution Go. O Compose compila uma imagem derivada do Evolution Go 0.7.2, fixada no commit oficial `9337afc47e10b86cc896a6f432240e40fee95dd1`, com o patch mínimo que decripta edições `SecretEncryptedMessage` antes do webhook. `EVOLUTION_GO_GLOBAL_API_KEY` permite que somente a API crie instâncias e `PROVIDER_CREDENTIALS_KEY` cifra seus tokens no banco. Administradores criam o canal e recebem o QR pela tela **Canais do WhatsApp**, sem editar o `.env` por número ou acessar o Manager. `EVOLUTION_GO_API_KEY` e `EVOLUTION_GO_INSTANCE_TOKENS` permanecem apenas para canais legados.
+Antes de usar o gateway, ajuste os segredos únicos da instalação no `.env` e
+conclua a ativação única exigida pela versão do Evolution Go. Em produção, o
+Manager fica disponível somente em `127.0.0.1:18081` e deve ser acessado por
+túnel SSH conforme [docs/PRODUCTION_VPS.md](docs/PRODUCTION_VPS.md). O Compose
+compila uma imagem derivada do Evolution Go 0.7.2, fixada no commit oficial
+`9337afc47e10b86cc896a6f432240e40fee95dd1`, com o patch mínimo que decripta
+edições `SecretEncryptedMessage` antes do webhook.
+`EVOLUTION_GO_GLOBAL_API_KEY` permite que somente a API crie instâncias e
+`PROVIDER_CREDENTIALS_KEY` cifra seus tokens no banco. Depois da ativação
+inicial, administradores criam o canal e recebem o QR pela tela **Canais do
+WhatsApp**, sem editar o `.env` por número ou acessar o Manager.
+`EVOLUTION_GO_API_KEY` e `EVOLUTION_GO_INSTANCE_TOKENS` permanecem apenas para
+canais legados.
 
 ## Comandos principais
 
