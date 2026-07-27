@@ -30,6 +30,7 @@ export const useConversationStore = defineStore('conversations', {
     operationLoading: false,
     operationError: null as string | null,
     loading: false,
+    activeChannelId: null as string | null,
   }),
   getters: {
     selected(state): Conversation | null {
@@ -54,11 +55,23 @@ export const useConversationStore = defineStore('conversations', {
     },
   },
   actions: {
-    async loadConversations() {
+    async loadConversations(channelId?: string | null) {
+      const requestedChannelId =
+        channelId === undefined ? this.activeChannelId : channelId
       this.loading = true
+      this.activeChannelId = requestedChannelId
       try {
-        this.conversations = await conversationApi.listConversations()
-        if (!this.selectedId && this.conversations.length) this.selectedId = this.conversations[0].id
+        this.conversations =
+          await conversationApi.listConversations(requestedChannelId)
+        if (
+          this.selectedId &&
+          !this.conversations.some((conversation) => conversation.id === this.selectedId)
+        ) {
+          this.selectedId = null
+        }
+        if (!this.selectedId && this.conversations.length) {
+          this.selectedId = this.conversations[0].id
+        }
       } finally {
         this.loading = false
       }

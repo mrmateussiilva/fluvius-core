@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.realtime.manager import realtime_manager
 from app.security import decode_access_token
-from app.users.models import TenantUser
+from app.users.models import TenantUser, TenantUserChannel
 
 
 router = APIRouter()
@@ -40,6 +40,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 TenantUser.is_active.is_(True),
             )
         )
+        channel_ids = (
+            None
+            if membership is not None and membership.role == "admin"
+            else frozenset(
+                db.scalars(
+                    select(TenantUserChannel.channel_id).where(
+                        TenantUserChannel.tenant_id == tenant_id,
+                        TenantUserChannel.user_id == user_id,
+                    )
+                )
+            )
+        )
     if membership is None:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
@@ -47,7 +59,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await realtime_manager.connect(
         tenant_id,
         websocket,
+        user_id=user_id,
         subprotocol="fluvius-auth",
+        channel_ids=channel_ids,
     )
     try:
         while True:

@@ -19,6 +19,7 @@ class ConversationResponse(BaseModel):
     contact_name: str | None
     contact_phone: str
     channel_id: UUID
+    channel_name: str
     channel_status: ChannelStatus
     last_message_at: datetime | None
     last_message_body: str | None = None

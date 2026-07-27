@@ -100,7 +100,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
 - A mensagem outgoing e sua outbox são persistidas juntas antes da chamada externa. A API responde `202/pending`, e um delivery worker exclusivo processa a fila sem concorrer com sincronizações administrativas.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
-- Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, redefinem senha e desativam memberships sem atravessar tenants. Os números disponíveis continuam sendo exclusivamente os canais cadastrados naquela empresa.
+- Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, atribuem os canais permitidos, redefinem senha e desativam memberships sem atravessar tenants. Conversas e quadro podem ser filtrados por canal; a visão consolidada é exclusiva de administradores.
 - Textos e legendas enviados pelo número compartilhado recebem automaticamente `*Nome do atendente:*` em negrito no WhatsApp. O nome usado fica preservado na mensagem para auditoria e retries.
 - Edições atualizam a mensagem original, aparecem como `editada` e nunca criam
   uma bolha `[text]`; reações ficam fora do MVP.

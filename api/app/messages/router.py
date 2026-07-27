@@ -30,8 +30,7 @@ from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.conversations.router import (
     ensure_conversation_assignee,
-    get_tenant_conversation,
-    get_tenant_conversation_for_update,
+    get_accessible_conversation,
 )
 from app.database import get_db
 from app.delivery.dispatcher import create_delivery, dispatch_delivery
@@ -53,20 +52,28 @@ from app.storage.local import LocalStorageProvider
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
 def conversation_delivery_context(
-    db: Session, tenant_id: UUID, conversation_id: UUID, user_id: UUID
+    db: Session,
+    context: AuthContext,
+    conversation_id: UUID,
 ) -> tuple[Conversation, WhatsAppChannel, Contact]:
-    conversation = get_tenant_conversation_for_update(
-        db, tenant_id, conversation_id
+    conversation = get_accessible_conversation(
+        db,
+        context,
+        conversation_id,
+        for_update=True,
     )
-    ensure_conversation_assignee(conversation, user_id)
+    ensure_conversation_assignee(conversation, context.user.id)
     channel = db.scalar(
         select(WhatsAppChannel).where(
             WhatsAppChannel.id == conversation.channel_id,
-            WhatsAppChannel.tenant_id == tenant_id,
+            WhatsAppChannel.tenant_id == context.tenant_id,
         )
     )
     contact = db.scalar(
-        select(Contact).where(Contact.id == conversation.contact_id, Contact.tenant_id == tenant_id)
+        select(Contact).where(
+            Contact.id == conversation.contact_id,
+            Contact.tenant_id == context.tenant_id,
+        )
     )
     if channel is None or contact is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Conversa inconsistente")
@@ -224,7 +231,7 @@ def list_messages(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> list[MessageResponse]:
-    get_tenant_conversation(db, context.tenant_id, conversation_id)
+    get_accessible_conversation(db, context, conversation_id)
     messages = list(
         db.scalars(
             select(Message)
@@ -250,7 +257,9 @@ async def send_message(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, _, _ = conversation_delivery_context(
-        db, context.tenant_id, conversation_id, context.user.id
+        db,
+        context,
+        conversation_id,
     )
     existing = db.scalar(
         select(Message).where(
@@ -322,7 +331,14 @@ async def send_message(
     await realtime_manager.broadcast(
         context.tenant_id,
         "message.created",
-        message_response(db, context.tenant_id, message).model_dump(mode="json"),
+        {
+            **message_response(
+                db,
+                context.tenant_id,
+                message,
+            ).model_dump(mode="json"),
+            "channel_id": str(conversation.channel_id),
+        },
     )
     await asyncio.to_thread(
         dispatch_delivery,
@@ -347,7 +363,9 @@ async def send_attachment(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, _, _ = conversation_delivery_context(
-        db, context.tenant_id, conversation_id, context.user.id
+        db,
+        context,
+        conversation_id,
     )
     reply_to = None
     if reply_to_message_id:
@@ -481,7 +499,14 @@ async def send_attachment(
     await realtime_manager.broadcast(
         context.tenant_id,
         "message.created",
-        message_response(db, context.tenant_id, message).model_dump(mode="json"),
+        {
+            **message_response(
+                db,
+                context.tenant_id,
+                message,
+            ).model_dump(mode="json"),
+            "channel_id": str(conversation.channel_id),
+        },
     )
     await asyncio.to_thread(
         dispatch_delivery,
@@ -503,7 +528,9 @@ async def retry_message(
     db: Session = Depends(get_db),
 ) -> MessageResponse:
     conversation, _, _ = conversation_delivery_context(
-        db, context.tenant_id, conversation_id, context.user.id
+        db,
+        context,
+        conversation_id,
     )
     message = get_tenant_message(db, context.tenant_id, conversation_id, message_id)
     if message.direction != MessageDirection.OUTGOING or message.status != MessageStatus.FAILED:
@@ -526,7 +553,14 @@ async def retry_message(
     await realtime_manager.broadcast(
         context.tenant_id,
         "message.updated",
-        message_response(db, context.tenant_id, message).model_dump(mode="json"),
+        {
+            **message_response(
+                db,
+                context.tenant_id,
+                message,
+            ).model_dump(mode="json"),
+            "channel_id": str(conversation.channel_id),
+        },
     )
     await asyncio.to_thread(
         dispatch_delivery,

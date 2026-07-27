@@ -25,6 +25,7 @@ from app.providers.evolution_provisioning import (
 from app.providers.factory import get_provider
 from app.realtime.manager import realtime_manager
 from app.users.router import require_admin
+from app.users.channel_access import accessible_channel_ids, ensure_channel_access
 
 router = APIRouter(prefix="/channels", tags=["channels"])
 
@@ -44,11 +45,15 @@ def get_tenant_channel(db: Session, tenant_id: UUID, channel_id: UUID) -> WhatsA
 def list_channels(
     context: AuthContext = Depends(get_auth_context), db: Session = Depends(get_db)
 ) -> list[WhatsAppChannel]:
+    allowed_channel_ids = accessible_channel_ids(db, context)
+    query = select(WhatsAppChannel).where(
+        WhatsAppChannel.tenant_id == context.tenant_id
+    )
+    if allowed_channel_ids is not None:
+        query = query.where(WhatsAppChannel.id.in_(allowed_channel_ids))
     return list(
         db.scalars(
-            select(WhatsAppChannel)
-            .where(WhatsAppChannel.tenant_id == context.tenant_id)
-            .order_by(WhatsAppChannel.created_at)
+            query.order_by(WhatsAppChannel.created_at)
         )
     )
 
@@ -213,6 +218,7 @@ async def channel_status(
     db: Session = Depends(get_db),
 ) -> ChannelStatusResult:
     channel = get_tenant_channel(db, context.tenant_id, channel_id)
+    ensure_channel_access(db, context, channel.id)
     try:
         if channel.provider == ChannelProvider.EVOLUTION_GO:
             claim_evolution_credential(db, channel)
@@ -228,7 +234,11 @@ async def channel_status(
         await realtime_manager.broadcast(
             channel.tenant_id,
             "channel.status.updated",
-            {"id": str(channel.id), "status": channel.status.value},
+            {
+                "id": str(channel.id),
+                "channel_id": str(channel.id),
+                "status": channel.status.value,
+            },
         )
     return result
 
@@ -261,7 +271,11 @@ async def connect_tenant_channel(
         await realtime_manager.broadcast(
             channel.tenant_id,
             "channel.status.updated",
-            {"id": str(channel.id), "status": channel.status.value},
+            {
+                "id": str(channel.id),
+                "channel_id": str(channel.id),
+                "status": channel.status.value,
+            },
         )
     return result
 

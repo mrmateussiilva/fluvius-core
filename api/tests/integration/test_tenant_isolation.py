@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+from hashlib import sha256
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
 
@@ -6,8 +8,16 @@ from starlette.websockets import WebSocketDisconnect
 
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
-from app.common.enums import ChannelStatus, ConversationStatus
+from app.common.enums import (
+    ChannelProvider,
+    ChannelStatus,
+    ConversationStatus,
+    MessageDirection,
+    MessageStatus,
+    MessageType,
+)
 from app.config import settings
+from app.contacts.models import Contact
 from app.conversations.models import Conversation, ConversationRead
 from app.database import SessionLocal
 from app.messages.models import Message
@@ -17,7 +27,7 @@ from app.providers.factory import get_provider
 from app.providers.models import ProviderCredential
 from app.quick_replies.models import QuickReply
 from app.security import create_access_token
-from app.users.models import TenantUser, User
+from app.users.models import TenantUser, TenantUserChannel, User
 
 from .base import TEST_PASSWORD, PostgresIntegrationTestCase
 
@@ -75,7 +85,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         )
         self.assertTrue(
             all(
-                set(user) == {"id", "name", "role"}
+                set(user) == {"id", "name", "role", "channel_ids"}
                 for user in active_team.json()
             )
         )
@@ -204,6 +214,181 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(duplicate.status_code, 409, duplicate.text)
+
+    def test_agent_access_is_scoped_to_assigned_channels(self) -> None:
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            second_channel = WhatsAppChannel(
+                tenant_id=self.tenant_a.tenant_id,
+                name="Canal A 2",
+                phone_number="552788830000",
+                provider=ChannelProvider.EVOLUTION_GO,
+                provider_config={"instance_name": "tenant-a-2"},
+                credential_fingerprint=sha256(b"token-a-2").hexdigest(),
+                status=ChannelStatus.CONNECTED,
+            )
+            second_contact = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                name="Contato do canal 2",
+                phone_number="5527993333333",
+            )
+            db.add_all([second_channel, second_contact])
+            db.flush()
+            second_conversation = Conversation(
+                tenant_id=self.tenant_a.tenant_id,
+                channel_id=second_channel.id,
+                contact_id=second_contact.id,
+                status=ConversationStatus.NEW,
+                last_message_at=now,
+            )
+            db.add(second_conversation)
+            db.flush()
+            db.add(
+                Message(
+                    tenant_id=self.tenant_a.tenant_id,
+                    conversation_id=second_conversation.id,
+                    direction=MessageDirection.INCOMING,
+                    message_type=MessageType.TEXT,
+                    status=MessageStatus.DELIVERED,
+                    body="Mensagem exclusiva do canal 2",
+                    provider_message_id="seed-a-2",
+                    sent_at=now,
+                )
+            )
+            db.commit()
+            second_channel_id = second_channel.id
+            second_contact_id = second_contact.id
+            second_conversation_id = second_conversation.id
+
+        created = self.client.post(
+            "/api/v1/users",
+            headers=self.headers_a,
+            json={
+                "name": "Atendente restrito",
+                "email": "restricted-agent@example.com",
+                "password": "senha-restrita-123",
+                "role": "agent",
+                "channel_ids": [str(self.tenant_a.channel_id)],
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        agent_id = UUID(created.json()["id"])
+        self.assertEqual(
+            created.json()["channel_ids"],
+            [str(self.tenant_a.channel_id)],
+        )
+        login = self.client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "restricted-agent@example.com",
+                "password": "senha-restrita-123",
+                "tenant_id": str(self.tenant_a.tenant_id),
+            },
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        agent_headers = {
+            "Authorization": f"Bearer {login.json()['access_token']}"
+        }
+
+        channels = self.client.get("/api/v1/channels", headers=agent_headers)
+        self.assertEqual(channels.status_code, 200, channels.text)
+        self.assertEqual(
+            {channel["id"] for channel in channels.json()},
+            {str(self.tenant_a.channel_id)},
+        )
+        conversations = self.client.get(
+            "/api/v1/conversations",
+            headers=agent_headers,
+        )
+        self.assertEqual(conversations.status_code, 200, conversations.text)
+        self.assertEqual(
+            {conversation["id"] for conversation in conversations.json()},
+            {str(self.tenant_a.conversation_id)},
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/conversations?channel_id={second_channel_id}",
+                headers=agent_headers,
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/conversations/{second_conversation_id}",
+                headers=agent_headers,
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/conversations/{second_conversation_id}/messages",
+                headers=agent_headers,
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/contacts/{second_contact_id}",
+                headers=agent_headers,
+            ).status_code,
+            404,
+        )
+
+        invalid_assignment = self.client.post(
+            f"/api/v1/conversations/{second_conversation_id}/assign",
+            headers=self.headers_a,
+            json={"user_id": str(agent_id)},
+        )
+        self.assertEqual(invalid_assignment.status_code, 400, invalid_assignment.text)
+        self.assertEqual(
+            invalid_assignment.json()["detail"],
+            "Atendente não possui acesso a este canal",
+        )
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={"user_id": str(agent_id)},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        moved = self.client.patch(
+            f"/api/v1/users/{agent_id}",
+            headers=self.headers_a,
+            json={"channel_ids": [str(second_channel_id)]},
+        )
+        self.assertEqual(moved.status_code, 200, moved.text)
+        self.assertEqual(moved.json()["channel_ids"], [str(second_channel_id)])
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}",
+                headers=agent_headers,
+            ).status_code,
+            404,
+        )
+        visible_after_move = self.client.get(
+            f"/api/v1/conversations/{second_conversation_id}",
+            headers=agent_headers,
+        )
+        self.assertEqual(visible_after_move.status_code, 200, visible_after_move.text)
+
+        with SessionLocal() as db:
+            released = db.scalar(
+                select(Conversation).where(
+                    Conversation.id == self.tenant_a.conversation_id,
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            assigned_channels = set(
+                db.scalars(
+                    select(TenantUserChannel.channel_id).where(
+                        TenantUserChannel.tenant_id == self.tenant_a.tenant_id,
+                        TenantUserChannel.user_id == agent_id,
+                    )
+                )
+            )
+            self.assertEqual(released.status, ConversationStatus.NEW)
+            self.assertIsNone(released.assigned_user_id)
+            self.assertEqual(assigned_channels, {second_channel_id})
 
     def test_lists_and_creates_resources_only_inside_authenticated_tenant(self) -> None:
         me = self.client.get("/api/v1/auth/me", headers=self.headers_a)
@@ -636,6 +821,13 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                     tenant_id=self.tenant_a.tenant_id,
                     user_id=second_user.id,
                     role="agent",
+                )
+            )
+            db.add(
+                TenantUserChannel(
+                    tenant_id=self.tenant_a.tenant_id,
+                    user_id=second_user.id,
+                    channel_id=self.tenant_a.channel_id,
                 )
             )
             db.commit()

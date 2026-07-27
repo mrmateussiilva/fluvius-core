@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { MessageSquareText, Search, X } from 'lucide-vue-next'
+import { MessageSquareText, Search, Smartphone, X } from 'lucide-vue-next'
 import type {
+  Channel,
   Conversation,
   ConversationStatus,
   MessageType,
@@ -15,8 +16,14 @@ const props = defineProps<{
   currentUserId: string | null
   currentUserRole: UserRole | null
   assignableUsers: TenantUser[]
+  channels: Channel[]
+  activeChannelId: string | null
+  canViewAllChannels: boolean
 }>()
-const emit = defineEmits<{ select: [id: string] }>()
+const emit = defineEmits<{
+  select: [id: string]
+  channelChange: [channelId: string | null]
+}>()
 const activeStatus = ref<ConversationStatus>('new')
 const search = ref('')
 const tabs: { label: string; value: ConversationStatus }[] = [
@@ -142,6 +149,29 @@ function timeLabel(value: string | null) {
           <MessageSquareText class="h-[18px] w-[18px]" />
         </div>
       </div>
+      <label class="mt-3 flex items-center gap-2 rounded-lg border border-[#d8dcdf] bg-white px-3 py-2 text-[#54656f]">
+        <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
+        <select
+          :value="activeChannelId || ''"
+          class="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#111b21] outline-none"
+          aria-label="Canal de atendimento"
+          @change="
+            emit(
+              'channelChange',
+              ($event.target as HTMLSelectElement).value || null,
+            )
+          "
+        >
+          <option v-if="canViewAllChannels" value="">Todos os canais</option>
+          <option
+            v-for="channel in channels"
+            :key="channel.id"
+            :value="channel.id"
+          >
+            {{ channel.name }}{{ channel.phone_number ? ` · ${channel.phone_number}` : '' }}
+          </option>
+        </select>
+      </label>
       <label class="mt-3 flex h-10 items-center gap-2.5 rounded-lg bg-[#e9edef] px-3 text-[#667781] transition focus-within:bg-white focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
         <Search class="h-4 w-4 shrink-0" />
         <input
@@ -204,6 +234,13 @@ function timeLabel(value: string | null) {
             </time>
           </div>
           <div class="mt-0.5 flex items-center gap-2">
+            <span
+              v-if="!activeChannelId"
+              class="max-w-24 shrink-0 truncate rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700"
+              :title="conversation.channel_name"
+            >
+              {{ conversation.channel_name }}
+            </span>
             <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-[#667781]">
               {{ messagePreview(conversation) }}
             </span>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import type { TenantUser } from '../api/types'
+import { listChannels } from '../api/channels'
+import type { Channel, TenantUser } from '../api/types'
 import { listUsers } from '../api/users'
 import ConversationChat from '../components/ConversationChat.vue'
 import ConversationList from '../components/ConversationList.vue'
@@ -14,6 +15,26 @@ const auth = useAuthStore()
 const realtime = useRealtimeStore()
 const route = useRoute()
 const assignableUsers = ref<TenantUser[]>([])
+const channels = ref<Channel[]>([])
+
+function channelStorageKey() {
+  return auth.user
+    ? `fluvius_active_channel:${auth.user.tenant_id}:${auth.user.id}`
+    : null
+}
+
+async function selectChannel(channelId: string | null) {
+  store.selectedId = null
+  const storageKey = channelStorageKey()
+  if (storageKey) {
+    if (channelId) localStorage.setItem(storageKey, channelId)
+    else localStorage.removeItem(storageKey)
+  }
+  await store.loadConversations(channelId)
+  if (store.selectedId) {
+    await store.selectConversation(store.selectedId)
+  }
+}
 
 async function sendMessage(
   text: string,
@@ -44,8 +65,29 @@ function backToConversationList() {
 
 onMounted(async () => {
   await auth.restore()
+  channels.value = await listChannels()
+  const requestedConversationId =
+    typeof route.query.conversation === 'string'
+      ? route.query.conversation
+      : null
+  const requestedChannelId =
+    typeof route.query.channel === 'string'
+      ? route.query.channel
+      : null
+  const storedChannelId = channelStorageKey()
+    ? localStorage.getItem(channelStorageKey() as string)
+    : null
+  const availableIds = new Set(channels.value.map((channel) => channel.id))
+  const initialChannelId =
+    requestedChannelId && availableIds.has(requestedChannelId)
+      ? requestedChannelId
+      : storedChannelId && availableIds.has(storedChannelId)
+        ? storedChannelId
+        : requestedConversationId && auth.user?.role === 'admin'
+          ? null
+          : channels.value[0]?.id || null
   await Promise.all([
-    store.loadConversations(),
+    store.loadConversations(initialChannelId),
     auth.user?.role === 'admin'
       ? listUsers()
           .then((users) => {
@@ -56,10 +98,6 @@ onMounted(async () => {
           })
       : Promise.resolve(),
   ])
-  const requestedConversationId =
-    typeof route.query.conversation === 'string'
-      ? route.query.conversation
-      : null
   if (
     requestedConversationId &&
     store.conversations.some(
@@ -88,7 +126,11 @@ onBeforeUnmount(() => {
       :current-user-id="auth.user?.id || null"
       :current-user-role="auth.user?.role || null"
       :assignable-users="assignableUsers"
+      :channels="channels"
+      :active-channel-id="store.activeChannelId"
+      :can-view-all-channels="auth.user?.role === 'admin'"
       @select="store.selectConversation"
+      @channel-change="selectChannel"
     />
     <ConversationChat
       :class="store.selectedId ? 'flex' : 'hidden md:flex'"

@@ -103,8 +103,18 @@ const isAssignedToCurrentUser = computed(
     props.conversation?.assigned_user_id === props.currentUserId,
 )
 const isAdmin = computed(() => props.currentUserRole === 'admin')
+const eligibleAssignableUsers = computed(() =>
+  props.assignableUsers.filter(
+    (user) =>
+      user.role === 'admin' ||
+      Boolean(
+        props.conversation &&
+          user.channel_ids.includes(props.conversation.channel_id),
+      ),
+  ),
+)
 const assignedUser = computed(() =>
-  props.assignableUsers.find(
+  eligibleAssignableUsers.value.find(
     (user) => user.id === props.conversation?.assigned_user_id,
   ),
 )
@@ -164,16 +174,18 @@ watch(
   () => [
     props.conversation?.id,
     props.conversation?.assigned_user_id,
-    props.assignableUsers.map((user) => user.id).join(','),
+    eligibleAssignableUsers.value.map((user) => user.id).join(','),
   ],
   () => {
-    const assignedUserIsAvailable = props.assignableUsers.some(
+    const assignedUserIsAvailable = eligibleAssignableUsers.value.some(
       (user) => user.id === props.conversation?.assigned_user_id,
     )
     assignmentTargetId.value = assignedUserIsAvailable
       ? props.conversation?.assigned_user_id || ''
-      : props.assignableUsers.find((user) => user.id === props.currentUserId)?.id ||
-        props.assignableUsers[0]?.id ||
+      : eligibleAssignableUsers.value.find(
+            (user) => user.id === props.currentUserId,
+          )?.id ||
+        eligibleAssignableUsers.value[0]?.id ||
         ''
   },
   { immediate: true },
@@ -497,7 +509,9 @@ function previewMedia(
                 {{ conversation.contact_name || conversation.contact_phone }}
               </h2>
               <p class="truncate text-[11px] text-[#667781] sm:text-xs">
-                <span class="hidden sm:inline">{{ conversation.contact_phone }} · </span>{{ ownershipLabel }}
+                <span class="hidden sm:inline">
+                  {{ conversation.contact_phone }} · {{ conversation.channel_name }} ·
+                </span>{{ ownershipLabel }}
               </p>
             </div>
           </button>
@@ -544,7 +558,7 @@ function previewMedia(
         </div>
       </header>
       <div
-        v-if="isAdmin && assignableUsers.length"
+        v-if="isAdmin && eligibleAssignableUsers.length"
         class="z-10 flex min-h-12 items-center gap-2 border-b border-[#d8dcdf] bg-white px-3 py-2 shadow-sm shadow-slate-900/[0.02] sm:px-4"
       >
         <ShieldCheck class="h-4 w-4 shrink-0 text-fluvius-700" />
@@ -558,7 +572,7 @@ function previewMedia(
           aria-label="Responsável pelo atendimento"
         >
           <option
-            v-for="user in assignableUsers"
+            v-for="user in eligibleAssignableUsers"
             :key="user.id"
             :value="user.id"
           >

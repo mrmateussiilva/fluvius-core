@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     role: UserRole = "agent"
+    channel_ids: list[UUID] | None = None
 
     @field_validator("name")
     @classmethod
@@ -28,6 +29,7 @@ class UserUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=8, max_length=128)
     role: UserRole | None = None
     is_active: bool | None = None
+    channel_ids: list[UUID] | None = None
 
     @field_validator("name")
     @classmethod
@@ -52,6 +54,7 @@ class TenantUserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    channel_ids: list[UUID]
     created_at: datetime
 
 
@@ -59,3 +62,4 @@ class ActiveTenantUserResponse(BaseModel):
     id: UUID
     name: str
     role: UserRole
+    channel_ids: list[UUID]

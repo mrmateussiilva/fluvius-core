@@ -1,7 +1,10 @@
 import { http } from './http'
 import type { Conversation } from './types'
 
-export const listConversations = () => http<Conversation[]>('/api/v1/conversations')
+export const listConversations = (channelId?: string | null) =>
+  http<Conversation[]>(
+    `/api/v1/conversations${channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ''}`,
+  )
 export const getConversation = (id: string) => http<Conversation>(`/api/v1/conversations/${id}`)
 export const assignConversation = (id: string, userId?: string) =>
   http<Conversation>(`/api/v1/conversations/${id}/assign`, {

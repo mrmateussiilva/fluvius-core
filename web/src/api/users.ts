@@ -6,6 +6,7 @@ export interface CreateUserPayload {
   email: string
   password: string
   role: UserRole
+  channel_ids?: string[]
 }
 
 export interface UpdateUserPayload {
@@ -13,6 +14,7 @@ export interface UpdateUserPayload {
   password?: string
   role?: UserRole
   is_active?: boolean
+  channel_ids?: string[]
 }
 
 export const listUsers = () => http<TenantUser[]>('/api/v1/users')

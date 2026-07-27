@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
@@ -19,7 +19,8 @@ from app.conversations.schemas import (
 from app.database import get_db
 from app.messages.models import Message
 from app.realtime.manager import realtime_manager
-from app.users.models import TenantUser, User
+from app.users.channel_access import accessible_channel_ids, ensure_channel_access
+from app.users.models import TenantUser, TenantUserChannel, User
 
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -29,7 +30,13 @@ ADMIN_TRANSFER_REQUIRED = "Apenas administradores podem transferir atendimentos"
 ADMIN_RELEASE_REQUIRED = "Apenas administradores podem liberar atendimentos"
 
 
-def conversation_query(tenant_id: UUID, user_id: UUID):
+def conversation_query(
+    tenant_id: UUID,
+    user_id: UUID,
+    *,
+    allowed_channel_ids: set[UUID] | None = None,
+    channel_id: UUID | None = None,
+):
     def last_message_value(column):
         return (
             select(column)
@@ -64,7 +71,7 @@ def conversation_query(tenant_id: UUID, user_id: UUID):
         .correlate(Conversation)
         .scalar_subquery()
     )
-    return (
+    query = (
         select(
             Conversation,
             Contact,
@@ -85,6 +92,11 @@ def conversation_query(tenant_id: UUID, user_id: UUID):
         )
         .where(Conversation.tenant_id == tenant_id)
     )
+    if allowed_channel_ids is not None:
+        query = query.where(Conversation.channel_id.in_(allowed_channel_ids))
+    if channel_id is not None:
+        query = query.where(Conversation.channel_id == channel_id)
+    return query
 
 
 def as_response(row) -> ConversationResponse:
@@ -110,6 +122,7 @@ def as_response(row) -> ConversationResponse:
         ),
         contact_phone=contact.phone_number,
         channel_id=channel.id,
+        channel_name=channel.name,
         channel_status=channel.status,
         last_message_at=conversation.last_message_at,
         last_message_body=last_message_body,
@@ -152,6 +165,30 @@ def get_tenant_conversation_for_update(
     return conversation
 
 
+def get_accessible_conversation(
+    db: Session,
+    context: AuthContext,
+    conversation_id: UUID,
+    *,
+    for_update: bool = False,
+) -> Conversation:
+    conversation = (
+        get_tenant_conversation_for_update(
+            db,
+            context.tenant_id,
+            conversation_id,
+        )
+        if for_update
+        else get_tenant_conversation(
+            db,
+            context.tenant_id,
+            conversation_id,
+        )
+    )
+    ensure_channel_access(db, context, conversation.channel_id)
+    return conversation
+
+
 def ensure_conversation_assignee(conversation: Conversation, user_id: UUID) -> None:
     if (
         conversation.status != ConversationStatus.OPEN
@@ -170,10 +207,30 @@ def ensure_conversation_assignee(conversation: Conversation, user_id: UUID) -> N
 
 @router.get("", response_model=list[ConversationResponse])
 def list_conversations(
-    context: AuthContext = Depends(get_auth_context), db: Session = Depends(get_db)
+    channel_id: UUID | None = Query(default=None),
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
 ) -> list[ConversationResponse]:
+    if channel_id is not None:
+        channel = db.scalar(
+            select(WhatsAppChannel).where(
+                WhatsAppChannel.id == channel_id,
+                WhatsAppChannel.tenant_id == context.tenant_id,
+            )
+        )
+        if channel is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Canal não encontrado",
+            )
+        ensure_channel_access(db, context, channel_id)
     rows = db.execute(
-        conversation_query(context.tenant_id, context.user.id).order_by(
+        conversation_query(
+            context.tenant_id,
+            context.user.id,
+            allowed_channel_ids=accessible_channel_ids(db, context),
+            channel_id=channel_id,
+        ).order_by(
             Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc()
         )
     ).all()
@@ -187,7 +244,11 @@ def get_conversation(
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
     row = db.execute(
-        conversation_query(context.tenant_id, context.user.id).where(
+        conversation_query(
+            context.tenant_id,
+            context.user.id,
+            allowed_channel_ids=accessible_channel_ids(db, context),
+        ).where(
             Conversation.id == conversation_id
         )
     ).one_or_none()
@@ -206,7 +267,7 @@ def mark_conversation_read(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> Response:
-    get_tenant_conversation(db, context.tenant_id, conversation_id)
+    get_accessible_conversation(db, context, conversation_id)
     read_through = datetime.now(UTC)
     if payload and payload.through_message_id:
         visible_message = db.scalar(
@@ -252,8 +313,11 @@ async def assign_conversation(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
-    conversation = get_tenant_conversation_for_update(
-        db, context.tenant_id, conversation_id
+    conversation = get_accessible_conversation(
+        db,
+        context,
+        conversation_id,
+        for_update=True,
     )
     assignee_id = payload.user_id or context.user.id
     is_admin = context.membership.role == "admin"
@@ -277,6 +341,19 @@ async def assign_conversation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Atendente fora do tenant",
         )
+    if membership.role != "admin":
+        channel_membership = db.scalar(
+            select(TenantUserChannel.id).where(
+                TenantUserChannel.tenant_id == context.tenant_id,
+                TenantUserChannel.user_id == assignee_id,
+                TenantUserChannel.channel_id == conversation.channel_id,
+            )
+        )
+        if channel_membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Atendente não possui acesso a este canal",
+            )
     if (
         conversation.status == ConversationStatus.OPEN
         and conversation.assigned_user_id is not None
@@ -329,6 +406,7 @@ async def assign_conversation(
             "conversation.updated",
             {
                 "id": str(conversation.id),
+                "channel_id": str(conversation.channel_id),
                 "status": conversation.status.value,
                 "assigned_user_id": str(conversation.assigned_user_id),
             },
@@ -342,8 +420,11 @@ async def release_conversation(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
-    conversation = get_tenant_conversation_for_update(
-        db, context.tenant_id, conversation_id
+    conversation = get_accessible_conversation(
+        db,
+        context,
+        conversation_id,
+        for_update=True,
     )
     if context.membership.role != "admin":
         raise HTTPException(
@@ -383,6 +464,7 @@ async def release_conversation(
         "conversation.updated",
         {
             "id": str(conversation.id),
+            "channel_id": str(conversation.channel_id),
             "status": conversation.status.value,
             "assigned_user_id": None,
         },
@@ -396,8 +478,11 @@ async def close_conversation(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> ConversationResponse:
-    conversation = get_tenant_conversation_for_update(
-        db, context.tenant_id, conversation_id
+    conversation = get_accessible_conversation(
+        db,
+        context,
+        conversation_id,
+        for_update=True,
     )
     ensure_conversation_assignee(conversation, context.user.id)
     conversation.status = ConversationStatus.CLOSED
@@ -407,6 +492,7 @@ async def close_conversation(
         "conversation.updated",
         {
             "id": str(conversation.id),
+            "channel_id": str(conversation.channel_id),
             "status": conversation.status.value,
             "assigned_user_id": str(conversation.assigned_user_id),
         },

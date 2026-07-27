@@ -34,12 +34,14 @@ const createForm = reactive({
   email: '',
   password: '',
   role: 'agent' as UserRole,
+  channel_ids: [] as string[],
 })
 const editForm = reactive({
   name: '',
   password: '',
   role: 'agent' as UserRole,
   is_active: true,
+  channel_ids: [] as string[],
 })
 
 const activeUsers = computed(
@@ -54,6 +56,27 @@ const channelDescription = computed(() => {
 
 function roleLabel(role: UserRole) {
   return role === 'admin' ? 'Administrador' : 'Atendente'
+}
+
+function userChannelNames(user: TenantUser) {
+  if (user.role === 'admin') return 'Todos os canais'
+  const names = channels.value
+    .filter((channel) => user.channel_ids.includes(channel.id))
+    .map((channel) => channel.name)
+  return names.length ? names.join(' · ') : 'Sem canal atribuído'
+}
+
+function openCreate() {
+  Object.assign(createForm, {
+    name: '',
+    email: '',
+    password: '',
+    role: 'agent',
+    channel_ids: channels.value.map((channel) => channel.id),
+  })
+  showCreateForm.value = true
+  error.value = ''
+  notice.value = ''
 }
 
 function formatDate(value: string) {
@@ -97,6 +120,7 @@ async function submitCreate() {
       email: '',
       password: '',
       role: 'agent',
+      channel_ids: [],
     })
     showCreateForm.value = false
     notice.value = `${user.name} já pode entrar com o e-mail e a senha cadastrados.`
@@ -117,6 +141,7 @@ function openEdit(user: TenantUser) {
     password: '',
     role: user.role,
     is_active: user.is_active,
+    channel_ids: [...user.channel_ids],
   })
   editError.value = ''
   error.value = ''
@@ -139,6 +164,8 @@ async function submitEdit() {
       name: editForm.name,
       role: editForm.role,
       is_active: editForm.is_active,
+      channel_ids:
+        editForm.role === 'agent' ? [...editForm.channel_ids] : [],
       ...(editForm.password ? { password: editForm.password } : {}),
     })
     const index = users.value.findIndex((user) => user.id === updated.id)
@@ -180,13 +207,13 @@ onMounted(async () => {
           </div>
           <h1 class="mt-1 text-2xl font-semibold text-slate-900">Usuários e acessos</h1>
           <p class="mt-1 max-w-2xl text-sm text-slate-500">
-            Cada pessoa entra com seu próprio e-mail e atende somente os canais desta empresa.
+            Cada pessoa entra com seu próprio e-mail e atende somente os números atribuídos.
           </p>
         </div>
         <button
           v-if="!showCreateForm"
           class="inline-flex items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-fluvius-800"
-          @click="showCreateForm = true; error = ''; notice = ''"
+          @click="openCreate"
         >
           <Plus class="h-4 w-4" />
           Novo usuário
@@ -207,7 +234,7 @@ onMounted(async () => {
                 {{ channelDescription }}
               </p>
               <p class="mt-1 text-xs leading-5 text-emerald-800">
-                Os usuários abaixo compartilham as filas desses canais, mantendo atribuição individual por atendimento.
+                Administradores enxergam tudo; cada atendente recebe somente os canais necessários.
               </p>
             </div>
           </div>
@@ -272,6 +299,33 @@ onMounted(async () => {
               class="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-100"
             />
           </label>
+          <fieldset
+            v-if="createForm.role === 'agent'"
+            class="grid gap-2 rounded-xl border border-slate-200 p-3 md:col-span-2"
+          >
+            <legend class="px-1 text-xs font-semibold text-slate-600">
+              Canais permitidos
+            </legend>
+            <p v-if="!channels.length" class="text-xs text-slate-500">
+              Cadastre um canal do WhatsApp antes de liberar atendimento.
+            </p>
+            <label
+              v-for="channel in channels"
+              :key="channel.id"
+              class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <input
+                v-model="createForm.channel_ids"
+                type="checkbox"
+                :value="channel.id"
+                class="h-4 w-4 accent-emerald-600"
+              />
+              <span class="font-medium">{{ channel.name }}</span>
+              <span class="text-xs text-slate-400">
+                {{ channel.phone_number || 'Número ainda não identificado' }}
+              </span>
+            </label>
+          </fieldset>
           <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
             E-mail de acesso
             <input
@@ -366,6 +420,17 @@ onMounted(async () => {
                 </span>
               </div>
               <p class="truncate text-sm text-slate-500">{{ user.email }}</p>
+              <p
+                class="mt-0.5 truncate text-xs"
+                :class="
+                  user.role === 'agent' && !user.channel_ids.length
+                    ? 'font-medium text-amber-600'
+                    : 'text-slate-400'
+                "
+                :title="userChannelNames(user)"
+              >
+                {{ userChannelNames(user) }}
+              </p>
             </div>
             <div class="flex flex-wrap items-center gap-2 sm:justify-end">
               <span
@@ -443,6 +508,36 @@ onMounted(async () => {
             class="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-normal text-slate-900 outline-none focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-100"
           />
         </label>
+        <fieldset
+          v-if="editForm.role === 'agent'"
+          class="grid gap-2 rounded-xl border border-slate-200 p-3"
+        >
+          <legend class="px-1 text-xs font-semibold text-slate-600">
+            Canais permitidos
+          </legend>
+          <label
+            v-for="channel in channels"
+            :key="channel.id"
+            class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <input
+              v-model="editForm.channel_ids"
+              type="checkbox"
+              :value="channel.id"
+              class="h-4 w-4 accent-emerald-600"
+            />
+            <span class="font-medium">{{ channel.name }}</span>
+            <span class="text-xs text-slate-400">
+              {{ channel.phone_number || 'Número ainda não identificado' }}
+            </span>
+          </label>
+          <p
+            v-if="!editForm.channel_ids.length"
+            class="rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-700"
+          >
+            Sem canais selecionados, o atendente não verá conversas.
+          </p>
+        </fieldset>
         <label class="grid gap-1.5 text-xs font-semibold text-slate-600">
           Papel
           <select

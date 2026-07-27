@@ -145,7 +145,7 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
                 "Canal ou contato não encontrado para esta mensagem.",
             )
             db.commit()
-            _publish_message(message)
+            _publish_message(message, channel_id=conversation.channel_id)
             return
         if channel.status != ChannelStatus.CONNECTED:
             _fail_delivery(
@@ -154,7 +154,7 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
                 "WhatsApp desconectado durante o processamento do envio.",
             )
             db.commit()
-            _publish_message(message)
+            _publish_message(message, channel_id=conversation.channel_id)
             return
 
         try:
@@ -167,7 +167,7 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
                 "A credencial do canal não está disponível para envio.",
             )
             db.commit()
-            _publish_message(message)
+            _publish_message(message, channel_id=conversation.channel_id)
             return
 
         delivery.status = "processing"
@@ -204,7 +204,7 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
             message.status = MessageStatus.PENDING
             message.error = None
             db.commit()
-            _publish_message(message)
+            _publish_message(message, channel_id=conversation.channel_id)
             return
 
         apply_send_result(message, result)
@@ -230,10 +230,10 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
             else []
         )
         db.commit()
-        _publish_message(message)
+        _publish_message(message, channel_id=conversation.channel_id)
         for updated in reconciled:
             if updated.id != message.id:
-                _publish_message(updated)
+                _publish_message(updated, channel_id=conversation.channel_id)
 
 
 def fail_stale_delivery(
@@ -301,7 +301,13 @@ def _mark_internal_failure(delivery_id: UUID, tenant_id: UUID) -> None:
             message.error = SAFE_INTERNAL_ERROR
         db.commit()
         if message is not None:
-            _publish_message(message)
+            conversation_channel_id = db.scalar(
+                select(Conversation.channel_id).where(
+                    Conversation.id == message.conversation_id,
+                    Conversation.tenant_id == tenant_id,
+                )
+            )
+            _publish_message(message, channel_id=conversation_channel_id)
 
 
 def _get_delivery(
@@ -320,12 +326,19 @@ def _get_delivery(
     return db.scalar(query)
 
 
-def _publish_message(message: Message) -> None:
+def _publish_message(
+    message: Message,
+    *,
+    channel_id: UUID | None = None,
+) -> None:
+    data = {
+        "id": str(message.id),
+        "conversation_id": str(message.conversation_id),
+    }
+    if channel_id is not None:
+        data["channel_id"] = str(channel_id)
     publish_realtime_event(
         message.tenant_id,
         "message.updated",
-        {
-            "id": str(message.id),
-            "conversation_id": str(message.conversation_id),
-        },
+        data,
     )

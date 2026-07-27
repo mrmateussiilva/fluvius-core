@@ -20,6 +20,7 @@ export interface TenantUser {
   email: string
   role: UserRole
   is_active: boolean
+  channel_ids: string[]
   created_at: string
 }
 
@@ -27,6 +28,7 @@ export interface ActiveTenantUser {
   id: string
   name: string
   role: UserRole
+  channel_ids: string[]
 }
 
 export interface SyncRun {
@@ -63,6 +65,7 @@ export interface Conversation {
   contact_name: string | null
   contact_phone: string
   channel_id: string
+  channel_name: string
   channel_status: ChannelStatus
   last_message_at: string | null
   last_message_body: string | null

@@ -187,6 +187,7 @@ async def whatsapp_webhook(
                     {
                         "id": str(message.id),
                         "conversation_id": str(message.conversation_id),
+                        "channel_id": str(channel.id),
                         "status": message.status.value,
                     },
                 )
@@ -225,6 +226,7 @@ async def whatsapp_webhook(
                 {
                     "id": str(edited_message.id),
                     "conversation_id": str(edited_message.conversation_id),
+                    "channel_id": str(channel.id),
                     "edited_at": edited_message.edited_at.isoformat(),
                     "edit_content_unavailable": (
                         edited_message.edit_content_unavailable
@@ -371,18 +373,31 @@ async def whatsapp_webhook(
         db.commit()
         if created_conversation:
             await realtime_manager.broadcast(
-                channel.tenant_id, "conversation.created", {"id": str(conversation.id)}
+                channel.tenant_id,
+                "conversation.created",
+                {
+                    "id": str(conversation.id),
+                    "channel_id": str(channel.id),
+                },
             )
         elif reopened_conversation:
             await realtime_manager.broadcast(
                 channel.tenant_id,
                 "conversation.updated",
-                {"id": str(conversation.id), "status": conversation.status.value},
+                {
+                    "id": str(conversation.id),
+                    "channel_id": str(channel.id),
+                    "status": conversation.status.value,
+                },
             )
         await realtime_manager.broadcast(
             channel.tenant_id,
             "message.created",
-            {"id": str(message.id), "conversation_id": str(conversation.id)},
+            {
+                "id": str(message.id),
+                "conversation_id": str(conversation.id),
+                "channel_id": str(channel.id),
+            },
         )
         for reconciled in reconciled_edits:
             await realtime_manager.broadcast(
@@ -391,6 +406,7 @@ async def whatsapp_webhook(
                 {
                     "id": str(reconciled.id),
                     "conversation_id": str(reconciled.conversation_id),
+                    "channel_id": str(channel.id),
                     "edited_at": reconciled.edited_at.isoformat(),
                     "edit_content_unavailable": (
                         reconciled.edit_content_unavailable
@@ -433,5 +449,9 @@ async def _process_channel_status(channel: WhatsAppChannel, payload: dict, db: S
     await realtime_manager.broadcast(
         channel.tenant_id,
         "channel.status.updated",
-        {"id": str(channel.id), "status": channel.status},
+        {
+            "id": str(channel.id),
+            "channel_id": str(channel.id),
+            "status": channel.status,
+        },
     )

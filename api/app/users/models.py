@@ -28,3 +28,28 @@ class TenantUser(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     role: Mapped[str] = mapped_column(String(40), default="agent", nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+
+
+class TenantUserChannel(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "tenant_user_channels"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "channel_id",
+            name="uq_tenant_user_channels_membership",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("whatsapp_channels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )

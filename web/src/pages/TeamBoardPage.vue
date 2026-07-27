@@ -9,17 +9,20 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Smartphone,
   UserRound,
   WifiOff,
   X,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { listChannels } from '../api/channels'
 import {
   assignConversation,
   releaseConversation,
 } from '../api/conversations'
 import type {
   ActiveTenantUser,
+  Channel,
   Conversation,
   MessageType,
 } from '../api/types'
@@ -41,6 +44,8 @@ const conversations = useConversationStore()
 const realtime = useRealtimeStore()
 const router = useRouter()
 const members = ref<ActiveTenantUser[]>([])
+const channels = ref<Channel[]>([])
+const boardChannelId = ref<string | null>(null)
 const loading = ref(true)
 const refreshing = ref(false)
 const error = ref('')
@@ -57,11 +62,18 @@ const columns = computed<BoardColumn[]>(() => [
     name: 'Aguardando',
     role: null,
   },
-  ...members.value.map((member) => ({
+  ...members.value
+    .filter(
+      (member) =>
+        !boardChannelId.value ||
+        member.role === 'admin' ||
+        member.channel_ids.includes(boardChannelId.value),
+    )
+    .map((member) => ({
     id: member.id,
     name: member.name,
     role: member.role,
-  })),
+    })),
 ])
 const operationalConversations = computed(() =>
   conversations.conversations.filter(
@@ -106,6 +118,14 @@ function cardsForColumn(columnId: string) {
     (conversation) =>
       conversation.status === 'open' &&
       conversation.assigned_user_id === columnId,
+  )
+}
+
+function eligibleMembers(conversation: Conversation) {
+  return members.value.filter(
+    (member) =>
+      member.role === 'admin' ||
+      member.channel_ids.includes(conversation.channel_id),
   )
 }
 
@@ -190,7 +210,7 @@ async function loadBoard(showFullLoading = false) {
   error.value = ''
   try {
     const [, activeMembers] = await Promise.all([
-      conversations.loadConversations(),
+      conversations.loadConversations(boardChannelId.value),
       listActiveUsers(),
     ])
     members.value = activeMembers
@@ -289,11 +309,25 @@ async function selectAssignment(
 }
 
 async function openConversation(conversationId: string) {
+  const conversation = conversations.conversations.find(
+    (item) => item.id === conversationId,
+  )
+  if (!conversation) return
   conversations.selectedId = conversationId
   await router.push({
     path: '/app/conversations',
-    query: { conversation: conversationId },
+    query: {
+      conversation: conversationId,
+      channel: conversation.channel_id,
+    },
   })
+}
+
+async function changeBoardChannel(event: Event) {
+  boardChannelId.value =
+    (event.target as HTMLSelectElement).value || null
+  draggedConversationId.value = null
+  await loadBoard()
 }
 
 function refreshWhenVisible() {
@@ -306,6 +340,8 @@ onMounted(async () => {
     await router.replace('/app/conversations')
     return
   }
+  channels.value = await listChannels()
+  boardChannelId.value = channels.value[0]?.id || null
   await loadBoard(true)
   realtime.connect()
   document.addEventListener('visibilitychange', refreshWhenVisible)
@@ -335,6 +371,24 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label class="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-500 sm:w-64">
+            <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
+            <select
+              :value="boardChannelId || ''"
+              class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none"
+              aria-label="Canal do quadro"
+              @change="changeBoardChannel"
+            >
+              <option value="">Todos os canais</option>
+              <option
+                v-for="channel in channels"
+                :key="channel.id"
+                :value="channel.id"
+              >
+                {{ channel.name }}
+              </option>
+            </select>
+          </label>
           <div class="flex items-center gap-2 text-xs">
             <span class="rounded-full bg-amber-50 px-2.5 py-1.5 font-medium text-amber-700 ring-1 ring-amber-100">
               {{ waitingCount }} aguardando
@@ -505,6 +559,12 @@ onBeforeUnmount(() => {
                       <p class="mt-0.5 truncate text-[11px] text-slate-500">
                         {{ conversation.contact_phone }}
                       </p>
+                      <p
+                        v-if="!boardChannelId"
+                        class="mt-1 inline-flex max-w-full truncate rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700"
+                      >
+                        {{ conversation.channel_name }}
+                      </p>
                     </div>
                     <time
                       class="shrink-0 text-[10px] text-slate-400"
@@ -563,7 +623,7 @@ onBeforeUnmount(() => {
                 >
                   <option :value="WAITING_COLUMN_ID">Aguardando</option>
                   <option
-                    v-for="member in members"
+                    v-for="member in eligibleMembers(conversation)"
                     :key="member.id"
                     :value="member.id"
                   >

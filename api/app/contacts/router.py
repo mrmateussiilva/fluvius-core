@@ -15,6 +15,7 @@ from app.database import get_db
 from app.messages.models import Message
 from app.providers.evolution_credentials import ProviderConfigurationError
 from app.realtime.manager import realtime_manager
+from app.users.channel_access import accessible_channel_ids, ensure_channel_access
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de atualizar o contato."
@@ -29,28 +30,51 @@ def get_tenant_contact(db: Session, tenant_id: UUID, contact_id: UUID) -> Contac
     return contact
 
 
-def contact_response(db: Session, tenant_id: UUID, contact: Contact) -> ContactResponse:
-    conversation_count, closed_count = db.execute(
-        select(
-            func.count(Conversation.id),
-            func.count(Conversation.id).filter(
-                Conversation.status == ConversationStatus.CLOSED
-            ),
-        ).where(
-            Conversation.tenant_id == tenant_id,
-            Conversation.contact_id == contact.id,
+def contact_response(
+    db: Session,
+    tenant_id: UUID,
+    contact: Contact,
+    *,
+    allowed_channel_ids: set[UUID] | None = None,
+) -> ContactResponse:
+    conversation_stats = select(
+        func.count(Conversation.id),
+        func.count(Conversation.id).filter(
+            Conversation.status == ConversationStatus.CLOSED
+        ),
+    ).where(
+        Conversation.tenant_id == tenant_id,
+        Conversation.contact_id == contact.id,
+    )
+    if allowed_channel_ids is not None:
+        conversation_stats = conversation_stats.where(
+            Conversation.channel_id.in_(allowed_channel_ids)
         )
+    conversation_count, closed_count = db.execute(
+        conversation_stats
     ).one()
-    first_interaction, last_interaction = db.execute(
-        select(func.min(Message.created_at), func.max(Message.created_at))
+    interaction_query = (
+        select(
+            func.min(Message.created_at),
+            func.max(Message.created_at),
+        )
         .select_from(Message)
-        .join(Conversation, Conversation.id == Message.conversation_id)
+        .join(
+            Conversation,
+            (Conversation.id == Message.conversation_id)
+            & (Conversation.tenant_id == tenant_id),
+        )
         .where(
             Message.tenant_id == tenant_id,
             Conversation.tenant_id == tenant_id,
             Conversation.contact_id == contact.id,
         )
-    ).one()
+    )
+    if allowed_channel_ids is not None:
+        interaction_query = interaction_query.where(
+            Conversation.channel_id.in_(allowed_channel_ids)
+        )
+    first_interaction, last_interaction = db.execute(interaction_query).one()
     display_name = (
         contact.name
         or contact.push_name
@@ -85,7 +109,26 @@ def get_contact(
     db: Session = Depends(get_db),
 ) -> ContactResponse:
     contact = get_tenant_contact(db, context.tenant_id, contact_id)
-    return contact_response(db, context.tenant_id, contact)
+    allowed_channel_ids = accessible_channel_ids(db, context)
+    if allowed_channel_ids is not None:
+        accessible_conversation = db.scalar(
+            select(Conversation.id).where(
+                Conversation.tenant_id == context.tenant_id,
+                Conversation.contact_id == contact.id,
+                Conversation.channel_id.in_(allowed_channel_ids),
+            )
+        )
+        if accessible_conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contato não encontrado",
+            )
+    return contact_response(
+        db,
+        context.tenant_id,
+        contact,
+        allowed_channel_ids=allowed_channel_ids,
+    )
 
 
 @router.post("/{contact_id}/refresh", response_model=ContactResponse)
@@ -96,6 +139,7 @@ async def refresh_contact(
     db: Session = Depends(get_db),
 ) -> ContactResponse:
     contact = get_tenant_contact(db, context.tenant_id, contact_id)
+    ensure_channel_access(db, context, payload.channel_id)
     channel = db.scalar(
         select(WhatsAppChannel)
         .join(Conversation, Conversation.channel_id == WhatsAppChannel.id)
@@ -131,4 +175,9 @@ async def refresh_contact(
         "contact.updated",
         {"id": str(contact.id), "channel_id": str(channel.id)},
     )
-    return contact_response(db, context.tenant_id, contact)
+    return contact_response(
+        db,
+        context.tenant_id,
+        contact,
+        allowed_channel_ids=accessible_channel_ids(db, context),
+    )

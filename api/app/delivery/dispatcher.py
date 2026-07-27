@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 
 from app.config import settings
+from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.delivery.tasks import fail_stale_delivery
@@ -91,7 +92,7 @@ def dispatch_delivery(delivery_id: UUID, tenant_id: UUID) -> bool:
 
 def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
     now = datetime.now(UTC)
-    stale_messages: list[Message] = []
+    stale_messages: list[tuple[Message, UUID | None]] = []
     with SessionLocal() as db:
         stale_processing = list(
             db.scalars(
@@ -107,7 +108,13 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
         for delivery in stale_processing:
             message = fail_stale_delivery(db, delivery, tenant_id)
             if message is not None:
-                stale_messages.append(message)
+                channel_id = db.scalar(
+                    select(Conversation.channel_id).where(
+                        Conversation.id == message.conversation_id,
+                        Conversation.tenant_id == tenant_id,
+                    )
+                )
+                stale_messages.append((message, channel_id))
 
         stale_enqueued = list(
             db.scalars(
@@ -138,14 +145,17 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
         )
         db.commit()
 
-    for message in stale_messages:
+    for message, channel_id in stale_messages:
+        event_data = {
+            "id": str(message.id),
+            "conversation_id": str(message.conversation_id),
+        }
+        if channel_id is not None:
+            event_data["channel_id"] = str(channel_id)
         publish_realtime_event(
             tenant_id,
             "message.updated",
-            {
-                "id": str(message.id),
-                "conversation_id": str(message.conversation_id),
-            },
+            event_data,
         )
     return sum(
         dispatch_delivery(delivery_id, tenant_id) for delivery_id in due_ids
