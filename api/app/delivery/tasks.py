@@ -22,6 +22,7 @@ from app.delivery.service import (
     reconcile_delivery_receipts,
     safe_delivery_error,
 )
+from app.jobs.runtime import prepare_job_runtime
 from app.messages.models import Message
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
@@ -41,6 +42,7 @@ AMBIGUOUS_RECOVERY_ERROR = (
 
 
 def run_delivery(delivery_id: str, tenant_id: str) -> None:
+    prepare_job_runtime()
     scoped_delivery_id = UUID(delivery_id)
     scoped_tenant_id = UUID(tenant_id)
     try:

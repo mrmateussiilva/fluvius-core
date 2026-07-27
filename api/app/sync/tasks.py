@@ -12,6 +12,7 @@ from app.contacts.models import Contact
 from app.contacts.service import synchronize_contact_profile
 from app.conversations.models import Conversation
 from app.database import SessionLocal
+from app.jobs.runtime import prepare_job_runtime
 from app.providers.base import IgnoredWebhookEvent, IncomingMessageEditResult
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
@@ -37,6 +38,7 @@ FATAL_SYNC_ERROR = "A sincronização foi interrompida por uma falha interna seg
 
 
 def run_sync(sync_run_id: str, tenant_id: str) -> None:
+    prepare_job_runtime()
     run_id = UUID(sync_run_id)
     scoped_tenant_id = UUID(tenant_id)
     try:

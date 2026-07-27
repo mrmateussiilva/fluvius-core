@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.common.enums import MessageStatus
 from app.config import settings
 from app.database import SessionLocal
-from app.delivery.dispatcher import dispatch_delivery
+from app.delivery.dispatcher import dispatch_delivery, dispatch_due_deliveries
 from app.delivery.models import MessageDelivery
 from app.delivery.tasks import run_delivery
 from app.messages.models import Message
@@ -131,6 +131,39 @@ class DeliveryWorkerTest(PostgresIntegrationTestCase):
             self.assertEqual(message.provider_message_id, "worker-confirmed-1")
             self.assertEqual(message.attempt_count, 1)
             self.assertEqual(delivery.status, "completed")
+
+    def test_stale_enqueued_delivery_is_recovered_and_requeued(self) -> None:
+        self._assign()
+        _, delivery_id = self._create_message("Recuperar após queda do worker")
+        with SessionLocal() as db:
+            delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            delivery.status = "enqueued"
+            delivery.rq_job_id = "failed-rq-job"
+            delivery.updated_at = datetime.now(UTC) - timedelta(minutes=11)
+            db.commit()
+
+        with (
+            patch.object(settings, "environment", "development"),
+            patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
+        ):
+            dispatched = dispatch_due_deliveries(self.tenant_a.tenant_id)
+
+        self.assertEqual(dispatched, 1)
+        enqueue.assert_called_once()
+        with SessionLocal() as db:
+            delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(delivery.status, "enqueued")
+            self.assertNotEqual(delivery.rq_job_id, "failed-rq-job")
 
     def test_clearly_transient_failure_retries_with_the_same_message_id(self) -> None:
         self._assign()

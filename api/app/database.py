@@ -23,7 +23,7 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def load_all_models() -> None:
-    """Import model modules so Alembic can discover every table."""
+    """Import every model module into the shared SQLAlchemy metadata."""
     from app.attachments import models as _attachments  # noqa: F401
     from app.channels import models as _channels  # noqa: F401
     from app.common import audit_models as _audit  # noqa: F401

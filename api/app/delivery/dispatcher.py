@@ -131,6 +131,7 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
             delivery.status = "queued"
             delivery.rq_job_id = None
 
+        db.flush()
         due_ids = list(
             db.scalars(
                 select(MessageDelivery.id)

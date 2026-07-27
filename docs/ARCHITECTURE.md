@@ -180,7 +180,10 @@ Redis e duas filas RQ sobem no Compose. `fluvius-delivery` tem um
 `delivery-worker` exclusivo para texto e mídia; `fluvius-maintenance` mantém
 sincronizações administrativas fora do caminho crítico. Os jobs recebem IDs e
 reconsultam dados com `tenant_id`, em vez de serializar objetos ORM. A outbox no
-PostgreSQL é a fonte da verdade; Redis apenas transporta a execução.
+PostgreSQL é a fonte da verdade; Redis apenas transporta a execução. Cada job
+carrega todos os modelos antes de abrir a sessão, pois os processos RQ não
+passam pelo bootstrap da API e precisam resolver as chaves estrangeiras no
+próprio metadata SQLAlchemy.
 
 ## Storage
 
