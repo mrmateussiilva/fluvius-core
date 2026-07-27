@@ -165,6 +165,64 @@ class DeliveryWorkerTest(PostgresIntegrationTestCase):
             self.assertEqual(delivery.status, "enqueued")
             self.assertNotEqual(delivery.rq_job_id, "failed-rq-job")
 
+    def test_failed_rq_job_is_recovered_without_waiting_ten_minutes(self) -> None:
+        self._assign()
+        _, delivery_id = self._create_message("Recuperação rápida do RQ")
+        with SessionLocal() as db:
+            delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            delivery.status = "enqueued"
+            delivery.rq_job_id = "failed-rq-job"
+            delivery.updated_at = datetime.now(UTC) - timedelta(seconds=20)
+            db.commit()
+
+        with (
+            patch.object(settings, "environment", "development"),
+            patch(
+                "app.delivery.dispatcher._rq_job_is_active",
+                return_value=False,
+            ),
+            patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
+        ):
+            dispatched = dispatch_due_deliveries(self.tenant_a.tenant_id)
+
+        self.assertEqual(dispatched, 1)
+        enqueue.assert_called_once()
+
+    def test_dispatcher_does_not_enqueue_a_newer_pending_message_first(
+        self,
+    ) -> None:
+        self._assign()
+        _, first_delivery_id = self._create_message("Primeira pendente")
+        _, second_delivery_id = self._create_message("Segunda pendente")
+
+        with (
+            patch.object(settings, "environment", "development"),
+            patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
+        ):
+            self.assertFalse(
+                dispatch_delivery(
+                    second_delivery_id,
+                    self.tenant_a.tenant_id,
+                )
+            )
+            self.assertTrue(
+                dispatch_delivery(
+                    first_delivery_id,
+                    self.tenant_a.tenant_id,
+                )
+            )
+
+        enqueue.assert_called_once()
+        self.assertEqual(
+            enqueue.call_args.args[1],
+            str(first_delivery_id),
+        )
+
     def test_clearly_transient_failure_retries_with_the_same_message_id(self) -> None:
         self._assign()
         message_id, delivery_id = self._create_message("Retry controlado")

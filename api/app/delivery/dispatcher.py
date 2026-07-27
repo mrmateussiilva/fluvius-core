@@ -3,14 +3,19 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from redis.exceptions import RedisError
+from rq.exceptions import InvalidJobOperation, NoSuchJobError
+from rq.job import Job, JobStatus
 from sqlalchemy import select
 
+from app.common.enums import MessageStatus
 from app.config import settings
 from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
+from app.delivery.order import has_pending_predecessor
 from app.delivery.tasks import fail_stale_delivery
-from app.jobs.queue import delivery_queue
+from app.jobs.queue import delivery_queue, redis_connection
 from app.messages.models import Message
 from app.realtime.broker import publish_realtime_event
 from app.tenants.models import Tenant
@@ -18,7 +23,15 @@ from app.tenants.models import Tenant
 
 logger = logging.getLogger(__name__)
 ENQUEUED_STALE_AFTER = timedelta(minutes=10)
+ENQUEUED_JOB_GRACE = timedelta(seconds=15)
 PROCESSING_STALE_AFTER = timedelta(minutes=2)
+ACTIVE_RQ_JOB_STATUSES = {
+    JobStatus.CREATED,
+    JobStatus.QUEUED,
+    JobStatus.STARTED,
+    JobStatus.DEFERRED,
+    JobStatus.SCHEDULED,
+}
 
 
 def create_delivery(
@@ -54,6 +67,15 @@ def dispatch_delivery(delivery_id: UUID, tenant_id: UUID) -> bool:
             return False
         now = datetime.now(UTC)
         if delivery.next_attempt_at and delivery.next_attempt_at > now:
+            return False
+        message = db.scalar(
+            select(Message).where(
+                Message.id == delivery.message_id,
+                Message.tenant_id == tenant_id,
+                Message.status == MessageStatus.PENDING,
+            )
+        )
+        if message is None or has_pending_predecessor(db, message):
             return False
         delivery.status = "enqueued"
         delivery.rq_job_id = rq_job_id
@@ -116,18 +138,21 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
                 )
                 stale_messages.append((message, channel_id))
 
-        stale_enqueued = list(
+        enqueued_candidates = list(
             db.scalars(
                 select(MessageDelivery)
                 .where(
                     MessageDelivery.tenant_id == tenant_id,
                     MessageDelivery.status == "enqueued",
-                    MessageDelivery.updated_at < now - ENQUEUED_STALE_AFTER,
+                    MessageDelivery.updated_at < now - ENQUEUED_JOB_GRACE,
                 )
                 .with_for_update(skip_locked=True)
             )
         )
-        for delivery in stale_enqueued:
+        for delivery in enqueued_candidates:
+            is_expired = delivery.updated_at < now - ENQUEUED_STALE_AFTER
+            if not is_expired and _rq_job_is_active(delivery.rq_job_id):
+                continue
             delivery.status = "queued"
             delivery.rq_job_id = None
 
@@ -182,3 +207,15 @@ async def delivery_dispatcher_loop(stop_event: asyncio.Event) -> None:
 def _tenant_ids() -> list[UUID]:
     with SessionLocal() as db:
         return list(db.scalars(select(Tenant.id).order_by(Tenant.id)))
+
+
+def _rq_job_is_active(job_id: str | None) -> bool:
+    if not job_id:
+        return False
+    try:
+        job = Job.fetch(job_id, connection=redis_connection)
+        return job.get_status(refresh=True) in ACTIVE_RQ_JOB_STATUSES
+    except (InvalidJobOperation, NoSuchJobError):
+        return False
+    except RedisError:
+        return True

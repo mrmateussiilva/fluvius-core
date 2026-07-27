@@ -183,7 +183,10 @@ reconsultam dados com `tenant_id`, em vez de serializar objetos ORM. A outbox no
 PostgreSQL é a fonte da verdade; Redis apenas transporta a execução. Cada job
 carrega todos os modelos antes de abrir a sessão, pois os processos RQ não
 passam pelo bootstrap da API e precisam resolver as chaves estrangeiras no
-próprio metadata SQLAlchemy.
+próprio metadata SQLAlchemy. O dispatcher consulta o estado do job no RQ para
+recuperar rapidamente entregas que falharam antes do efeito externo e só
+enfileira a mensagem pendente mais antiga de cada conversa; o worker repete a
+mesma validação antes de chamar o provider.
 
 ## Storage
 

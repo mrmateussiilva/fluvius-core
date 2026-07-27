@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.channels.models import WhatsAppChannel
@@ -16,6 +16,7 @@ from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
+from app.delivery.order import has_pending_predecessor
 from app.delivery.service import (
     apply_send_result,
     call_provider,
@@ -103,25 +104,7 @@ async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
             _publish_message(message)
             return
 
-        predecessor = db.scalar(
-            select(Message.id)
-            .where(
-                Message.tenant_id == tenant_id,
-                Message.conversation_id == conversation.id,
-                Message.direction == MessageDirection.OUTGOING,
-                Message.status == MessageStatus.PENDING,
-                Message.id != message.id,
-                or_(
-                    Message.created_at < message.created_at,
-                    (
-                        (Message.created_at == message.created_at)
-                        & (Message.id < message.id)
-                    ),
-                ),
-            )
-            .limit(1)
-        )
-        if predecessor is not None:
+        if has_pending_predecessor(db, message):
             delivery.status = "retry_wait"
             delivery.next_attempt_at = now + timedelta(seconds=2)
             delivery.locked_at = None
