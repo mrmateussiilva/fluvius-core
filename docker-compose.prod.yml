@@ -1,0 +1,275 @@
+x-api-environment: &api-environment
+  ENVIRONMENT: production
+  HOME: /home/fluvius
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?configure POSTGRES_DB}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0
+  SECRET_KEY: ${SECRET_KEY:?configure SECRET_KEY}
+  AUTH_COOKIE_SECURE: "true"
+  LOGIN_RATE_LIMIT_ENABLED: "true"
+  CORS_ORIGINS: https://${APP_DOMAIN:?configure APP_DOMAIN}
+  PUBLIC_API_URL: https://${APP_DOMAIN:?configure APP_DOMAIN}
+  LOCAL_STORAGE_PATH: /app/storage
+  EVOLUTION_GO_BASE_URL: http://evolution-go:8080
+  EVOLUTION_GO_WEBHOOK_BASE_URL: http://api:8000
+  EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-}
+  EVOLUTION_GO_GLOBAL_API_KEY: ${EVOLUTION_GO_GLOBAL_API_KEY:?configure EVOLUTION_GO_GLOBAL_API_KEY}
+  EVOLUTION_GO_INSTANCE_TOKENS: '${EVOLUTION_GO_INSTANCE_TOKENS:-{}}'
+  PROVIDER_CREDENTIALS_KEY: ${PROVIDER_CREDENTIALS_KEY:?configure PROVIDER_CREDENTIALS_KEY}
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:?configure WEBHOOK_SECRET}
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+services:
+  postgres:
+    <<: *service-defaults
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?configure POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?configure POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-evolution-databases.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    shm_size: 256mb
+    mem_limit: 1792m
+    cpus: 2
+    pids_limit: 300
+    networks:
+      - backend
+
+  redis:
+    <<: *service-defaults
+    image: redis:7-alpine
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:?configure REDIS_PASSWORD}",
+        "--maxmemory",
+        "384mb",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?configure REDIS_PASSWORD}
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/redis:/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 100
+    networks:
+      - backend
+
+  api:
+    <<: *service-defaults
+    build: ./api
+    user: "10001:10001"
+    command:
+      - sh
+      - -c
+      - >-
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --proxy-headers --forwarded-allow-ips=*
+    environment: *api-environment
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 1280m
+    cpus: 2
+    pids_limit: 300
+    networks:
+      - frontend
+      - backend
+
+  worker:
+    <<: *service-defaults
+    build: ./api
+    user: "10001:10001"
+    command:
+      [
+        "rq",
+        "worker",
+        "--url",
+        "redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0",
+        "fluvius-maintenance",
+      ]
+    environment: *api-environment
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from app.config import settings; from redis import Redis; c=Redis.from_url(settings.redis_url); assert c.ping(); c.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 200
+    networks:
+      - backend
+
+  delivery-worker:
+    <<: *service-defaults
+    build: ./api
+    user: "10001:10001"
+    command:
+      [
+        "rq",
+        "worker",
+        "--url",
+        "redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0",
+        "fluvius-delivery",
+      ]
+    environment: *api-environment
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from app.config import settings; from redis import Redis; c=Redis.from_url(settings.redis_url); assert c.ping(); c.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 200
+    networks:
+      - backend
+
+  evolution-go:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: api/app/providers/evolution_go_gateway/Dockerfile
+      args:
+        EVOLUTION_GO_SOURCE_REF: ${EVOLUTION_GO_SOURCE_REF:-9337afc47e10b86cc896a6f432240e40fee95dd1}
+    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-edit-fix.1}
+    environment:
+      SERVER_PORT: 8080
+      CLIENT_NAME: fluvius-core
+      GLOBAL_API_KEY: ${EVOLUTION_GO_GLOBAL_API_KEY:?configure EVOLUTION_GO_GLOBAL_API_KEY}
+      POSTGRES_AUTH_DB: postgresql://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/evogo_auth?sslmode=disable
+      POSTGRES_USERS_DB: postgresql://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/evogo_users?sslmode=disable
+      DATABASE_SAVE_MESSAGES: "false"
+      CONNECT_ON_STARTUP: "true"
+      WEBHOOK_FILES: "true"
+      EVOLUTION_OPERATOR_EMAIL: ${EVOLUTION_OPERATOR_EMAIL:-}
+      WADEBUG: INFO
+      LOGTYPE: console
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 1792m
+    cpus: 2
+    pids_limit: 500
+    networks:
+      - backend
+
+  caddy:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: web/Dockerfile.prod
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?configure APP_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?configure ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/caddy/data:/data
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/caddy/config:/config
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "-q",
+          "-O",
+          "/dev/null",
+          "http://localhost:2019/config/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    networks:
+      - frontend
+
+networks:
+  frontend:
+  backend:

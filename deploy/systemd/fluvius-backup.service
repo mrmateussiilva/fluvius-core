@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup do Fluvius Core
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fluvius-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

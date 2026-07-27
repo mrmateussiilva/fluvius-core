@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+TARGET_FILE=${1:-"$PROJECT_ROOT/.env.production"}
+APP_DOMAIN=${APP_DOMAIN:-fluvius.finderbit.com.br}
+ACME_EMAIL=${ACME_EMAIL:-admin@finderbit.com.br}
+
+if [[ -e "$TARGET_FILE" ]]; then
+  echo "O arquivo $TARGET_FILE já existe; nenhum segredo foi sobrescrito." >&2
+  exit 1
+fi
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "Instale openssl antes de gerar o ambiente." >&2
+  exit 1
+fi
+
+random_secret() {
+  openssl rand -hex 32
+}
+
+umask 077
+{
+  echo "COMPOSE_PROJECT_NAME=fluvius-core-prod"
+  echo "APP_DOMAIN=$APP_DOMAIN"
+  echo "ACME_EMAIL=$ACME_EMAIL"
+  echo "FLUVIUS_DATA_DIR=/srv/fluvius"
+  echo
+  echo "POSTGRES_DB=fluvius"
+  echo "POSTGRES_USER=fluvius"
+  echo "POSTGRES_PASSWORD=$(random_secret)"
+  echo "REDIS_PASSWORD=$(random_secret)"
+  echo
+  echo "SECRET_KEY=$(random_secret)"
+  echo "PROVIDER_CREDENTIALS_KEY=$(random_secret)"
+  echo "WEBHOOK_SECRET=$(random_secret)"
+  echo "EVOLUTION_GO_GLOBAL_API_KEY=$(random_secret)"
+  echo
+  echo "EVOLUTION_GO_API_KEY="
+  echo "EVOLUTION_GO_INSTANCE_TOKENS={}"
+  echo "EVOLUTION_OPERATOR_EMAIL="
+  echo "EVOLUTION_GO_SOURCE_REF=9337afc47e10b86cc896a6f432240e40fee95dd1"
+  echo "EVOLUTION_GO_IMAGE=fluvius/evolution-go:0.7.2-edit-fix.1"
+} > "$TARGET_FILE"
+
+chmod 600 "$TARGET_FILE"
+echo "Ambiente de produção criado em $TARGET_FILE."
+echo "Revise ACME_EMAIL e guarde uma cópia segura dos segredos antes do deploy."

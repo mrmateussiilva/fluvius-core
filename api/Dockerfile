@@ -13,7 +13,10 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
 
-RUN mkdir -p /app/storage
+RUN groupadd --gid 10001 fluvius \
+    && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin fluvius \
+    && mkdir -p /app/storage \
+    && chown -R fluvius:fluvius /app/storage
 
 EXPOSE 8000
 

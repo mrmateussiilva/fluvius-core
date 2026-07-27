@@ -25,6 +25,8 @@
 - Respostas rápidas.
 - Atualizações realtime essenciais.
 - Auditoria/eventos técnicos suficientes para diagnosticar provider.
+- Implantação em uma VPS com Caddy, HTTPS/WSS, serviços internos, mídias
+  persistentes, healthchecks e backup local versionado.
 
 ## Não entra no MVP
 
@@ -37,7 +39,7 @@
 - Omnichannel além do WhatsApp.
 - Importação de código, dados ou arquitetura do Chatwoot.
 - Alta disponibilidade e realtime multi-réplica nesta primeira etapa.
-- Storage de produção, antivírus e CDN.
+- Antivírus, CDN e storage distribuído.
 - Importação completa do histórico ou da agenda do WhatsApp quando o provider não oferecer um contrato confirmado para isso.
 
 ## Plano dos próximos 10 dias
