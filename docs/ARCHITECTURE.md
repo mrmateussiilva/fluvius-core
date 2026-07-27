@@ -114,6 +114,22 @@ Desativar uma membership invalida imediatamente o acesso porque toda requisiçã
 
 O quadro operacional e `/api/v1/users/active` exigem papel `admin`. O endpoint expõe somente ID, nome, papel e canais dos usuários ativos do tenant autenticado, sem e-mail ou dados de acesso. Conversas e quadro oferecem seletor de canal; somente o administrador recebe a opção consolidada “Todos os canais”. As colunas são calculadas no navegador a partir das conversas existentes e uma conversa só pode ser atribuída a um atendente autorizado para seu canal. Drag-and-drop e o seletor dos cards chamam exclusivamente os endpoints tenant-scoped de atribuição ou liberação. Liberar move uma conversa `open` para `new`, remove o responsável e registra `conversation.released` em `audit_logs`.
 
+## Administração da plataforma
+
+`User.is_platform_admin` é uma autorização global distinta do papel `admin` de
+uma membership. Somente ela libera `/api/v1/platform`: a área lista empresas,
+mostra usuários e canais, cria tenant com seu primeiro administrador e
+ativa/suspende a operação. Suspender um tenant invalida imediatamente login,
+requisições e WebSockets porque todos revalidam `Tenant.is_active`.
+
+O acesso de suporte não ignora as regras operacionais. A API cria ou reativa uma
+`TenantUser` administrativa para o operador da plataforma, troca o cookie para
+o tenant escolhido e grava `platform.support_access` no `AuditLog` dessa
+empresa. A conta global da plataforma não pode ter nome, senha, papel ou estado
+alterados pela gestão de usuários de uma empresa. Usuários com memberships
+ativas em mais de um tenant podem trocar de empresa pelo seletor; cada novo
+cookie continua representando exatamente um tenant.
+
 Mensagens criadas pela API guardam uma cópia de `User.name` em
 `Message.sender_name`. O corpo interno permanece sem decoração, enquanto o
 conteúdo entregue ao WhatsApp recebe `*Nome do atendente:*\n` antes do texto ou

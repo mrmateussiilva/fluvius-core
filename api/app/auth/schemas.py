@@ -17,6 +17,20 @@ class TokenResponse(BaseModel):
 class CurrentUserResponse(BaseModel):
     id: UUID
     tenant_id: UUID
+    tenant_name: str
+    tenant_slug: str
     email: str
     name: str
+    role: str
+    is_platform_admin: bool
+
+
+class TenantSwitchRequest(BaseModel):
+    tenant_id: UUID
+
+
+class AvailableTenantResponse(BaseModel):
+    id: UUID
+    name: str
+    slug: str
     role: str

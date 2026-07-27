@@ -8,6 +8,7 @@ from app.config import settings
 from app.database import SessionLocal
 from app.realtime.manager import realtime_manager
 from app.security import decode_access_token
+from app.tenants.models import Tenant
 from app.users.models import TenantUser, TenantUserChannel
 
 
@@ -49,10 +50,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     with SessionLocal() as db:
         membership = db.scalar(
-            select(TenantUser).where(
+            select(TenantUser)
+            .join(
+                Tenant,
+                (Tenant.id == TenantUser.tenant_id)
+                & (Tenant.id == tenant_id),
+            )
+            .where(
                 TenantUser.user_id == user_id,
                 TenantUser.tenant_id == tenant_id,
                 TenantUser.is_active.is_(True),
+                Tenant.id == tenant_id,
+                Tenant.is_active.is_(True),
             )
         )
         channel_ids = (

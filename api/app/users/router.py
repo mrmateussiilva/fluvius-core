@@ -47,6 +47,7 @@ def tenant_user_response(
         email=user.email,
         role=membership.role,
         is_active=user.is_active and membership.is_active,
+        is_platform_admin=user.is_platform_admin,
         channel_ids=user_channel_ids(
             db,
             membership.tenant_id,
@@ -281,6 +282,11 @@ async def update_user(
         user_id,
         for_update=True,
     )
+    if user.is_platform_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A conta da plataforma não pode ser alterada pela empresa",
+        )
     if user.id == context.user.id and (
         payload.is_active is False
         or (payload.role is not None and payload.role != "admin")

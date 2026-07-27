@@ -56,7 +56,7 @@ Em `production`, a API recusa iniciar com segredo curto/reutilizado, URL HTTP,
 CORS de localhost, cookie inseguro, rate limit desligado, storage relativo,
 banco com senha padrão ou Redis sem autenticação.
 
-## Primeiro administrador
+## Primeiro administrador da plataforma
 
 Depois do healthcheck ficar verde:
 
@@ -69,11 +69,23 @@ docker compose \
   --tenant-slug "finderbit" \
   --email "admin@finderbit.com.br" \
   --name "Administrador" \
-  --password "defina-uma-senha-forte"
+  --password "defina-uma-senha-forte" \
+  --platform-admin
 ```
 
 O navegador usa cookie `HttpOnly`, `Secure` e `SameSite=Strict`; o JWT não fica
 persistido em `localStorage`. O login é limitado por conta e IP usando Redis.
+Depois do login, o ícone **Administração Fluvius** permite criar as empresas e
+seus primeiros administradores sem shell. Se o primeiro usuário já existia
+antes desta migration, promova a conta existente sem alterar sua senha:
+
+```bash
+docker compose \
+  --env-file .env.production \
+  -f docker-compose.prod.yml \
+  exec api python -m app.jobs.promote_platform_admin \
+  --email "admin@finderbit.com.br"
+```
 
 ## Operação
 

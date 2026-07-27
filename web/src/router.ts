@@ -4,6 +4,7 @@ import AdminSyncPage from './pages/AdminSyncPage.vue'
 import ChannelsPage from './pages/ChannelsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
+import PlatformTenantsPage from './pages/PlatformTenantsPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
 import TeamBoardPage from './pages/TeamBoardPage.vue'
 import UsersPage from './pages/UsersPage.vue'
@@ -35,7 +36,16 @@ export const router = createRouter({
           component: AdminSyncPage,
           meta: { admin: true },
         },
-        { path: 'settings/users', component: UsersPage },
+        {
+          path: 'settings/users',
+          component: UsersPage,
+          meta: { admin: true },
+        },
+        {
+          path: 'platform/tenants',
+          component: PlatformTenantsPage,
+          meta: { platformAdmin: true },
+        },
       ],
     },
   ],
@@ -62,5 +72,8 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.admin) {
     if (auth.user?.role !== 'admin') return '/app/conversations'
+  }
+  if (to.meta.platformAdmin && !auth.user?.is_platform_admin) {
+    return '/app/conversations'
   }
 })

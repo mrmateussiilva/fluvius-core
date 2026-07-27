@@ -8,7 +8,15 @@ from app.tenants.models import Tenant
 from app.users.models import TenantUser, User
 
 
-def bootstrap(tenant_name: str, tenant_slug: str, email: str, name: str, password: str) -> None:
+def bootstrap(
+    tenant_name: str,
+    tenant_slug: str,
+    email: str,
+    name: str,
+    password: str,
+    *,
+    platform_admin: bool = False,
+) -> None:
     load_all_models()
     with SessionLocal() as db:
         tenant = db.scalar(select(Tenant).where(Tenant.slug == tenant_slug))
@@ -18,9 +26,16 @@ def bootstrap(tenant_name: str, tenant_slug: str, email: str, name: str, passwor
             db.flush()
         user = db.scalar(select(User).where(User.email == email.lower()))
         if user is None:
-            user = User(email=email.lower(), name=name, password_hash=hash_password(password))
+            user = User(
+                email=email.lower(),
+                name=name,
+                password_hash=hash_password(password),
+                is_platform_admin=platform_admin,
+            )
             db.add(user)
             db.flush()
+        elif platform_admin and not user.is_platform_admin:
+            user.is_platform_admin = True
         membership = db.scalar(
             select(TenantUser).where(
                 TenantUser.tenant_id == tenant.id, TenantUser.user_id == user.id
@@ -39,5 +54,17 @@ if __name__ == "__main__":
     parser.add_argument("--email", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--password", required=True)
+    parser.add_argument(
+        "--platform-admin",
+        action="store_true",
+        help="Concede acesso à administração global da plataforma",
+    )
     args = parser.parse_args()
-    bootstrap(args.tenant_name, args.tenant_slug, args.email, args.name, args.password)
+    bootstrap(
+        args.tenant_name,
+        args.tenant_slug,
+        args.email,
+        args.name,
+        args.password,
+        platform_admin=args.platform_admin,
+    )

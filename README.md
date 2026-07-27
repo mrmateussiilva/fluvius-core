@@ -21,7 +21,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-A migration roda automaticamente ao iniciar a API. Em outro terminal, crie o primeiro tenant e usuário administrador:
+A migration roda automaticamente ao iniciar a API. Em outro terminal, crie o
+primeiro tenant e o administrador da plataforma:
 
 ```bash
 docker compose exec api python -m app.jobs.bootstrap \
@@ -29,7 +30,8 @@ docker compose exec api python -m app.jobs.bootstrap \
   --tenant-slug "empresa-local" \
   --email "admin@example.com" \
   --name "Administrador" \
-  --password "troque-esta-senha"
+  --password "troque-esta-senha" \
+  --platform-admin
 ```
 
 Serviços locais:
@@ -117,6 +119,10 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
 - Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, atribuem os canais permitidos, redefinem senha e desativam memberships sem atravessar tenants. Conversas e quadro podem ser filtrados por canal; a visão consolidada é exclusiva de administradores.
+- O administrador da plataforma usa **Administração Fluvius** para criar,
+  inspecionar, ativar ou suspender empresas. Entrar em uma empresa para suporte
+  cria uma membership administrativa e registra a ação no log auditável do
+  tenant; administradores comuns nunca acessam essa área.
 - Textos e legendas enviados pelo número compartilhado recebem automaticamente `*Nome do atendente:*` em negrito no WhatsApp. O nome usado fica preservado na mensagem para auditoria e retries.
 - Edições atualizam a mensagem original, aparecem como `editada` e nunca criam
   uma bolha `[text]`; reações ficam fora do MVP.

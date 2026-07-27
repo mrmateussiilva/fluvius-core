@@ -79,5 +79,15 @@ class RealtimeManager:
             finally:
                 self.disconnect(tenant_id, websocket)
 
+    async def disconnect_tenant(self, tenant_id: UUID) -> None:
+        connections = self._connections.get(tenant_id, {}).copy()
+        for websocket in connections:
+            try:
+                await websocket.close(code=1008)
+            except RuntimeError:
+                pass
+            finally:
+                self.disconnect(tenant_id, websocket)
+
 
 realtime_manager = RealtimeManager()

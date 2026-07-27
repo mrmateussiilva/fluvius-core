@@ -9,9 +9,53 @@ export type SyncStatus = 'queued' | 'running' | 'completed' | 'partial' | 'faile
 export interface CurrentUser {
   id: string
   tenant_id: string
+  tenant_name: string
+  tenant_slug: string
   email: string
   name: string
   role: UserRole
+  is_platform_admin: boolean
+}
+
+export interface AvailableTenant {
+  id: string
+  name: string
+  slug: string
+  role: UserRole
+}
+
+export interface PlatformTenant {
+  id: string
+  name: string
+  slug: string
+  is_active: boolean
+  user_count: number
+  active_user_count: number
+  channel_count: number
+  connected_channel_count: number
+  created_at: string
+}
+
+export interface PlatformTenantMember {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  is_active: boolean
+  is_platform_admin: boolean
+}
+
+export interface PlatformTenantChannel {
+  id: string
+  name: string
+  phone_number: string | null
+  provider: Channel['provider']
+  status: ChannelStatus
+}
+
+export interface PlatformTenantDetail extends PlatformTenant {
+  users: PlatformTenantMember[]
+  channels: PlatformTenantChannel[]
 }
 
 export interface TenantUser {
@@ -20,6 +64,7 @@ export interface TenantUser {
   email: string
   role: UserRole
   is_active: boolean
+  is_platform_admin: boolean
   channel_ids: string[]
   created_at: string
 }

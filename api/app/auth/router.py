@@ -10,10 +10,18 @@ from app.auth.rate_limit import (
     ensure_login_allowed,
     record_login_failure,
 )
-from app.auth.schemas import CurrentUserResponse, LoginRequest, TokenResponse
+from app.auth.schemas import (
+    AvailableTenantResponse,
+    CurrentUserResponse,
+    LoginRequest,
+    TenantSwitchRequest,
+    TokenResponse,
+)
+from app.auth.session import issue_session
 from app.config import settings
 from app.database import get_db
-from app.security import create_access_token, verify_password
+from app.security import verify_password
+from app.tenants.models import Tenant
 from app.users.models import TenantUser, User
 
 
@@ -36,8 +44,18 @@ def login(
         logger.warning("Falha de autenticação", extra={"client_ip": client_ip})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-mail ou senha inválidos")
 
-    membership_query = select(TenantUser).where(
-        TenantUser.user_id == user.id, TenantUser.is_active.is_(True)
+    membership_query = (
+        select(TenantUser)
+        .join(
+            Tenant,
+            (Tenant.id == TenantUser.tenant_id)
+            & (Tenant.is_active.is_(True)),
+        )
+        .where(
+            TenantUser.user_id == user.id,
+            TenantUser.is_active.is_(True),
+            Tenant.is_active.is_(True),
+        )
     )
     if payload.tenant_id:
         membership_query = membership_query.where(TenantUser.tenant_id == payload.tenant_id)
@@ -47,16 +65,7 @@ def login(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Usuário sem acesso ao tenant")
 
     clear_account_login_failures(payload.email)
-    token = create_access_token(str(user.id), str(membership.tenant_id), role=membership.role)
-    response.set_cookie(
-        key=settings.auth_cookie_name,
-        value=token,
-        max_age=settings.access_token_expire_minutes * 60,
-        httponly=True,
-        secure=settings.auth_cookie_secure,
-        samesite="strict",
-        path="/",
-    )
+    token = issue_session(response, user, membership)
     logger.info(
         "Autenticação concluída",
         extra={"user_id": str(user.id), "tenant_id": str(membership.tenant_id)},
@@ -78,11 +87,89 @@ def logout(response: Response) -> Response:
 
 
 @router.get("/me", response_model=CurrentUserResponse)
-def me(context: AuthContext = Depends(get_auth_context)) -> CurrentUserResponse:
+def me(
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> CurrentUserResponse:
+    tenant = db.scalar(
+        select(Tenant).where(
+            Tenant.id == context.tenant_id,
+            Tenant.is_active.is_(True),
+        )
+    )
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Empresa inativa ou indisponível",
+        )
     return CurrentUserResponse(
         id=context.user.id,
         tenant_id=context.tenant_id,
+        tenant_name=tenant.name,
+        tenant_slug=tenant.slug,
         email=context.user.email,
         name=context.user.name,
         role=context.membership.role,
+        is_platform_admin=context.user.is_platform_admin,
     )
+
+
+@router.get("/tenants", response_model=list[AvailableTenantResponse])
+def available_tenants(
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> list[AvailableTenantResponse]:
+    rows = db.execute(
+        select(Tenant, TenantUser.role)
+        .join(
+            TenantUser,
+            (TenantUser.tenant_id == Tenant.id)
+            & (TenantUser.user_id == context.user.id),
+        )
+        .where(
+            TenantUser.user_id == context.user.id,
+            TenantUser.is_active.is_(True),
+            Tenant.is_active.is_(True),
+        )
+        .order_by(Tenant.name, Tenant.id)
+    ).all()
+    return [
+        AvailableTenantResponse(
+            id=tenant.id,
+            name=tenant.name,
+            slug=tenant.slug,
+            role=role,
+        )
+        for tenant, role in rows
+    ]
+
+
+@router.post("/switch-tenant", response_model=TokenResponse)
+def switch_tenant(
+    payload: TenantSwitchRequest,
+    response: Response,
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    membership = db.scalar(
+        select(TenantUser)
+        .join(
+            Tenant,
+            (Tenant.id == TenantUser.tenant_id)
+            & (Tenant.id == payload.tenant_id),
+        )
+        .where(
+            TenantUser.tenant_id == payload.tenant_id,
+            TenantUser.user_id == context.user.id,
+            TenantUser.is_active.is_(True),
+            Tenant.id == payload.tenant_id,
+            Tenant.is_active.is_(True),
+        )
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você não possui acesso ativo a esta empresa",
+        )
+    token = issue_session(response, context.user, membership)
+    return TokenResponse(access_token=token)

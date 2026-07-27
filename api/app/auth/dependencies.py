@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.security import decode_access_token
+from app.tenants.models import Tenant
 from app.users.models import TenantUser, User
 
 
@@ -49,14 +50,29 @@ def get_auth_context(
     except (jwt.PyJWTError, KeyError, ValueError):
         raise unauthorized from None
 
-    membership = db.scalar(
-        select(TenantUser).where(
+    row = db.execute(
+        select(User, TenantUser)
+        .join(
+            TenantUser,
+            (TenantUser.user_id == User.id)
+            & (TenantUser.tenant_id == tenant_id),
+        )
+        .join(
+            Tenant,
+            (Tenant.id == TenantUser.tenant_id)
+            & (Tenant.id == tenant_id),
+        )
+        .where(
+            User.id == user_id,
+            User.is_active.is_(True),
             TenantUser.user_id == user_id,
             TenantUser.tenant_id == tenant_id,
             TenantUser.is_active.is_(True),
+            Tenant.id == tenant_id,
+            Tenant.is_active.is_(True),
         )
-    )
-    user = db.scalar(select(User).where(User.id == user_id, User.is_active.is_(True)))
-    if membership is None or user is None:
+    ).one_or_none()
+    if row is None:
         raise unauthorized
+    user, membership = row
     return AuthContext(user=user, membership=membership)

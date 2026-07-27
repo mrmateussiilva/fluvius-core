@@ -54,6 +54,7 @@ class TenantUserResponse(BaseModel):
     email: str
     role: UserRole
     is_active: bool
+    is_platform_admin: bool
     channel_ids: list[UUID]
     created_at: datetime
 

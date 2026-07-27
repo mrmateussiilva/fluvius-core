@@ -3,6 +3,9 @@
 ## Entra no MVP
 
 - Autenticação simples e gestão de administradores/atendentes associados a tenants. Administradores criam, atualizam senha, definem papel, atribuem canais e desativam usuários da própria empresa.
+- Administração global mínima da instalação: criar, listar, inspecionar,
+  ativar/suspender empresas e entrar para suporte com auditoria, sem billing ou
+  métricas comerciais.
 - Identificação automática do atendente em textos e legendas enviados pelo número compartilhado, usando o nome de exibição persistido no momento do envio.
 - Um ou mais canais WhatsApp por tenant.
 - Filas separadas por canal: administradores podem selecionar um canal ou a visão consolidada; atendentes enxergam somente os canais atribuídos.

@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { getMe, login, logout } from '../api/auth'
+import {
+  getMe,
+  login,
+  logout,
+  switchTenant as switchTenantRequest,
+} from '../api/auth'
 import type { CurrentUser } from '../api/types'
 
 export const useAuthStore = defineStore('auth', {
@@ -19,6 +24,13 @@ export const useAuthStore = defineStore('auth', {
     },
     async restore() {
       if (!this.user) this.user = await getMe()
+    },
+    async refresh() {
+      this.user = await getMe()
+    },
+    async switchTenant(tenantId: string) {
+      await switchTenantRequest(tenantId)
+      await this.refresh()
     },
     async signOut() {
       try {
