@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from './layouts/AppLayout.vue'
+import AdminSyncPage from './pages/AdminSyncPage.vue'
 import ChannelsPage from './pages/ChannelsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
@@ -25,6 +26,11 @@ export const router = createRouter({
         },
         { path: 'quick-replies', component: QuickRepliesPage },
         { path: 'settings/channels', component: ChannelsPage },
+        {
+          path: 'settings/sync',
+          component: AdminSyncPage,
+          meta: { admin: true },
+        },
         { path: 'settings/users', component: UsersPage },
       ],
     },

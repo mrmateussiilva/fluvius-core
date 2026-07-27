@@ -12,6 +12,7 @@ from app.messages.router import router as messages_router
 from app.providers.webhook_router import router as webhook_router
 from app.quick_replies.router import router as quick_replies_router
 from app.realtime.router import router as realtime_router
+from app.sync.router import router as sync_router
 from app.users.router import router as users_router
 
 
@@ -40,5 +41,6 @@ app.include_router(conversations_router, prefix=settings.api_v1_prefix)
 app.include_router(messages_router, prefix=settings.api_v1_prefix)
 app.include_router(quick_replies_router, prefix=settings.api_v1_prefix)
 app.include_router(users_router, prefix=settings.api_v1_prefix)
+app.include_router(sync_router, prefix=settings.api_v1_prefix)
 app.include_router(webhook_router, prefix=settings.api_v1_prefix)
 app.include_router(realtime_router)

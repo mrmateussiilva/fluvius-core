@@ -73,6 +73,25 @@ O cadastro é idempotente por credencial dentro do tenant: se o usuário tentar 
 
 O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A atualização explícita usa `POST /api/v1/contacts/{id}/refresh`, valida tenant, vínculo entre contato e canal e status conectado antes de chamar `WhatsAppProvider.get_contact_profile`. O Evolution Go é consultado apenas pelo adapter e os resultados disponíveis são armazenados como cache; estatísticas de primeira/última interação e atendimentos são calculadas a partir dos dados do Fluvius.
 
+## Sincronização administrativa
+
+A tela **Sincronização**, disponível apenas para administradores, cria execuções em
+`/api/v1/admin/sync-runs`. A API valida o canal dentro do tenant, persiste a
+execução como `queued`, registra auditoria e envia ao RQ somente os IDs da
+execução e do tenant. O worker reconsulta todos os dados com filtro explícito de
+`tenant_id`, mantém contadores de progresso e conclui como `completed`,
+`partial` ou `failed`. Apenas uma execução `queued` ou `running` pode existir por
+canal.
+
+A sincronização de contatos atualiza, no máximo, os 50 contatos conhecidos mais
+recentes por meio do provider do canal e exige conexão ativa. A opção de
+mensagens examina até 500 eventos dos últimos 1 a 30 dias que já estão
+persistidos como recibos ou edições pendentes e tenta reconciliá-los com as
+mensagens locais. Ela não consulta nem importa todo o histórico do WhatsApp,
+porque esse contrato não existe no adapter atual. O frontend consulta
+periodicamente o estado persistido da execução; o worker não depende do
+gerenciador WebSocket em memória da API.
+
 ## Usuários da empresa
 
 `TenantUser` é a autorização entre uma identidade global e uma empresa. A gestão usa `/api/v1/users`, exige papel `admin` e filtra explicitamente cada listagem ou alteração pelo `tenant_id` autenticado. Um atendente enxerga e opera somente os canais e números do seu tenant; não existe acesso direto do usuário ao gateway. E-mails novos são únicos, senhas são persistidas apenas como hash e nenhuma resposta expõe credenciais.
@@ -115,7 +134,11 @@ sincronizada novamente.
 
 ## Fila
 
-Redis e uma fila RQ chamada `fluvius` já sobem no Compose. O worker ainda não executa envio de mensagens. Futuros candidatos: retries de provider, download/processamento de mídia, reprocessamento de webhook e notificações. Jobs precisam receber IDs e reconsultar dados com `tenant_id`, em vez de serializar objetos ORM.
+Redis e uma fila RQ chamada `fluvius` sobem no Compose. O worker executa as
+sincronizações administrativas de contatos e de eventos pendentes; os jobs
+recebem IDs e reconsultam dados com `tenant_id`, em vez de serializar objetos
+ORM. O envio de mensagens continua síncrono. Futuros candidatos: retries de
+provider, download/processamento de mídia e notificações.
 
 ## Storage
 

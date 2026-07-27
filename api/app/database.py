@@ -32,5 +32,6 @@ def load_all_models() -> None:
     from app.messages import models as _messages  # noqa: F401
     from app.providers import models as _provider_events  # noqa: F401
     from app.quick_replies import models as _quick_replies  # noqa: F401
+    from app.sync import models as _sync_runs  # noqa: F401
     from app.tenants import models as _tenants  # noqa: F401
     from app.users import models as _users  # noqa: F401

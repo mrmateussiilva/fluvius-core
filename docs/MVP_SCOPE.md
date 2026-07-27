@@ -12,6 +12,7 @@
 - Filas `new`, `open` e `closed`.
 - Assumir e finalizar atendimento, com takeover e transferência por administradores para usuários ativos da própria empresa.
 - Quadro operacional exclusivo para administradores, com fila aguardando, colunas por atendente, atualização realtime e redistribuição por drag-and-drop ou seletor.
+- Sincronização operacional exclusiva para administradores: atualização limitada dos contatos conhecidos e reconciliação de edições/recibos recentes já recebidos.
 - Receber e enviar texto.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.
@@ -34,6 +35,7 @@
 - Importação de código, dados ou arquitetura do Chatwoot.
 - Alta disponibilidade e realtime multi-réplica nesta primeira etapa.
 - Storage de produção, antivírus e CDN.
+- Importação completa do histórico ou da agenda do WhatsApp quando o provider não oferecer um contrato confirmado para isso.
 
 ## Plano dos próximos 10 dias
 

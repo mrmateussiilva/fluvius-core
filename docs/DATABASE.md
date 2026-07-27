@@ -16,6 +16,7 @@
 | `MessageAttachment` | Metadados do arquivo de uma mensagem | `tenant_id` |
 | `QuickReply` | Texto reutilizável no atendimento | `tenant_id` |
 | `ProviderEvent` | Evento bruto, deduplicação e diagnóstico | `tenant_id` |
+| `SyncRun` | Execução e progresso de sincronização administrativa | `tenant_id` |
 | `AuditLog` | Trilha de ações relevantes | `tenant_id` |
 
 ## Relacionamentos
@@ -31,6 +32,7 @@
   novo quando disponível e o ID idempotente do evento externo.
 - `MessageAttachment` pertence à mensagem, repete o tenant e guarda nome, MIME type, tamanho, chave de storage e URL pública controlada pelo Fluvius.
 - `ProviderEvent` pertence ao canal e guarda o payload bruto.
+- `SyncRun` pertence ao tenant, canal e usuário solicitante; guarda somente estado, limites, contadores e erro seguro da execução.
 
 Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas por `(tenant_id, channel_id, contact_id)`, mantendo um histórico contínuo de WhatsApp por contato e canal. Além do nome operacional e telefone, contatos podem guardar o último retrato normalizado do WhatsApp (`push_name`, nome comercial/verificado, recado, foto, existência no WhatsApp e data/erro de sincronização). Esses campos são cache e podem ficar ausentes por privacidade; dados históricos continuam derivados da conversa e das mensagens. IDs externos de mensagem são únicos por `(tenant_id, provider_message_id)`. Eventos, quando têm ID externo, são únicos por `(channel_id, provider_event_id)`. Canais guardam somente o fingerprint da credencial resolvida, único por `(provider, credential_fingerprint)`; o token nunca é persistido.
 
@@ -71,10 +73,15 @@ Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas po
 22. Texto e legenda outgoing são enviados ao WhatsApp com o prefixo em negrito
     `*sender_name:*\n`; o corpo persistido continua limpo. Retry reutiliza o mesmo
     snapshot de nome e conteúdo.
+23. Somente administradores criam ou consultam `SyncRun`. Cada consulta valida
+    tenant e canal; existe no máximo uma execução `queued` ou `running` por
+    canal. Contatos são atualizados pelo provider somente com o canal conectado.
+    A sincronização de mensagens processa apenas eventos recentes já
+    persistidos e pendentes, sem importar histórico externo.
 
 ## Migration inicial
 
-`api/alembic/versions/20260721_0001_initial.py` cria as onze tabelas iniciais, enums, chaves estrangeiras, constraints de deduplicação e índices de tenant. `20260722_0002_conversation_reads.py` adiciona os marcadores de leitura por usuário. `20260722_0003_contact_profiles.py` adiciona o cache de perfil WhatsApp aos contatos. `20260722_0004_message_replies_delivery_times.py` adiciona citações, contagem de tentativas e timestamps de envio/entrega/leitura. `20260722_0005_single_conversation_per_contact.py` consolida conversas duplicadas sem apagar mensagens e impede novas duplicatas por contato/canal. `20260722_0006_video_and_sticker_messages.py` adiciona vídeo e figurinha ao enum. `20260724_0007_channel_credential_claims.py` adiciona o fingerprint e impede que uma credencial de provider seja reutilizada por outro canal. `20260726_0008_message_edits.py` adiciona revisões/estado de edição, remove mensagens artificiais geradas por edição/reação e sanitiza material criptográfico legado. `20260726_0009_attachment_integrity.py` adiciona o SHA-256 do conteúdo para validar a idempotência exata dos anexos novos. `20260726_0010_message_sender_name.py` preserva o nome de exibição do atendente em cada mensagem outgoing e preenche o histórico que ainda referencia um usuário. Defaults de UUID e estados são aplicados pela camada ORM; integrações que escrevam SQL diretamente devem fornecê-los explicitamente.
+`api/alembic/versions/20260721_0001_initial.py` cria as onze tabelas iniciais, enums, chaves estrangeiras, constraints de deduplicação e índices de tenant. `20260722_0002_conversation_reads.py` adiciona os marcadores de leitura por usuário. `20260722_0003_contact_profiles.py` adiciona o cache de perfil WhatsApp aos contatos. `20260722_0004_message_replies_delivery_times.py` adiciona citações, contagem de tentativas e timestamps de envio/entrega/leitura. `20260722_0005_single_conversation_per_contact.py` consolida conversas duplicadas sem apagar mensagens e impede novas duplicatas por contato/canal. `20260722_0006_video_and_sticker_messages.py` adiciona vídeo e figurinha ao enum. `20260724_0007_channel_credential_claims.py` adiciona o fingerprint e impede que uma credencial de provider seja reutilizada por outro canal. `20260726_0008_message_edits.py` adiciona revisões/estado de edição, remove mensagens artificiais geradas por edição/reação e sanitiza material criptográfico legado. `20260726_0009_attachment_integrity.py` adiciona o SHA-256 do conteúdo para validar a idempotência exata dos anexos novos. `20260726_0010_message_sender_name.py` preserva o nome de exibição do atendente em cada mensagem outgoing e preenche o histórico que ainda referencia um usuário. `20260727_0011_sync_runs.py` adiciona as execuções administrativas, seus contadores e a unicidade parcial que impede duas sincronizações ativas no mesmo canal. Defaults de UUID e estados são aplicados pela camada ORM; integrações que escrevam SQL diretamente devem fornecê-los explicitamente.
 
 A `20260722_0005` é uma migration de dados e consulta as conversas existentes para escolher e
 consolidar registros. Por isso, a cadeia completa deve ser validada com `alembic upgrade head`

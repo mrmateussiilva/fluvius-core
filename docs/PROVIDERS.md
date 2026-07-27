@@ -75,6 +75,14 @@ Recibos chegam como evento `Receipt`, com o estado em `state`, os IDs em `data.M
 
 O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter normaliza confirmação do número, nome exibido/comercial/verificado, recado e URL da foto. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 
+O adapter atual não possui um endpoint confirmado para listar ou importar o
+histórico completo de mensagens. Por isso, a sincronização administrativa de
+mensagens não chama uma rota presumida do gateway: ela reprocessa somente
+edições e recibos recentes que o webhook já persistiu como pendentes em
+`provider_events`. A sincronização de contatos também se limita aos contatos já
+associados às conversas do canal; ela atualiza seus perfis pelas rotas
+confirmadas acima, mas não importa toda a agenda do WhatsApp.
+
 ## TODO de compatibilidade Evolution Go
 
 A documentação pública e o Swagger da linha Evolution Go estão evoluindo. Antes do primeiro teste integrado/produção, confirmar contra o Swagger da imagem efetivamente fixada:

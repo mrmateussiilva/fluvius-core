@@ -3,6 +3,8 @@ export type ConversationStatus = 'new' | 'open' | 'closed'
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker'
 export type UserRole = 'admin' | 'agent'
+export type SyncType = 'contacts' | 'messages' | 'all'
+export type SyncStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed'
 
 export interface CurrentUser {
   id: string
@@ -25,6 +27,23 @@ export interface ActiveTenantUser {
   id: string
   name: string
   role: UserRole
+}
+
+export interface SyncRun {
+  id: string
+  channel_id: string
+  sync_type: SyncType
+  status: SyncStatus
+  recent_days: number
+  total_items: number
+  processed_items: number
+  succeeded_items: number
+  failed_items: number
+  error: string | null
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Channel {

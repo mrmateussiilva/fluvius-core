@@ -1,4 +1,3 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,17 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
-from app.common.enums import ChannelProvider, ChannelStatus, ConversationStatus
+from app.common.enums import ChannelStatus, ConversationStatus
 from app.contacts.models import Contact
 from app.contacts.schemas import ContactRefreshRequest, ContactResponse
+from app.contacts.service import synchronize_contact_profile
 from app.conversations.models import Conversation
 from app.database import get_db
 from app.messages.models import Message
-from app.providers.evolution_credentials import (
-    ProviderConfigurationError,
-    claim_evolution_credential,
-)
-from app.providers.factory import get_provider
+from app.providers.evolution_credentials import ProviderConfigurationError
 from app.realtime.manager import realtime_manager
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
@@ -119,31 +115,16 @@ async def refresh_contact(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OFFLINE_MESSAGE)
 
     try:
-        if channel.provider == ChannelProvider.EVOLUTION_GO:
-            claim_evolution_credential(db, channel)
-        profile = await get_provider(channel.provider, channel).get_contact_profile(
-            channel, contact.phone_number
+        await synchronize_contact_profile(
+            db,
+            channel=channel,
+            contact=contact,
         )
     except ProviderConfigurationError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except NotImplementedError as exc:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(exc)) from exc
 
-    for field in (
-        "push_name",
-        "business_name",
-        "verified_name",
-        "about",
-        "profile_picture_url",
-        "is_on_whatsapp",
-    ):
-        value = getattr(profile, field)
-        if value is not None:
-            setattr(contact, field, value)
-    if not contact.name and profile.push_name:
-        contact.name = profile.push_name
-    contact.profile_synced_at = datetime.now(UTC)
-    contact.profile_sync_error = profile.error
     db.commit()
     await realtime_manager.broadcast(
         context.tenant_id,

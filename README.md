@@ -82,7 +82,7 @@ de desenvolvimento.
 
 ## Escopo do MVP
 
-O MVP cobre login, canais WhatsApp, filas de conversas, quadro operacional da equipe, assumir/finalizar atendimento, mensagens de texto e anexos básicos, respostas rápidas, perfil operacional básico do contato, webhook, status/QR e realtime em uma única réplica da API.
+O MVP cobre login, canais WhatsApp, filas de conversas, quadro operacional da equipe, sincronização operacional administrativa, assumir/finalizar atendimento, mensagens de texto e anexos básicos, respostas rápidas, perfil operacional básico do contato, webhook, status/QR e realtime em uma única réplica da API.
 
 Não entram agora: dashboard, CRM, IA, billing, campanhas, Meta Cloud completa, BSP completo, automações avançadas e arquitetura herdada do Chatwoot. Veja [docs/MVP_SCOPE.md](docs/MVP_SCOPE.md).
 
@@ -95,6 +95,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
 - Os endpoints iniciais existem e são tenant-scoped.
 - Assumir uma conversa é atômico; atendentes não podem sobrescrever a atribuição ativa. Administradores podem assumir ou transferir o atendimento para outro usuário ativo da própria empresa, com registro em auditoria.
 - O **Quadro da equipe** é exclusivo para administradores e organiza a fila aguardando e os atendimentos de cada usuário ativo. O admin arrasta os cards, usa o seletor para transferir ou devolve uma conversa à fila, sempre pela API auditada.
+- A tela **Sincronização** é exclusiva para administradores e executa no worker a atualização de até 50 contatos conhecidos, a reconciliação de até 500 edições/recibos recentes já persistidos ou ambas. Ela mostra progresso auditável por canal e não promete importar o histórico completo do WhatsApp.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing é persistida como `pending` antes da chamada externa.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
@@ -105,5 +106,5 @@ O navegador fala exclusivamente com o Fluvius Core; a API resolve o provider con
   uma bolha `[text]`; reações ficam fora do MVP.
 - O composer e a API bloqueiam envio com o canal offline.
 - O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia, seletor de emojis, botão dedicado para figurinha e um menu de anexos separado em fotos/vídeos, documentos e áudio, além de colagem e arrastar e soltar. PNG/JPG escolhidos como figurinha são convertidos para WebP 512×512 e enviados pelo fluxo nativo de sticker, sem legenda. Áudios usam player próprio com progresso e velocidades `1x`, `1,5x` e `2x`.
-- O worker RQ está disponível, mas o envio ainda é síncrono para manter simples a confirmação nesta etapa.
+- O worker RQ executa as sincronizações administrativas; o envio continua síncrono para manter simples a confirmação nesta etapa.
 - Payloads e rotas exatas do Evolution Go devem ser validados contra o Swagger da imagem escolhida antes de produção.
