@@ -4,6 +4,7 @@ import AdminSyncPage from './pages/AdminSyncPage.vue'
 import ChannelsPage from './pages/ChannelsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
+import OperationalHealthPage from './pages/OperationalHealthPage.vue'
 import PlatformTenantsPage from './pages/PlatformTenantsPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
 import TeamBoardPage from './pages/TeamBoardPage.vue'
@@ -39,6 +40,11 @@ export const router = createRouter({
         {
           path: 'settings/sync',
           component: AdminSyncPage,
+          meta: { admin: true },
+        },
+        {
+          path: 'settings/operations',
+          component: OperationalHealthPage,
           meta: { admin: true },
         },
         {

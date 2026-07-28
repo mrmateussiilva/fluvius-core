@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
+  AlertTriangle,
   Building2,
   Check,
   Columns3,
   DatabaseBackup,
+  HeartPulse,
   LogOut,
   MessageCircle,
   Settings,
@@ -15,9 +17,11 @@ import { listAvailableTenants } from '../api/auth'
 import type { AvailableTenant } from '../api/types'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/authStore'
+import { useOperationalStore } from '../stores/operationalStore'
 import { useRealtimeStore } from '../stores/realtimeStore'
 
 const auth = useAuthStore()
+const operations = useOperationalStore()
 const realtime = useRealtimeStore()
 const router = useRouter()
 const userInitial = computed(() => auth.user?.name?.trim().charAt(0).toUpperCase() || 'U')
@@ -25,14 +29,34 @@ const availableTenants = ref<AvailableTenant[]>([])
 const tenantMenuOpen = ref(false)
 const tenantSwitching = ref(false)
 const tenantError = ref('')
+const operationalAlert = computed(() => {
+  if (operations.error) return operations.error
+  if (operations.health?.status === 'critical') {
+    return operations.health.issues[0] || 'A operação exige ação imediata.'
+  }
+  if (operations.health?.status === 'attention') {
+    return operations.health.issues[0] || 'A operação exige atenção.'
+  }
+  return ''
+})
+const operationalAlertClass = computed(() =>
+  operations.health?.status === 'critical' || operations.error
+    ? 'border-rose-200 bg-rose-50 text-rose-800'
+    : 'border-amber-200 bg-amber-50 text-amber-900',
+)
 
 onMounted(async () => {
   try {
     await auth.restore()
+    if (auth.user?.role === 'admin') operations.startPolling()
     availableTenants.value = await listAvailableTenants()
   } catch {
     availableTenants.value = []
   }
+})
+
+onBeforeUnmount(() => {
+  operations.stopPolling()
 })
 
 async function logout() {
@@ -169,6 +193,24 @@ async function selectTenant(tenantId: string) {
         <DatabaseBackup class="h-5 w-5" />
       </RouterLink>
       <RouterLink
+        v-if="auth.user?.role === 'admin'"
+        class="relative mt-1.5 rounded-xl p-3 transition hover:bg-white/10 hover:text-white"
+        active-class="bg-white/15 text-white shadow-sm"
+        to="/app/settings/operations"
+        title="Saúde operacional"
+      >
+        <HeartPulse class="h-5 w-5" />
+        <span
+          v-if="operationalAlert"
+          class="absolute right-2 top-2 h-2 w-2 rounded-full ring-2 ring-fluvius-900"
+          :class="
+            operations.health?.status === 'critical' || operations.error
+              ? 'bg-rose-400'
+              : 'bg-amber-300'
+          "
+        />
+      </RouterLink>
+      <RouterLink
         v-if="auth.user?.is_platform_admin"
         class="mt-1.5 rounded-xl p-2.5 text-amber-200 transition hover:bg-white/10 hover:text-amber-100"
         active-class="bg-amber-400/15 text-amber-100 shadow-sm"
@@ -184,8 +226,20 @@ async function selectTenant(tenantId: string) {
         <LogOut class="h-5 w-5" />
       </button>
     </nav>
-    <main class="min-w-0 flex-1 overflow-hidden">
-      <RouterView />
+    <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <RouterLink
+        v-if="auth.user?.role === 'admin' && operationalAlert"
+        class="flex shrink-0 items-center gap-2 border-b px-4 py-2 text-xs font-medium"
+        :class="operationalAlertClass"
+        to="/app/settings/operations"
+      >
+        <AlertTriangle class="h-4 w-4 shrink-0" />
+        <span class="truncate">{{ operationalAlert }}</span>
+        <span class="ml-auto shrink-0 font-semibold">Ver saúde</span>
+      </RouterLink>
+      <div class="min-h-0 flex-1 overflow-hidden">
+        <RouterView />
+      </div>
     </main>
   </div>
 </template>

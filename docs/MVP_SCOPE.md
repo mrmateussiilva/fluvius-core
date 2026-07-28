@@ -18,6 +18,9 @@
 - Assumir e finalizar atendimento, com takeover e transferência por administradores para usuários ativos da própria empresa.
 - Quadro operacional exclusivo para administradores, com fila aguardando, colunas por atendente, atualização realtime e redistribuição por drag-and-drop ou seletor.
 - Sincronização operacional exclusiva para administradores: atualização limitada dos contatos conhecidos e reconciliação de edições/recibos recentes já recebidos.
+- Saúde operacional exclusiva para administradores da empresa: presença dos
+  workers, disponibilidade do Redis, entregas pendentes/atrasadas, falhas das
+  últimas 24 horas e estado dos canais, com alerta global na interface.
 - Receber e enviar texto.
 - Entrega assíncrona de texto e mídia por worker exclusivo, com outbox
   persistente, ordem por conversa e retry conservador.

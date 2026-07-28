@@ -114,6 +114,14 @@ Desativar uma membership invalida imediatamente o acesso porque toda requisiçã
 
 O quadro operacional e `/api/v1/users/active` exigem papel `admin`. O endpoint expõe somente ID, nome, papel e canais dos usuários ativos do tenant autenticado, sem e-mail ou dados de acesso. Conversas e quadro oferecem seletor de canal; somente o administrador recebe a opção consolidada “Todos os canais”. As colunas são calculadas no navegador a partir das conversas existentes e uma conversa só pode ser atribuída a um atendente autorizado para seu canal. Drag-and-drop e o seletor dos cards chamam exclusivamente os endpoints tenant-scoped de atribuição ou liberação. Liberar move uma conversa `open` para `new`, remove o responsável e registra `conversation.released` em `audit_logs`.
 
+`GET /api/v1/operations/health` também exige papel `admin`. Ele combina o
+registro de workers ativos do RQ com contagens tenant-scoped da outbox e dos
+canais. Uma entrega `pending` há mais de dois minutos é considerada atrasada;
+falhas são contadas numa janela de 24 horas. A resposta nunca contém jobs ou
+dados de outros tenants, mesmo que Redis e os workers sejam compartilhados. O
+frontend consulta esse retrato a cada 30 segundos enquanto a aba está visível e
+mostra um alerta global quando a operação exige atenção.
+
 ## Administração da plataforma
 
 `User.is_platform_admin` é uma autorização global distinta do papel `admin` de
@@ -186,7 +194,9 @@ passam pelo bootstrap da API e precisam resolver as chaves estrangeiras no
 próprio metadata SQLAlchemy. O dispatcher consulta o estado do job no RQ para
 recuperar rapidamente entregas que falharam antes do efeito externo e só
 enfileira a mensagem pendente mais antiga de cada conversa; o worker repete a
-mesma validação antes de chamar o provider.
+mesma validação antes de chamar o provider. Se uma exceção interna escapar do
+processamento, o worker tenta persistir a falha segura e relança a exceção para
+que o próprio RQ registre o job como falho.
 
 ## Storage
 

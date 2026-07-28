@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -27,6 +28,7 @@ from app.sync.models import SyncRun
 
 CONTACT_SYNC_LIMIT = 50
 MESSAGE_SYNC_LIMIT = 500
+logger = logging.getLogger(__name__)
 PENDING_MESSAGE_ERRORS = (
     "Aguardando a mensagem correspondente ser confirmada pelo provider",
     "Aguardando a mensagem original da edição ser persistida",
@@ -44,7 +46,21 @@ def run_sync(sync_run_id: str, tenant_id: str) -> None:
     try:
         asyncio.run(_run_sync(run_id, scoped_tenant_id))
     except Exception:
-        _mark_fatal_failure(run_id, scoped_tenant_id)
+        logger.exception(
+            "Falha interna na sincronização %s do tenant %s",
+            run_id,
+            scoped_tenant_id,
+        )
+        try:
+            _mark_fatal_failure(run_id, scoped_tenant_id)
+        except Exception:
+            logger.exception(
+                "Não foi possível persistir a falha da sincronização %s "
+                "do tenant %s",
+                run_id,
+                scoped_tenant_id,
+            )
+        raise
 
 
 async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:

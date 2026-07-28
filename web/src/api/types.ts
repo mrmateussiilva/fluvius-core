@@ -5,6 +5,7 @@ export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 's
 export type UserRole = 'admin' | 'agent'
 export type SyncType = 'contacts' | 'messages' | 'all'
 export type SyncStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed'
+export type OperationalStatus = 'healthy' | 'attention' | 'critical'
 
 export interface CurrentUser {
   id: string
@@ -100,6 +101,30 @@ export interface Channel {
   provider: 'evolution_go' | 'meta_cloud' | 'bsp'
   status: ChannelStatus
   provider_config: Record<string, unknown>
+}
+
+export interface OperationalChannelHealth {
+  id: string
+  name: string
+  phone_number: string | null
+  status: ChannelStatus
+  last_event_at: string | null
+}
+
+export interface OperationalHealth {
+  status: OperationalStatus
+  generated_at: string
+  redis_available: boolean
+  delivery_worker_online: boolean
+  maintenance_worker_online: boolean
+  pending_deliveries: number
+  delayed_deliveries: number
+  failed_deliveries_24h: number
+  oldest_pending_at: string | null
+  connected_channels: number
+  total_channels: number
+  issues: string[]
+  channels: OperationalChannelHealth[]
 }
 
 export interface Conversation {

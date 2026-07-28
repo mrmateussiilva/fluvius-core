@@ -18,6 +18,7 @@ from app.conversations.router import router as conversations_router
 from app.database import engine, load_all_models
 from app.delivery.dispatcher import delivery_dispatcher_loop
 from app.messages.router import router as messages_router
+from app.operations.router import router as operations_router
 from app.platform.router import router as platform_router
 from app.providers.webhook_router import router as webhook_router
 from app.quick_replies.router import router as quick_replies_router
@@ -98,6 +99,7 @@ app.include_router(channels_router, prefix=settings.api_v1_prefix)
 app.include_router(contacts_router, prefix=settings.api_v1_prefix)
 app.include_router(conversations_router, prefix=settings.api_v1_prefix)
 app.include_router(messages_router, prefix=settings.api_v1_prefix)
+app.include_router(operations_router, prefix=settings.api_v1_prefix)
 app.include_router(platform_router, prefix=settings.api_v1_prefix)
 app.include_router(quick_replies_router, prefix=settings.api_v1_prefix)
 app.include_router(users_router, prefix=settings.api_v1_prefix)

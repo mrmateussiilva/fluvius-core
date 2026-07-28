@@ -172,6 +172,14 @@ O endpoint `/health/live` confirma o processo. `/health/ready` exige conexão
 positiva com PostgreSQL e Redis. Os containers usam `restart: unless-stopped`,
 healthchecks, limites de recursos, limite de PIDs e rotação do log local.
 
+Administradores de cada empresa também possuem **Saúde operacional** no menu.
+A tela verifica a cada 30 segundos a presença dos workers de entrega e
+manutenção, entregas aguardando há mais de dois minutos, falhas nas últimas 24
+horas e o estado/último evento dos canais daquele tenant. Alertas amarelos
+indicam degradação; alertas vermelhos indicam risco direto para o envio. Durante
+um deploy, o aviso de worker offline pode aparecer transitoriamente até o novo
+processo registrar seu heartbeat no RQ.
+
 Para rollback de código, voltar ao commit anterior de forma não destrutiva,
 reconstruir e subir novamente. Migration de banco só pode ser revertida após
 analisar se houve escrita no schema novo; na dúvida, restaurar em ambiente

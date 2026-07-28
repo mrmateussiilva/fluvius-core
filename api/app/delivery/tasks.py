@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -33,6 +34,7 @@ from app.realtime.broker import publish_realtime_event
 
 
 RETRY_DELAYS_SECONDS = (5, 30, 120)
+logger = logging.getLogger(__name__)
 SAFE_INTERNAL_ERROR = (
     "O envio foi interrompido antes de receber uma confirmação segura."
 )
@@ -49,7 +51,20 @@ def run_delivery(delivery_id: str, tenant_id: str) -> None:
     try:
         asyncio.run(_run_delivery(scoped_delivery_id, scoped_tenant_id))
     except Exception:
-        _mark_internal_failure(scoped_delivery_id, scoped_tenant_id)
+        logger.exception(
+            "Falha interna na entrega %s do tenant %s",
+            scoped_delivery_id,
+            scoped_tenant_id,
+        )
+        try:
+            _mark_internal_failure(scoped_delivery_id, scoped_tenant_id)
+        except Exception:
+            logger.exception(
+                "Não foi possível persistir a falha da entrega %s do tenant %s",
+                scoped_delivery_id,
+                scoped_tenant_id,
+            )
+        raise
 
 
 async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:

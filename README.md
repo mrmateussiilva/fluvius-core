@@ -128,6 +128,10 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
 - Assumir uma conversa é atômico; atendentes não podem sobrescrever a atribuição ativa. Administradores podem assumir ou transferir o atendimento para outro usuário ativo da própria empresa, com registro em auditoria.
 - O **Quadro da equipe** é exclusivo para administradores e organiza a fila aguardando e os atendimentos de cada usuário ativo. O admin arrasta os cards, usa o seletor para transferir ou devolve uma conversa à fila, sempre pela API auditada.
 - A tela **Sincronização** é exclusiva para administradores e executa no worker a atualização de até 50 contatos conhecidos, a reconciliação de até 500 edições/recibos recentes já persistidos ou ambas. Ela mostra progresso auditável por canal e não promete importar o histórico completo do WhatsApp.
+- A tela **Saúde operacional** é exclusiva para administradores da empresa e
+  acompanha Redis, presença dos dois workers, entregas pendentes ou atrasadas,
+  falhas recentes e conexão dos canais. Situações de atenção ou críticas também
+  aparecem no topo da área autenticada, com atualização automática.
 - Responder, reenviar e finalizar exigem que a conversa esteja atribuída ao agente autenticado.
 - A mensagem outgoing e sua outbox são persistidas juntas antes da chamada externa. A API responde `202/pending`, e um delivery worker exclusivo processa a fila sem concorrer com sincronizações administrativas.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
@@ -147,5 +151,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
 - O chat preserva rascunho e posição por conversa, não força a rolagem de quem lê o histórico e só marca leitura quando o final está visível. A interface agrupa mensagens consecutivas, oferece ações contextuais, visualização ampliada de mídia, seletor de emojis, botão dedicado para figurinha e um menu de anexos separado em fotos/vídeos, documentos e áudio, além de colagem e arrastar e soltar. PNG/JPG escolhidos como figurinha são convertidos para WebP 512×512 e enviados pelo fluxo nativo de sticker, sem legenda. Áudios usam player próprio com progresso e velocidades `1x`, `1,5x` e `2x`.
 - Redis possui filas separadas de entrega e manutenção. O PostgreSQL recupera
   uma entrega que não chegou ao Redis, preserva a ordem por conversa e limita
-  retries automáticos a falhas comprovadamente transitórias.
+  retries automáticos a falhas comprovadamente transitórias. Exceções internas
+  dos workers também encerram o job como falha no RQ, sem produzir um falso
+  `Job OK` nos logs.
 - Payloads e rotas exatas do Evolution Go devem ser validados contra o Swagger da imagem escolhida antes de produção.
