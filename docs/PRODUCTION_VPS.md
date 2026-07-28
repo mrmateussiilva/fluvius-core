@@ -144,6 +144,14 @@ docker compose \
 
 ## Operação
 
+O deploy de produção é feito em etapas pelo script
+`deploy/scripts/production-deploy.sh`: primeiro valida e constrói as imagens,
+garante Postgres/Redis/Evolution Go, roda as migrations em um container
+temporário, troca a API já sem executar migration no boot, depois atualiza os
+workers e por último o frontend. Esse fluxo reduz a janela de 502 do Caddy
+durante publicação. Zero downtime completo exigirá blue/green com duas
+instâncias ativas ou troca atômica de upstream.
+
 ```bash
 # Estado
 docker compose --env-file .env.production -f docker-compose.prod.yml ps

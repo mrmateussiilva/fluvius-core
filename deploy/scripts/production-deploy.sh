@@ -34,8 +34,15 @@ wait_for_url() {
 
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" build
-"${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 300
+
+"${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 300 \
+  postgres redis evolution-go
+"${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
+"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 api
 "${COMPOSE[@]}" exec -T api alembic current
+"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 \
+  worker delivery-worker
+"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 web
 "${COMPOSE[@]}" ps
 
 wait_for_url \
