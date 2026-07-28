@@ -16,6 +16,7 @@ import {
 import { listAvailableTenants } from '../api/auth'
 import type { AvailableTenant } from '../api/types'
 import { useRouter } from 'vue-router'
+import { APP_NAME, APP_VERSION } from '../config/app'
 import { useAuthStore } from '../stores/authStore'
 import { useOperationalStore } from '../stores/operationalStore'
 import { useRealtimeStore } from '../stores/realtimeStore'
@@ -93,7 +94,7 @@ async function selectTenant(tenantId: string) {
     <nav class="relative flex w-[68px] shrink-0 flex-col items-center bg-fluvius-900 py-4 text-emerald-50/70 shadow-xl shadow-slate-900/10">
       <div
         class="mb-2 grid h-10 w-10 place-items-center rounded-xl bg-white font-bold text-fluvius-800 shadow-sm"
-        :title="`Fluvius Core · ${auth.user?.tenant_name || 'Empresa'}`"
+        :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
       >
         F
       </div>
@@ -219,7 +220,13 @@ async function selectTenant(tenantId: string) {
       >
         <Building2 class="h-5 w-5" />
       </RouterLink>
-      <div class="mt-auto grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10" :title="auth.user?.name || 'Usuário'">
+      <div
+        class="mb-3 mt-auto select-none text-[10px] font-semibold leading-none text-emerald-50/45"
+        :title="`${APP_NAME} v${APP_VERSION}`"
+      >
+        v{{ APP_VERSION }}
+      </div>
+      <div class="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10" :title="auth.user?.name || 'Usuário'">
         {{ userInitial }}
       </div>
       <button class="mt-2 rounded-xl p-2.5 transition hover:bg-white/10 hover:text-white" title="Sair" @click="logout">
