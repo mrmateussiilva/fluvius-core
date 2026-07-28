@@ -57,6 +57,10 @@ sudo ./deploy/scripts/install-ubuntu.sh
 O pipeline de GitHub Actions valida API, frontend e Compose antes de publicar o
 SHA aprovado na VPS por SSH. A configuração dos secrets, da chave do host e da
 trava de ativação está em [docs/GITHUB_ACTIONS.md](docs/GITHUB_ACTIONS.md).
+O deploy publicado na VPS roda em etapas pelo script
+`deploy/scripts/production-deploy.sh`: migrations em container temporário,
+troca da API sem migration no boot, workers depois da API e frontend por
+último. Não substitua esse fluxo por `docker compose up` genérico em produção.
 
 Use `docker-compose.prod.yml`; o Compose local continua destinado ao
 desenvolvimento. Instalação, firewall, backups, restauração e operação estão em

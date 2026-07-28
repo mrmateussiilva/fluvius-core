@@ -75,3 +75,23 @@ execuções simultâneas na VPS.
 O SHA implantado fica em `.deploy-state/last-successful-sha`. Em falha, o
 workflow mantém os containers e logs para diagnóstico; migrations não sofrem
 rollback automático.
+
+## Comportamento do deploy
+
+O workflow executa `deploy/scripts/production-deploy.sh` na VPS. Esse script
+não deve ser substituído por um `docker compose up` genérico, porque ele
+preserva algumas garantias operacionais:
+
+- valida o Compose e constrói as imagens antes de tocar nos containers ativos;
+- mantém Postgres, Redis e Evolution Go separados da troca cotidiana de código;
+- roda `alembic upgrade head` em um container temporário antes de reiniciar a
+  API;
+- inicia a API sem rodar migration no boot;
+- atualiza API, workers e frontend em etapas;
+- grava o SHA publicado em `.deploy-state/last-successful-sha` somente depois
+  dos healthchecks passarem.
+
+Esse fluxo reduz a janela em que o Caddy pode retornar 502 durante deploys.
+Ainda não é zero downtime absoluto: a produção possui uma única API e um único
+container `web` atrás do Caddy do host. Para eliminar a troca curta restante,
+implementar blue/green com duas instâncias ativas e troca atômica de upstream.

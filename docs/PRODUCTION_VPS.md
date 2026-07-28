@@ -152,6 +152,10 @@ workers e por último o frontend. Esse fluxo reduz a janela de 502 do Caddy
 durante publicação. Zero downtime completo exigirá blue/green com duas
 instâncias ativas ou troca atômica de upstream.
 
+Não troque esse script por `docker compose up -d --build` em produção. O fluxo
+genérico recria serviços em bloco, pode deixar o Caddy sem upstream por mais
+tempo e volta a acoplar migration ao boot da API.
+
 ```bash
 # Estado
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
@@ -181,6 +185,14 @@ após testes, build e validação do Compose. O servidor só aceita o SHA exato 
 `main` validado no pipeline. Consulte
 [GITHUB_ACTIONS.md](GITHUB_ACTIONS.md) para cadastrar a chave SSH, os secrets e
 ativar o deploy.
+
+Depois de um deploy, valide:
+
+```bash
+curl -fsS https://fluvius.finderbit.com.br/health/ready
+cat .deploy-state/last-successful-sha
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+```
 
 O endpoint `/health/live` confirma o processo. `/health/ready` exige conexão
 positiva com PostgreSQL e Redis. Os containers usam `restart: unless-stopped`,
