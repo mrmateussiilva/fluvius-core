@@ -16,27 +16,44 @@ COMPOSE=(
   -f "$PROJECT_ROOT/docker-compose.prod.yml"
 )
 
+wait_for_url() {
+  local url=$1
+  local label=$2
+  local attempts=${3:-30}
+
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+
+  echo "$label não respondeu após $((attempts * 2)) segundos: $url" >&2
+  return 1
+}
+
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" build
-"${COMPOSE[@]}" up -d --remove-orphans
+"${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 300
 "${COMPOSE[@]}" exec -T api alembic current
 "${COMPOSE[@]}" ps
 
-curl -fsS \
+wait_for_url \
   "http://127.0.0.1:${FLUVIUS_API_PORT:-18000}/health/ready" \
-  >/dev/null
-curl -fsS \
+  "API interna"
+wait_for_url \
   "http://127.0.0.1:${FLUVIUS_WEB_PORT:-18080}/" \
-  >/dev/null
+  "Frontend interno"
+wait_for_url "https://$APP_DOMAIN/health/ready" "Domínio público"
 
-for attempt in {1..30}; do
-  if curl -fsS "https://$APP_DOMAIN/health/ready" >/dev/null; then
-    echo "Deploy concluído: https://$APP_DOMAIN"
-    exit 0
-  fi
-  sleep 2
-done
+DEPLOY_SHA=${FLUVIUS_DEPLOY_SHA:-}
+if [[ -z "$DEPLOY_SHA" ]] && git -C "$PROJECT_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+  DEPLOY_SHA=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+fi
+if [[ -n "$DEPLOY_SHA" ]]; then
+  mkdir -p "$PROJECT_ROOT/.deploy-state"
+  printf '%s\n' "$DEPLOY_SHA" \
+    > "$PROJECT_ROOT/.deploy-state/last-successful-sha"
+fi
 
-echo "Os containers estão prontos, mas o domínio não respondeu." >&2
-echo "Valide e recarregue o Caddy do host com deploy/Caddyfile.host." >&2
-exit 1
+echo "Deploy concluído: https://$APP_DOMAIN (${DEPLOY_SHA:-sha desconhecido})"

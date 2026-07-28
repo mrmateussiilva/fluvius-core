@@ -168,6 +168,12 @@ git pull --ff-only
 ./deploy/scripts/production-deploy.sh
 ```
 
+Em operação normal, esse fluxo é executado automaticamente pelo GitHub Actions
+após testes, build e validação do Compose. O servidor só aceita o SHA exato da
+`main` validado no pipeline. Consulte
+[GITHUB_ACTIONS.md](GITHUB_ACTIONS.md) para cadastrar a chave SSH, os secrets e
+ativar o deploy.
+
 O endpoint `/health/live` confirma o processo. `/health/ready` exige conexão
 positiva com PostgreSQL e Redis. Os containers usam `restart: unless-stopped`,
 healthchecks, limites de recursos, limite de PIDs e rotação do log local.

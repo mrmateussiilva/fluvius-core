@@ -1,0 +1,163 @@
+name: CI and production deploy
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-tests:
+    name: API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run migrations and API tests
+        run: ./scripts/test-integration.sh
+
+  web-build:
+    name: Web build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  compose-config:
+    name: Compose configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate development Compose
+        run: docker compose config --quiet
+
+      - name: Validate production Compose
+        run: >-
+          docker compose
+          --env-file .env.production.example
+          -f docker-compose.prod.yml
+          config --quiet
+
+  deploy-production:
+    name: Deploy production
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      vars.PRODUCTION_DEPLOY_ENABLED == 'true'
+    needs:
+      - api-tests
+      - web-build
+      - compose-config
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+    concurrency:
+      group: fluvius-production
+      cancel-in-progress: false
+    env:
+      SSH_HOST: ${{ secrets.VPS_HOST }}
+      SSH_PORT: ${{ secrets.VPS_PORT }}
+      SSH_USER: ${{ secrets.VPS_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      DEPLOY_SHA: ${{ github.sha }}
+    steps:
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${SSH_HOST:?Configure o secret VPS_HOST}"
+          : "${SSH_PORT:?Configure o secret VPS_PORT}"
+          : "${SSH_USER:?Configure o secret VPS_USER}"
+          : "${SSH_PRIVATE_KEY:?Configure o secret VPS_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Configure o secret VPS_KNOWN_HOSTS}"
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/fluvius-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            > "$RUNNER_TEMP/fluvius-ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" \
+            > "$RUNNER_TEMP/fluvius-ssh/known_hosts"
+
+      - name: Deploy validated commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$RUNNER_TEMP/fluvius-ssh/id_ed25519" \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/fluvius-ssh/known_hosts" \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            "$SSH_USER@$SSH_HOST" \
+            "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
+          set -euo pipefail
+
+          deploy_sha=$1
+          project_root=/opt/apps/fluvius-core
+
+          mkdir -p "$project_root/.deploy-state"
+          exec 9>"$project_root/.deploy-state/deploy.lock"
+          if ! flock -n 9; then
+            echo "Outro deploy já está em execução." >&2
+            exit 1
+          fi
+
+          cd "$project_root"
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "A VPS possui alterações rastreadas; deploy interrompido." >&2
+            git status --short
+            exit 1
+          fi
+
+          git fetch --prune origin main
+          origin_sha=$(git rev-parse origin/main)
+          if [[ "$origin_sha" != "$deploy_sha" ]]; then
+            echo "O origin/main avançou; este deploy antigo foi ignorado." >&2
+            exit 1
+          fi
+
+          git switch main
+          git merge --ff-only "$deploy_sha"
+          FLUVIUS_DEPLOY_SHA="$deploy_sha" \
+            ./deploy/scripts/production-deploy.sh
+          REMOTE
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/fluvius-ssh"

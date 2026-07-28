@@ -19,6 +19,7 @@ htmlcov/
 
 # Runtime data
 api/storage/
+.deploy-state/
 
 # Node / Vite
 web/node_modules/
