@@ -1,0 +1,240 @@
+name: Production deploy
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag para deploy, exemplo: v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fluvius-production
+  cancel-in-progress: false
+
+jobs:
+  validate-tag:
+    name: Validate deployment tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+      sha: ${{ steps.tag.outputs.sha }}
+    env:
+      DEPLOY_VERSION: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag and checkout exact commit
+        id: tag
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${DEPLOY_VERSION:?Tag de deploy ausente}"
+          if [[ ! "$DEPLOY_VERSION" =~ ^v[0-9]+[.][0-9]+[.][0-9]+([-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Tag inválida: $DEPLOY_VERSION. Use formato semver, exemplo v0.1.0." >&2
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$DEPLOY_VERSION" >/dev/null; then
+            echo "Tag não encontrada no origin: $DEPLOY_VERSION" >&2
+            exit 1
+          fi
+          git fetch origin --tags --force
+          if ! git rev-parse -q --verify "refs/tags/$DEPLOY_VERSION^{commit}" >/dev/null; then
+            echo "Tag não encontrada no origin: $DEPLOY_VERSION" >&2
+            exit 1
+          fi
+          target_sha=$(git rev-parse "refs/tags/$DEPLOY_VERSION^{commit}")
+          git checkout --detach "$DEPLOY_VERSION"
+          current_sha=$(git rev-parse HEAD)
+          if [[ "$current_sha" != "$target_sha" ]]; then
+            echo "Checkout terminou em $current_sha, esperado $target_sha." >&2
+            exit 1
+          fi
+          echo "Deploy validado para $DEPLOY_VERSION ($target_sha)."
+          echo "version=$DEPLOY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$target_sha" >> "$GITHUB_OUTPUT"
+
+  api-tests:
+    name: API tests
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout deployment tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.version }}
+
+      - name: Run migrations and API tests
+        run: ./scripts/test-integration.sh
+
+  web-build:
+    name: Web build
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout deployment tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.version }}
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  compose-config:
+    name: Compose configuration
+    needs: validate-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout deployment tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.version }}
+
+      - name: Validate development Compose
+        run: docker compose config --quiet
+
+      - name: Validate production Compose
+        run: >-
+          docker compose
+          --env-file .env.production.example
+          -f docker-compose.prod.yml
+          config --quiet
+
+  deploy-production:
+    name: Deploy production
+    needs:
+      - validate-tag
+      - api-tests
+      - web-build
+      - compose-config
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.VPS_HOST }}
+      SSH_PORT: ${{ secrets.VPS_PORT }}
+      SSH_USER: ${{ secrets.VPS_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      DEPLOY_VERSION: ${{ needs.validate-tag.outputs.version }}
+      DEPLOY_SHA: ${{ needs.validate-tag.outputs.sha }}
+    steps:
+      - name: Checkout deployment tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate-tag.outputs.version }}
+
+      - name: Validate checkout
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          current_sha=$(git rev-parse HEAD)
+          if [[ "$current_sha" != "$DEPLOY_SHA" ]]; then
+            echo "Checkout terminou em $current_sha, esperado $DEPLOY_SHA." >&2
+            exit 1
+          fi
+          echo "Tag pronta para deploy: $DEPLOY_VERSION ($DEPLOY_SHA)."
+
+      - name: Validate deployment secrets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${SSH_HOST:?Configure o secret VPS_HOST}"
+          : "${SSH_PORT:?Configure o secret VPS_PORT}"
+          : "${SSH_USER:?Configure o secret VPS_USER}"
+          : "${SSH_PRIVATE_KEY:?Configure o secret VPS_SSH_PRIVATE_KEY}"
+          : "${SSH_KNOWN_HOSTS:?Configure o secret VPS_KNOWN_HOSTS}"
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/fluvius-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" \
+            > "$RUNNER_TEMP/fluvius-ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" \
+            > "$RUNNER_TEMP/fluvius-ssh/known_hosts"
+
+      - name: Deploy release tag
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh \
+            -i "$RUNNER_TEMP/fluvius-ssh/id_ed25519" \
+            -p "$SSH_PORT" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/fluvius-ssh/known_hosts" \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            "$SSH_USER@$SSH_HOST" \
+            "bash -s -- '$DEPLOY_VERSION' '$DEPLOY_SHA'" <<'REMOTE'
+          set -Eeuo pipefail
+
+          deploy_version=$1
+          expected_sha=$2
+          project_root=/opt/apps/fluvius-core
+
+          cd "$project_root"
+          if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+            echo "A VPS possui alterações rastreadas; deploy interrompido." >&2
+            git status --short
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$deploy_version" >/dev/null; then
+            echo "Tag não encontrada no origin pela VPS: $deploy_version" >&2
+            exit 1
+          fi
+          git fetch origin --tags --force
+          if ! git rev-parse -q --verify "refs/tags/$deploy_version^{commit}" >/dev/null; then
+            echo "Tag não encontrada na VPS: $deploy_version" >&2
+            exit 1
+          fi
+          target_sha=$(git rev-parse "refs/tags/$deploy_version^{commit}")
+          if [[ "$target_sha" != "$expected_sha" ]]; then
+            echo "Tag $deploy_version aponta para $target_sha na VPS, esperado $expected_sha." >&2
+            exit 1
+          fi
+          git checkout --detach "$deploy_version"
+          current_sha=$(git rev-parse HEAD)
+          if [[ "$current_sha" != "$target_sha" ]]; then
+            echo "Checkout na VPS terminou em $current_sha, esperado $target_sha." >&2
+            exit 1
+          fi
+          echo "Deploy remoto: $deploy_version ($current_sha)."
+          FLUVIUS_EXPECTED_DEPLOY_SHA="$expected_sha" \
+            ./deploy/scripts/production-deploy.sh "$deploy_version"
+          REMOTE
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/fluvius-ssh"

@@ -1,8 +1,53 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
+VERSION="${1:?Informe a versão para deploy}"
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ENV_FILE=${FLUVIUS_ENV_FILE:-"$PROJECT_ROOT/.env.production"}
+EXPECTED_DEPLOY_SHA=${FLUVIUS_EXPECTED_DEPLOY_SHA:-}
+
+if [[ ! "$VERSION" =~ ^v[0-9]+[.][0-9]+[.][0-9]+([-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+  echo "Tag inválida: $VERSION. Use formato semver, exemplo v0.1.0." >&2
+  exit 1
+fi
+
+mkdir -p "$PROJECT_ROOT/.deploy-state"
+exec 9>"$PROJECT_ROOT/.deploy-state/deploy.lock"
+if ! flock -n 9; then
+  echo "Outro deploy já está em execução." >&2
+  exit 1
+fi
+
+cd "$PROJECT_ROOT"
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+  echo "A VPS possui alterações rastreadas; deploy interrompido." >&2
+  git status --short
+  exit 1
+fi
+
+if ! git ls-remote --exit-code --tags origin "refs/tags/$VERSION" >/dev/null; then
+  echo "Tag não encontrada no origin: $VERSION" >&2
+  exit 1
+fi
+git fetch origin --tags --force
+if ! git rev-parse -q --verify "refs/tags/$VERSION^{commit}" >/dev/null; then
+  echo "Tag não encontrada no origin: $VERSION" >&2
+  exit 1
+fi
+DEPLOY_SHA=$(git rev-parse "refs/tags/$VERSION^{commit}")
+if [[ -n "$EXPECTED_DEPLOY_SHA" && "$DEPLOY_SHA" != "$EXPECTED_DEPLOY_SHA" ]]; then
+  echo "Tag $VERSION aponta para $DEPLOY_SHA, esperado $EXPECTED_DEPLOY_SHA." >&2
+  exit 1
+fi
+git checkout --detach "$VERSION"
+git reset --hard "$VERSION"
+CURRENT_SHA=$(git rev-parse HEAD)
+if [[ "$CURRENT_SHA" != "$DEPLOY_SHA" ]]; then
+  echo "Checkout terminou em $CURRENT_SHA, esperado $DEPLOY_SHA." >&2
+  exit 1
+fi
+echo "Implantando Fluvius $VERSION ($DEPLOY_SHA)."
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Crie $ENV_FILE antes do deploy." >&2
   exit 1
@@ -32,6 +77,29 @@ wait_for_url() {
   return 1
 }
 
+verify_services_running() {
+  local service
+  local status
+  local expected_services=(
+    postgres
+    redis
+    evolution-go
+    api
+    worker
+    delivery-worker
+    web
+  )
+
+  for service in "${expected_services[@]}"; do
+    status=$("${COMPOSE[@]}" ps --status running --services "$service" 2>/dev/null || true)
+    if [[ "$status" != "$service" ]]; then
+      echo "Container esperado não está running: $service" >&2
+      "${COMPOSE[@]}" ps
+      return 1
+    fi
+  done
+}
+
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" build
 
@@ -44,6 +112,7 @@ wait_for_url() {
   worker delivery-worker
 "${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 web
 "${COMPOSE[@]}" ps
+verify_services_running
 
 wait_for_url \
   "http://127.0.0.1:${FLUVIUS_API_PORT:-18000}/health/ready" \
@@ -53,14 +122,9 @@ wait_for_url \
   "Frontend interno"
 wait_for_url "https://$APP_DOMAIN/health/ready" "Domínio público"
 
-DEPLOY_SHA=${FLUVIUS_DEPLOY_SHA:-}
-if [[ -z "$DEPLOY_SHA" ]] && git -C "$PROJECT_ROOT" rev-parse HEAD >/dev/null 2>&1; then
-  DEPLOY_SHA=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
-fi
-if [[ -n "$DEPLOY_SHA" ]]; then
-  mkdir -p "$PROJECT_ROOT/.deploy-state"
-  printf '%s\n' "$DEPLOY_SHA" \
-    > "$PROJECT_ROOT/.deploy-state/last-successful-sha"
-fi
+printf '%s\n' "$VERSION" \
+  > "$PROJECT_ROOT/.deploy-state/last-successful-tag"
+printf '%s\n' "$DEPLOY_SHA" \
+  > "$PROJECT_ROOT/.deploy-state/last-successful-sha"
 
-echo "Deploy concluído: https://$APP_DOMAIN (${DEPLOY_SHA:-sha desconhecido})"
+echo "Deploy concluído: https://$APP_DOMAIN ($VERSION $DEPLOY_SHA)"

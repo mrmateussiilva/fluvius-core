@@ -82,4 +82,4 @@ else
   echo "Firewall não alterado. Rode novamente com --enable-firewall após confirmar a porta SSH."
 fi
 
-echo "Ubuntu preparado. Próximo passo: gere .env.production e execute production-deploy.sh."
+echo "Ubuntu preparado. Próximo passo: gere .env.production e execute production-deploy.sh vX.Y.Z."

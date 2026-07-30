@@ -1,10 +1,15 @@
 # GitHub Actions
 
-O workflow `.github/workflows/pipeline.yml` executa migrations/testes da API,
-build do frontend e validação dos arquivos Compose em pull requests, pushes na
-`main` e execuções manuais. O deploy só ocorre depois dos três jobs passarem e
-somente quando a variável de repositório `PRODUCTION_DEPLOY_ENABLED` vale
-`true`.
+O workflow `.github/workflows/pipeline.yml` executa CI em pull requests, pushes
+na `main` e execuções manuais. Ele roda migrations/testes da API, build do
+frontend e validação dos arquivos Compose. Push na `main` não faz deploy de
+produção.
+
+O deploy de produção fica em `.github/workflows/production-deploy.yml` e só é
+acionado por:
+
+- publicação de uma GitHub Release;
+- execução manual com `workflow_dispatch`, informando uma tag existente.
 
 ## Preparar o acesso da VPS
 
@@ -20,15 +25,15 @@ Antes de ativar o workflow, testar da máquina local:
 
 ```bash
 ssh -i ~/.ssh/fluvius_deploy -p 22022 deploy@129.121.38.224 \
-  'cd /opt/apps/fluvius-core && git fetch --dry-run origin main && docker compose version'
+  'cd /opt/apps/fluvius-core && git fetch origin --tags --dry-run && docker compose version'
 ```
 
 O repositório precisa permanecer sem alterações rastreadas na VPS. O arquivo
 `.env.production` é ignorado pelo Git e continua existindo somente no servidor.
 
-## Secrets e variável
+## Secrets
 
-Em **Settings → Secrets and variables → Actions**, criar estes repository
+Em **Settings -> Secrets and variables -> Actions**, criar estes repository
 secrets:
 
 - `VPS_HOST`: `129.121.38.224`
@@ -48,50 +53,104 @@ awk '{print "[129.121.38.224]:22022 "$1" "$2}' \
 A chave privada nunca deve ser enviada para a VPS, adicionada ao repositório ou
 exibida nos logs.
 
-Depois de criar todos os secrets, ainda em
-**Secrets and variables → Actions → Variables**, criar:
+O job usa o environment `production`. Ele pode receber uma regra de aprovação
+manual em **Settings -> Environments -> production** sem alterar o workflow.
 
-```text
-PRODUCTION_DEPLOY_ENABLED=true
+## Publicar uma versão
+
+Crie uma tag anotada a partir da `main` revisada:
+
+```bash
+git switch main
+git pull --ff-only
+git tag -a v0.1.0 -m "Fluvius v0.1.0"
+git push origin v0.1.0
 ```
 
-O job usa o environment `production`. Ele pode receber uma regra de aprovação
-manual em **Settings → Environments → production** sem alterar o workflow.
+Depois publique a Release:
 
-## Primeiro deploy e operação
+```text
+GitHub -> Releases -> Draft a new release -> selecionar a tag -> Publish release
+```
 
-Após cadastrar os secrets e a variável:
+Ao publicar a Release, o workflow **Production deploy** valida a tag, faz
+checkout do commit exato, roda testes/build/Compose nessa tag e envia a mesma
+tag para a VPS. A VPS executa:
 
-1. abrir **Actions → CI and production deploy**;
-2. escolher **Run workflow** na branch `main`;
-3. confirmar os três jobs de validação;
-4. acompanhar `Deploy production`.
+```bash
+./deploy/scripts/production-deploy.sh v0.1.0
+```
 
-O servidor aceita somente o SHA exato da `main` que passou no mesmo workflow.
-Se outro commit avançar a branch enquanto um pipeline antigo estiver rodando, o
-deploy antigo para e o pipeline novo assume. Um lock com `flock` impede duas
-execuções simultâneas na VPS.
+O servidor busca tags, entra em detached HEAD na tag informada, confirma o SHA,
+faz build das imagens e só então atualiza os containers.
 
-O SHA implantado fica em `.deploy-state/last-successful-sha`. Em falha, o
-workflow mantém os containers e logs para diagnóstico; migrations não sofrem
-rollback automático.
+## Rollback manual
+
+Para voltar o código para uma versão anterior:
+
+```text
+GitHub -> Actions -> Production deploy -> Run workflow
+```
+
+Informe a tag anterior, por exemplo:
+
+```text
+v0.1.0
+```
+
+O rollback não altera o histórico Git e não faz `git pull origin main`. A VPS
+fica no commit associado à tag informada.
+
+## Conferir versão implantada
+
+Na VPS:
+
+```bash
+cd /opt/apps/fluvius-core
+git describe --tags --exact-match HEAD
+git rev-parse HEAD
+cat .deploy-state/last-successful-tag
+cat .deploy-state/last-successful-sha
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+```
+
+Logs da aplicação:
+
+```bash
+docker compose --env-file .env.production -f docker-compose.prod.yml \
+  logs -f api worker delivery-worker evolution-go web
+```
+
+Logs do último deploy pelo GitHub ficam em
+**GitHub -> Actions -> Production deploy**.
 
 ## Comportamento do deploy
 
-O workflow executa `deploy/scripts/production-deploy.sh` na VPS. Esse script
-não deve ser substituído por um `docker compose up` genérico, porque ele
-preserva algumas garantias operacionais:
+O workflow executa `deploy/scripts/production-deploy.sh` na VPS com a tag
+obrigatória. Esse script não deve ser substituído por um `docker compose up`
+genérico, porque ele preserva garantias operacionais:
 
+- valida a tag e confirma o SHA antes de implantar;
 - valida o Compose e constrói as imagens antes de tocar nos containers ativos;
 - mantém Postgres, Redis e Evolution Go separados da troca cotidiana de código;
 - roda `alembic upgrade head` em um container temporário antes de reiniciar a
   API;
 - inicia a API sem rodar migration no boot;
 - atualiza API, workers e frontend em etapas;
-- grava o SHA publicado em `.deploy-state/last-successful-sha` somente depois
-  dos healthchecks passarem.
+- verifica containers esperados e healthchecks internos/público;
+- grava a tag e o SHA publicados em `.deploy-state/` somente depois dos
+  healthchecks passarem.
 
-Esse fluxo reduz a janela em que o Caddy pode retornar 502 durante deploys.
-Ainda não é zero downtime absoluto: a produção possui uma única API e um único
-container `web` atrás do Caddy do host. Para eliminar a troca curta restante,
-implementar blue/green com duas instâncias ativas e troca atômica de upstream.
+Um erro de build interrompe o deploy antes da troca de API, workers e frontend.
+Migrations não sofrem rollback automático.
+
+## Migrations e rollback
+
+Rollback de código para uma tag anterior pode falhar se uma versão mais nova já
+aplicou migrations incompatíveis com o código antigo. Não implemente rollback
+automático de banco no deploy de produção.
+
+Migrations futuras devem, sempre que possível, ser compatíveis com versões
+anteriores: adicionar colunas/tabelas antes de exigir uso, evitar remoções
+imediatas e separar mudanças destrutivas em versões posteriores após o código
+antigo deixar de ser necessário.

@@ -33,11 +33,11 @@ pela rede interna, durante o envio da mídia.
 ## Primeira instalação
 
 Clone o repositório em uma localização estável, por exemplo
-`/opt/fluvius-core`. Não mova o diretório depois de instalar o timer de backup,
-pois os links operacionais apontam para ele.
+`/opt/apps/fluvius-core`. Não mova o diretório depois de instalar o timer de
+backup, pois os links operacionais apontam para ele.
 
 ```bash
-cd /opt/fluvius-core
+cd /opt/apps/fluvius-core
 sudo ./deploy/scripts/install-ubuntu.sh
 ./deploy/scripts/generate-production-env.sh
 nano .env.production
@@ -46,7 +46,8 @@ sudo cp deploy/Caddyfile.host /etc/caddy/fluvius.caddy
 # import /etc/caddy/*.caddy
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
-./deploy/scripts/production-deploy.sh
+git fetch origin --tags --force
+./deploy/scripts/production-deploy.sh v0.1.0
 ```
 
 Se `fluvius.finderbit.com.br` já existir no Caddy, substitua o bloco antigo
@@ -144,10 +145,15 @@ docker compose \
 
 ## Operação
 
-O deploy de produção é feito em etapas pelo script
-`deploy/scripts/production-deploy.sh`: primeiro valida e constrói as imagens,
-garante Postgres/Redis/Evolution Go, roda as migrations em um container
-temporário, troca a API já sem executar migration no boot, depois atualiza os
+O deploy de produção é versionado por GitHub Release e tag Git. Push na `main`
+não faz deploy. O workflow **Production deploy** roda quando uma Release é
+publicada ou quando uma execução manual informa uma tag anterior para rollback.
+
+O deploy em si é feito em etapas pelo script
+`deploy/scripts/production-deploy.sh vX.Y.Z`: primeiro busca tags, valida que a
+tag existe, faz checkout detached no commit da tag, confirma o SHA e constrói as
+imagens. Só depois garante Postgres/Redis/Evolution Go, roda as migrations em um
+container temporário, troca a API já sem executar migration no boot, atualiza os
 workers e por último o frontend. Esse fluxo reduz a janela de 502 do Caddy
 durante publicação. Zero downtime completo exigirá blue/green com duas
 instâncias ativas ou troca atômica de upstream.
@@ -175,21 +181,26 @@ sudo caddy validate --config /etc/caddy/Caddyfile
 docker compose --env-file .env.production -f docker-compose.prod.yml \
   exec api alembic current
 
-# Atualização depois de revisar o commit
-git pull --ff-only
-./deploy/scripts/production-deploy.sh
+# Versão implantada
+git describe --tags --exact-match HEAD
+git rev-parse HEAD
+cat .deploy-state/last-successful-tag
+cat .deploy-state/last-successful-sha
 ```
 
 Em operação normal, esse fluxo é executado automaticamente pelo GitHub Actions
-após testes, build e validação do Compose. O servidor só aceita o SHA exato da
-`main` validado no pipeline. Consulte
-[GITHUB_ACTIONS.md](GITHUB_ACTIONS.md) para cadastrar a chave SSH, os secrets e
-ativar o deploy.
+após uma GitHub Release publicada. Para rollback, execute manualmente o workflow
+**Production deploy** e informe uma tag anterior, por exemplo `v0.1.0`. A VPS
+nunca deve executar `git pull origin main`, `git checkout main` ou
+`git reset --hard origin/main` durante o deploy. Consulte
+[GITHUB_ACTIONS.md](GITHUB_ACTIONS.md) para cadastrar a chave SSH, os secrets,
+publicar versões e operar rollback.
 
 Depois de um deploy, valide:
 
 ```bash
 curl -fsS https://fluvius.finderbit.com.br/health/ready
+cat .deploy-state/last-successful-tag
 cat .deploy-state/last-successful-sha
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
@@ -206,10 +217,12 @@ indicam degradação; alertas vermelhos indicam risco direto para o envio. Duran
 um deploy, o aviso de worker offline pode aparecer transitoriamente até o novo
 processo registrar seu heartbeat no RQ.
 
-Para rollback de código, voltar ao commit anterior de forma não destrutiva,
-reconstruir e subir novamente. Migration de banco só pode ser revertida após
-analisar se houve escrita no schema novo; na dúvida, restaurar em ambiente
-separado antes.
+Rollback de código deve ser feito pela execução manual do workflow de produção,
+informando uma tag anterior. Isso não altera o histórico Git e deixa a VPS no
+commit associado à tag. Migration de banco não sofre rollback automático: voltar
+o código para uma tag anterior pode falhar se uma versão mais nova já aplicou
+migrations incompatíveis. Migrations futuras devem, sempre que possível, ser
+compatíveis com versões anteriores e separar mudanças destrutivas em etapas.
 
 ## Dados e capacidade
 
