@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import mimetypes
@@ -189,7 +190,7 @@ async def persist_incoming_attachment(
     if estimated_size > MAX_MEDIA_BYTES:
         return None, "Mídia recebida excede o limite de 25 MB"
     try:
-        content = base64.b64decode(encoded, validate=True)
+        content = await asyncio.to_thread(base64.b64decode, encoded, None, True)
     except (binascii.Error, ValueError):
         return None, "Mídia recebida possui base64 inválido"
     if not content:

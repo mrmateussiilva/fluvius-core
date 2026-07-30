@@ -158,6 +158,12 @@ workers e por último o frontend. Esse fluxo reduz a janela de 502 do Caddy
 durante publicação. Zero downtime completo exigirá blue/green com duas
 instâncias ativas ou troca atômica de upstream.
 
+A API de produção sobe com vários processos uvicorn (`UVICORN_WORKERS`, padrão
+4) para absorver webhooks paralelos da Evolution Go sem bloquear o accept TCP.
+O dispatcher de entregas elege um líder via Redis; o listener realtime roda em
+cada worker para fan-out local dos WebSockets. Em VPS de 8 GB, o container da
+API fica limitado a 2 GB de RAM.
+
 Não troque esse script por `docker compose up -d --build` em produção. O fluxo
 genérico recria serviços em bloco, pode deixar o Caddy sem upstream por mais
 tempo e volta a acoplar migration ao boot da API.

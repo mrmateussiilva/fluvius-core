@@ -188,12 +188,20 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
     )
 
 
+DISPATCHER_LOCK_KEY = "fluvius:delivery-dispatcher-lock"
+DISPATCHER_LOCK_TTL_SECONDS = 8
+
+
 async def delivery_dispatcher_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
-            tenant_ids = await asyncio.to_thread(_tenant_ids)
-            for tenant_id in tenant_ids:
-                await asyncio.to_thread(dispatch_due_deliveries, tenant_id)
+            if await asyncio.to_thread(_claim_dispatcher_lock):
+                try:
+                    tenant_ids = await asyncio.to_thread(_tenant_ids)
+                    for tenant_id in tenant_ids:
+                        await asyncio.to_thread(dispatch_due_deliveries, tenant_id)
+                finally:
+                    await asyncio.to_thread(_release_dispatcher_lock)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -202,6 +210,27 @@ async def delivery_dispatcher_loop(stop_event: asyncio.Event) -> None:
             await asyncio.wait_for(stop_event.wait(), timeout=2)
         except TimeoutError:
             pass
+
+
+def _claim_dispatcher_lock() -> bool:
+    try:
+        return bool(
+            redis_connection.set(
+                DISPATCHER_LOCK_KEY,
+                "1",
+                nx=True,
+                ex=DISPATCHER_LOCK_TTL_SECONDS,
+            )
+        )
+    except RedisError:
+        return False
+
+
+def _release_dispatcher_lock() -> None:
+    try:
+        redis_connection.delete(DISPATCHER_LOCK_KEY)
+    except RedisError:
+        return
 
 
 def _tenant_ids() -> list[UUID]:

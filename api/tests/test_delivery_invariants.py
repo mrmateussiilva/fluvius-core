@@ -1,11 +1,14 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 from app.common.enums import MessageStatus
 from app.conversations.router import conversation_query
+from app.delivery.dispatcher import _claim_dispatcher_lock, _release_dispatcher_lock
 from app.messages.router import apply_send_result, format_outgoing_content
 from app.providers.base import SendResult
+from redis.exceptions import RedisError
 
 
 class DeliveryInvariantTest(unittest.TestCase):
@@ -84,6 +87,24 @@ class ConversationTenantScopeTest(unittest.TestCase):
         self.assertIn("conversations.tenant_id", statement)
         self.assertIn("contacts.tenant_id", statement)
         self.assertIn("whatsapp_channels.tenant_id", statement)
+
+
+class DeliveryDispatcherLockTest(unittest.TestCase):
+    def test_claim_uses_redis_nx_lock(self) -> None:
+        with patch("app.delivery.dispatcher.redis_connection") as redis:
+            redis.set.return_value = True
+            self.assertTrue(_claim_dispatcher_lock())
+            redis.set.assert_called_once()
+            kwargs = redis.set.call_args.kwargs
+            self.assertTrue(kwargs.get("nx"))
+            self.assertEqual(kwargs.get("ex"), 8)
+
+    def test_claim_fails_closed_on_redis_errors(self) -> None:
+        with patch("app.delivery.dispatcher.redis_connection") as redis:
+            redis.set.side_effect = RedisError("down")
+            self.assertFalse(_claim_dispatcher_lock())
+            redis.delete.side_effect = RedisError("down")
+            _release_dispatcher_lock()
 
 
 if __name__ == "__main__":

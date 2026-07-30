@@ -97,8 +97,14 @@ services:
       - -c
       - >-
         uvicorn app.main:app --host 0.0.0.0 --port 8000
+        --workers ${UVICORN_WORKERS:-4}
+        --limit-concurrency ${UVICORN_LIMIT_CONCURRENCY:-200}
+        --backlog ${UVICORN_BACKLOG:-2048}
+        --timeout-keep-alive 5
         --proxy-headers --forwarded-allow-ips=*
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
     volumes:
       - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
     ports:
@@ -114,15 +120,15 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 40s
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 1280m
-    cpus: 2
-    pids_limit: 300
+    mem_limit: 2048m
+    cpus: 3
+    pids_limit: 400
     networks:
       - frontend
       - backend
