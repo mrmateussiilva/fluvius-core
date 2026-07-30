@@ -145,21 +145,26 @@ jobs:
       DEPLOY_VERSION: ${{ needs.validate-tag.outputs.version }}
       DEPLOY_SHA: ${{ needs.validate-tag.outputs.sha }}
     steps:
-      - name: Checkout deployment tag
+      - name: Checkout deployment control scripts
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.validate-tag.outputs.version }}
+          ref: main
 
-      - name: Validate checkout
+      - name: Validate control checkout and deployment tag
         shell: bash
         run: |
           set -Eeuo pipefail
-          current_sha=$(git rev-parse HEAD)
-          if [[ "$current_sha" != "$DEPLOY_SHA" ]]; then
-            echo "Checkout terminou em $current_sha, esperado $DEPLOY_SHA." >&2
+          git fetch origin --tags --force
+          if ! git rev-parse -q --verify "refs/tags/$DEPLOY_VERSION^{commit}" >/dev/null; then
+            echo "Tag não encontrada no checkout de controle: $DEPLOY_VERSION" >&2
             exit 1
           fi
-          echo "Tag pronta para deploy: $DEPLOY_VERSION ($DEPLOY_SHA)."
+          target_sha=$(git rev-parse "refs/tags/$DEPLOY_VERSION^{commit}")
+          if [[ "$target_sha" != "$DEPLOY_SHA" ]]; then
+            echo "Tag $DEPLOY_VERSION aponta para $target_sha, esperado $DEPLOY_SHA." >&2
+            exit 1
+          fi
+          echo "Tag pronta para deploy: $DEPLOY_VERSION ($target_sha)."
 
       - name: Validate deployment secrets
         shell: bash
@@ -186,16 +191,19 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          ssh \
-            -i "$RUNNER_TEMP/fluvius-ssh/id_ed25519" \
-            -p "$SSH_PORT" \
-            -o BatchMode=yes \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$RUNNER_TEMP/fluvius-ssh/known_hosts" \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=4 \
-            "$SSH_USER@$SSH_HOST" \
+          ssh_command=(
+            ssh
+            -i "$RUNNER_TEMP/fluvius-ssh/id_ed25519"
+            -p "$SSH_PORT"
+            -o BatchMode=yes
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$RUNNER_TEMP/fluvius-ssh/known_hosts"
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            "$SSH_USER@$SSH_HOST"
+          )
+          "${ssh_command[@]}" \
             "bash -s -- '$DEPLOY_VERSION' '$DEPLOY_SHA'" <<'REMOTE'
           set -Eeuo pipefail
 
@@ -230,9 +238,10 @@ jobs:
             exit 1
           fi
           echo "Deploy remoto: $deploy_version ($current_sha)."
-          FLUVIUS_EXPECTED_DEPLOY_SHA="$expected_sha" \
-            ./deploy/scripts/production-deploy.sh "$deploy_version"
           REMOTE
+          "${ssh_command[@]}" \
+            "FLUVIUS_PROJECT_ROOT=/opt/apps/fluvius-core FLUVIUS_EXPECTED_DEPLOY_SHA='$DEPLOY_SHA' bash -s -- '$DEPLOY_VERSION'" \
+            < deploy/scripts/production-deploy.sh
 
       - name: Remove temporary SSH credentials
         if: always()

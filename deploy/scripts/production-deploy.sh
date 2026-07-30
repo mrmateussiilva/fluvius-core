@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 VERSION="${1:?Informe a versão para deploy}"
-PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+PROJECT_ROOT=${FLUVIUS_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 ENV_FILE=${FLUVIUS_ENV_FILE:-"$PROJECT_ROOT/.env.production"}
 EXPECTED_DEPLOY_SHA=${FLUVIUS_EXPECTED_DEPLOY_SHA:-}
 
@@ -100,11 +100,20 @@ verify_services_running() {
   done
 }
 
+verify_datastores_ready() {
+  "${COMPOSE[@]}" exec -T postgres \
+    pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
+  "${COMPOSE[@]}" exec -T redis \
+    redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping >/dev/null
+}
+
 "${COMPOSE[@]}" config --quiet
 "${COMPOSE[@]}" build
 
 "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 300 \
-  postgres redis evolution-go
+  postgres redis
+verify_datastores_ready
+"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 evolution-go
 "${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
 "${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 api
 "${COMPOSE[@]}" exec -T api alembic current
