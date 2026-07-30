@@ -35,6 +35,12 @@ class IncomingMessageResult(BaseModel):
     from_number: str
     to_number: str
     sender_name: str | None = None
+    is_group: bool = False
+    chat_id: str | None = None
+    chat_name: str | None = None
+    provider_address: str | None = None
+    participant_phone: str | None = None
+    participant_name: str | None = None
     direction: MessageDirection = MessageDirection.INCOMING
     message_type: MessageType
     body: str | None = None
@@ -51,6 +57,8 @@ class IncomingMessageEditResult(BaseModel):
     provider_event_id: str
     target_provider_message_id: str
     from_number: str
+    is_group: bool = False
+    chat_id: str | None = None
     direction: MessageDirection = MessageDirection.INCOMING
     body: str | None = None
     timestamp: datetime

@@ -21,6 +21,11 @@ class ConversationStatus(StrEnum):
     CLOSED = "closed"
 
 
+class ContactKind(StrEnum):
+    DIRECT = "direct"
+    GROUP = "group"
+
+
 class MessageDirection(StrEnum):
     INCOMING = "incoming"
     OUTGOING = "outgoing"

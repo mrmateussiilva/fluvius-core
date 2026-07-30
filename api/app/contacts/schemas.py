@@ -3,9 +3,12 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.common.enums import ContactKind
+
 
 class ContactResponse(BaseModel):
     id: UUID
+    kind: ContactKind = ContactKind.DIRECT
     display_name: str
     name: str | None
     push_name: str | None

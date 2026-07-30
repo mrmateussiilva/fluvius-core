@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.common.enums import (
     ChannelStatus,
+    ContactKind,
     ConversationStatus,
     MessageDirection,
     MessageType,
@@ -16,6 +17,7 @@ class ConversationResponse(BaseModel):
     status: ConversationStatus
     assigned_user_id: UUID | None
     contact_id: UUID
+    contact_kind: ContactKind = ContactKind.DIRECT
     contact_name: str | None
     contact_phone: str
     channel_id: UUID

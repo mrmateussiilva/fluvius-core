@@ -505,12 +505,23 @@ function previewMedia(
               <span v-else>{{ contactInitials }}</span>
             </div>
             <div class="min-w-0">
-              <h2 class="truncate text-[15px] font-semibold text-[#111b21]">
-                {{ conversation.contact_name || conversation.contact_phone }}
+              <h2 class="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-[#111b21]">
+                <span class="truncate">{{ conversation.contact_name || conversation.contact_phone }}</span>
+                <span
+                  v-if="(conversation.contact_kind || 'direct') === 'group'"
+                  class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700"
+                >
+                  Grupo
+                </span>
               </h2>
               <p class="truncate text-[11px] text-[#667781] sm:text-xs">
                 <span class="hidden sm:inline">
-                  {{ conversation.contact_phone }} · {{ conversation.channel_name }} ·
+                  {{
+                    (conversation.contact_kind || 'direct') === 'group'
+                      ? 'Grupo WhatsApp'
+                      : conversation.contact_phone
+                  }}
+                  · {{ conversation.channel_name }} ·
                 </span>{{ ownershipLabel }}
               </p>
             </div>

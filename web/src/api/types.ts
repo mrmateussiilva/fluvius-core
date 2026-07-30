@@ -127,11 +127,14 @@ export interface OperationalHealth {
   channels: OperationalChannelHealth[]
 }
 
+export type ContactKind = 'direct' | 'group'
+
 export interface Conversation {
   id: string
   status: ConversationStatus
   assigned_user_id: string | null
   contact_id: string
+  contact_kind: ContactKind
   contact_name: string | null
   contact_phone: string
   channel_id: string
@@ -146,6 +149,7 @@ export interface Conversation {
 
 export interface ContactDetail {
   id: string
+  kind: ContactKind
   display_name: string
   name: string | null
   push_name: string | null
@@ -178,9 +182,12 @@ export interface Message {
     message_type: MessageType
     body: string | null
     sender_name: string | null
+    participant_name: string | null
   } | null
   attachments: MessageAttachment[]
   sender_name: string | null
+  participant_phone: string | null
+  participant_name: string | null
   provider_message_id: string | null
   error: string | null
   attempt_count: number

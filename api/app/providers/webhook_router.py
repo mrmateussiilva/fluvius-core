@@ -10,6 +10,7 @@ from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelProvider,
     ChannelStatus,
+    ContactKind,
     ConversationStatus,
     MessageDirection,
     MessageStatus,
@@ -246,25 +247,43 @@ async def whatsapp_webhook(
             db.commit()
             return {"status": "duplicate"}
 
+        thread_number = (
+            incoming.chat_id
+            if incoming.is_group and incoming.chat_id
+            else incoming.from_number
+        )
         contact = db.scalar(
             select(Contact).where(
                 Contact.tenant_id == channel.tenant_id,
-                Contact.phone_number == incoming.from_number,
+                Contact.phone_number == thread_number,
             )
         )
         if contact is None:
+            group_label = (
+                incoming.chat_name
+                or (f"Grupo {thread_number[-6:]}" if incoming.is_group else None)
+            )
             contact = Contact(
                 tenant_id=channel.tenant_id,
-                phone_number=incoming.from_number,
-                name=incoming.sender_name,
-                push_name=incoming.sender_name,
+                kind=ContactKind.GROUP if incoming.is_group else ContactKind.DIRECT,
+                phone_number=thread_number,
+                provider_address=incoming.provider_address if incoming.is_group else None,
+                name=group_label if incoming.is_group else incoming.sender_name,
+                push_name=None if incoming.is_group else incoming.sender_name,
             )
             db.add(contact)
             db.flush()
-        elif incoming.sender_name:
-            contact.push_name = incoming.sender_name
-            if not contact.name:
-                contact.name = incoming.sender_name
+        else:
+            if incoming.is_group:
+                contact.kind = ContactKind.GROUP
+                if incoming.provider_address:
+                    contact.provider_address = incoming.provider_address
+                if incoming.chat_name and not contact.name:
+                    contact.name = incoming.chat_name
+            elif incoming.sender_name:
+                contact.push_name = incoming.sender_name
+                if not contact.name:
+                    contact.name = incoming.sender_name
 
         conversation = db.scalar(
             select(Conversation)
@@ -303,6 +322,16 @@ async def whatsapp_webhook(
                     Message.provider_message_id == incoming.reply_to_provider_message_id,
                 )
             )
+        participant_phone = (
+            incoming.participant_phone
+            if incoming.is_group
+            else None
+        )
+        participant_name = (
+            incoming.participant_name or incoming.sender_name
+            if incoming.is_group
+            else None
+        )
         message = Message(
             tenant_id=channel.tenant_id,
             conversation_id=conversation.id,
@@ -316,6 +345,13 @@ async def whatsapp_webhook(
                 else MessageStatus.DELIVERED
             ),
             body=incoming.body,
+            sender_name=(
+                participant_name
+                if incoming.direction == MessageDirection.INCOMING and incoming.is_group
+                else incoming.sender_name
+            ),
+            participant_phone=participant_phone,
+            participant_name=participant_name,
             provider_message_id=incoming.provider_message_id,
             attempt_count=1 if incoming.direction == MessageDirection.OUTGOING else 0,
             last_attempt_at=(

@@ -56,7 +56,9 @@ Ao apagar manualmente uma instância legada, atualize seu token em `EVOLUTION_GO
 
 Essa versão não envia header customizado no webhook. Ela inclui `instanceToken` no corpo; o adapter compara esse valor com `EVOLUTION_GO_API_KEY` em tempo constante. O token é removido do payload antes de gravar `provider_events`. O header `X-Webhook-Secret` continua aceito como alternativa para providers capazes de configurá-lo.
 
-Eventos `Message` usam o envelope nativo do Go com `data.Info` e `data.Message`. Mensagens com `Info.IsFromMe=true` originadas no celular são persistidas como `outgoing/sent`; o contato é resolvido por `Info.RecipientAlt`, evitando armazenar LIDs como telefone. Eventos técnicos `SendMessage` são ignorados porque a chamada síncrona da API já persiste esse envio. Grupos continuam fora do MVP.
+Eventos `Message` usam o envelope nativo do Go com `data.Info` e `data.Message`. Mensagens com `Info.IsFromMe=true` originadas no celular são persistidas como `outgoing/sent`; o contato é resolvido por `Info.RecipientAlt`, evitando armazenar LIDs como telefone. Eventos técnicos `SendMessage` são ignorados porque a chamada síncrona da API já persiste esse envio.
+
+Grupos (`Info.IsGroup=true` ou `Chat` com sufixo `@g.us`) entram na mesma inbox operacional. A thread é o chat do grupo (`Chat`), não o participante; o autor da mensagem fica em `participant_phone`/`participant_name` (via `Sender`/`SenderAlt` + `PushName`). O envio usa o endereço `…@g.us` do grupo; respostas citadas exigem o JID do participante original em `quoted.participant`.
 
 Edições observadas na 0.7.2 usam `Info.Edit=1` e apontam para a mensagem
 original em `Message.secretEncryptedMessage.targetMessageKey.ID`. O adapter

@@ -354,9 +354,15 @@ class EvolutionGoWebhookTest(unittest.TestCase):
                 )
             )
 
-    def test_ignores_group_messages(self) -> None:
-        with self.assertRaises(IgnoredWebhookEvent):
-            asyncio.run(self.provider.handle_webhook(message_payload(is_group=True)))
+    def test_parses_group_messages(self) -> None:
+        result = asyncio.run(self.provider.handle_webhook(message_payload(is_group=True)))
+        self.assertTrue(result.is_group)
+        self.assertEqual(result.chat_id, "120363018686549942")
+        self.assertEqual(result.provider_address, "120363018686549942@g.us")
+        self.assertEqual(result.from_number, "120363018686549942")
+        self.assertEqual(result.participant_phone, "5527999999999")
+        self.assertEqual(result.participant_name, "Cliente Teste")
+        self.assertEqual(result.body, "Olá pelo WhatsApp")
 
     def test_parses_connected_status_envelope(self) -> None:
         result = self.provider._parse_status(load_fixture("status-connected.json"))

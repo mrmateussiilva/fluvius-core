@@ -62,7 +62,13 @@ function formatDate(value: string | null | undefined) {
 <template>
   <aside class="absolute inset-0 z-30 flex h-full w-full shrink-0 flex-col border-l border-[#d8dcdf] bg-[#f7f8f8] xl:static xl:w-[340px]">
     <header class="flex min-h-[64px] items-center justify-between border-b border-[#d8dcdf] bg-[#f0f2f5] px-4 py-3">
-      <h2 class="text-sm font-semibold text-[#111b21]">Dados do contato</h2>
+      <h2 class="text-sm font-semibold text-[#111b21]">
+        {{
+          (contact?.kind || conversation.contact_kind || 'direct') === 'group'
+            ? 'Dados do grupo'
+            : 'Dados do contato'
+        }}
+      </h2>
       <button class="rounded-full p-2 text-[#667781] transition hover:bg-black/5" title="Fechar" @click="emit('close')">
         <X class="h-4 w-4" />
       </button>
@@ -85,9 +91,21 @@ function formatDate(value: string | null | undefined) {
           {{ initials }}
         </div>
         <h3 class="mt-3 text-lg font-semibold text-[#111b21]">{{ displayName }}</h3>
-        <p class="mt-1 text-sm text-[#667781]">{{ formatPhone(contact?.phone_number || conversation.contact_phone) }}</p>
+        <p class="mt-1 text-sm text-[#667781]">
+          {{
+            (contact?.kind || conversation.contact_kind || 'direct') === 'group'
+              ? 'Grupo do WhatsApp'
+              : formatPhone(contact?.phone_number || conversation.contact_phone)
+          }}
+        </p>
         <div
-          v-if="contact?.is_on_whatsapp === true"
+          v-if="(contact?.kind || conversation.contact_kind || 'direct') === 'group'"
+          class="mt-2 inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700"
+        >
+          Conversa em grupo
+        </div>
+        <div
+          v-else-if="contact?.is_on_whatsapp === true"
           class="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
         >
           <CheckCircle2 class="h-3.5 w-3.5" /> Número no WhatsApp
@@ -156,6 +174,7 @@ function formatDate(value: string | null | undefined) {
           {{ contact.profile_sync_error }}
         </p>
         <button
+          v-if="(contact?.kind || conversation.contact_kind || 'direct') !== 'group'"
           class="mx-4 mt-3 flex items-center justify-center gap-2 rounded-lg border border-[#d1d7db] bg-white px-3 py-2.5 text-sm font-medium text-fluvius-700 shadow-sm transition hover:bg-fluvius-50 disabled:opacity-50"
           :disabled="loading"
           @click="emit('refresh')"
@@ -164,7 +183,11 @@ function formatDate(value: string | null | undefined) {
           {{ loading ? 'Atualizando...' : 'Atualizar dados do WhatsApp' }}
         </button>
         <p class="px-5 pb-5 pt-3 text-center text-[11px] leading-4 text-[#8696a0]">
-          Alguns dados podem não aparecer devido às configurações de privacidade do contato.
+          {{
+            (contact?.kind || conversation.contact_kind || 'direct') === 'group'
+              ? 'Grupos entram na fila quando alguém envia mensagem. Respostas vão para o grupo.'
+              : 'Alguns dados podem não aparecer devido às configurações de privacidade do contato.'
+          }}
         </p>
       </template>
     </div>

@@ -148,6 +148,7 @@ def message_response(
             message_type=reply_to.message_type,
             body=reply_to.body,
             sender_name=reply_to.sender_name,
+            participant_name=reply_to.participant_name,
         )
         if reply_to
         else None

@@ -6,13 +6,34 @@ from sqlalchemy.orm import Session
 
 from app.attachments.models import MessageAttachment
 from app.channels.models import WhatsAppChannel
-from app.common.enums import MessageDirection, MessageStatus, MessageType
+from app.common.enums import ContactKind, MessageDirection, MessageStatus, MessageType
 from app.contacts.models import Contact
 from app.messages.models import Message
 from app.providers.base import SendResult
 from app.providers.factory import get_provider
 from app.providers.status_updates import reconcile_pending_status_events
 from app.storage.local import LocalStorageProvider
+
+
+def delivery_target(contact: Contact) -> str:
+    return contact.delivery_address
+
+
+def quote_participant(
+    *,
+    channel: WhatsAppChannel,
+    contact: Contact,
+    reply_to: Message,
+) -> str | None:
+    if reply_to.direction == MessageDirection.INCOMING:
+        if reply_to.participant_phone:
+            return reply_to.participant_phone
+        if contact.kind == ContactKind.GROUP:
+            return None
+        return contact.phone_number
+    return channel.phone_number or (
+        None if contact.kind == ContactKind.GROUP else contact.phone_number
+    )
 
 
 def normalized_sender_name(value: str | None) -> str | None:
@@ -77,18 +98,24 @@ async def call_provider(
             )
 
     provider = get_provider(channel.provider, channel, db)
+    target = delivery_target(contact)
     participant = None
     if reply_to:
-        participant = (
-            contact.phone_number
-            if reply_to.direction == MessageDirection.INCOMING
-            else channel.phone_number or contact.phone_number
+        participant = quote_participant(
+            channel=channel,
+            contact=contact,
+            reply_to=reply_to,
         )
+        if reply_to.provider_message_id and not participant:
+            return SendResult(
+                success=False,
+                error="Não foi possível identificar o autor da mensagem citada no grupo.",
+            )
 
     if message.message_type == MessageType.TEXT:
         return await provider.send_text(
             channel,
-            contact.phone_number,
+            target,
             format_outgoing_content(message.sender_name, message.body) or "",
             reply_to_provider_message_id=(
                 reply_to.provider_message_id if reply_to else None
@@ -110,7 +137,7 @@ async def call_provider(
         )
     return await provider.send_media(
         channel,
-        contact.phone_number,
+        target,
         LocalStorageProvider().public_url_for(attachment.storage_key),
         (
             None

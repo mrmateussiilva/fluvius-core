@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
-from app.common.enums import ChannelProvider, ChannelStatus
+from app.common.enums import ChannelProvider, ChannelStatus, ContactKind
 from app.contacts.models import Contact
 from app.contacts.service import synchronize_contact_profile
 from app.conversations.models import Conversation
@@ -126,9 +126,15 @@ def _contact_ids(db: Session, tenant_id: UUID, channel_id: UUID) -> list[UUID]:
     return list(
         db.scalars(
             select(Conversation.contact_id)
+            .join(
+                Contact,
+                (Contact.id == Conversation.contact_id)
+                & (Contact.tenant_id == tenant_id),
+            )
             .where(
                 Conversation.tenant_id == tenant_id,
                 Conversation.channel_id == channel_id,
+                Contact.kind == ContactKind.DIRECT,
             )
             .order_by(Conversation.last_message_at.desc().nullslast())
             .limit(CONTACT_SYNC_LIMIT)

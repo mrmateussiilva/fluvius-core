@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.channels.models import WhatsAppChannel
-from app.common.enums import ChannelProvider
+from app.common.enums import ChannelProvider, ContactKind
 from app.contacts.models import Contact
 from app.providers.base import ContactProfileResult
 from app.providers.evolution_credentials import claim_evolution_credential
@@ -16,6 +16,10 @@ async def synchronize_contact_profile(
     channel: WhatsAppChannel,
     contact: Contact,
 ) -> ContactProfileResult:
+    if contact.kind == ContactKind.GROUP:
+        contact.profile_synced_at = datetime.now(UTC)
+        contact.profile_sync_error = "Perfil de grupo não é sincronizado no MVP"
+        return ContactProfileResult(error=contact.profile_sync_error)
     if channel.provider == ChannelProvider.EVOLUTION_GO:
         claim_evolution_credential(db, channel)
     profile = await get_provider(channel.provider, channel, db).get_contact_profile(

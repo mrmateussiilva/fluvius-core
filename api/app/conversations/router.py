@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
-from app.common.enums import ConversationStatus, MessageDirection
+from app.common.enums import ContactKind, ConversationStatus, MessageDirection
 from app.contacts.models import Contact
 from app.conversations.models import Conversation, ConversationRead
 from app.conversations.schemas import (
@@ -36,6 +36,7 @@ def conversation_query(
     *,
     allowed_channel_ids: set[UUID] | None = None,
     channel_id: UUID | None = None,
+    contact_kind: ContactKind | None = None,
 ):
     def last_message_value(column):
         return (
@@ -96,6 +97,8 @@ def conversation_query(
         query = query.where(Conversation.channel_id.in_(allowed_channel_ids))
     if channel_id is not None:
         query = query.where(Conversation.channel_id == channel_id)
+    if contact_kind is not None:
+        query = query.where(Contact.kind == contact_kind)
     return query
 
 
@@ -114,6 +117,7 @@ def as_response(row) -> ConversationResponse:
         status=conversation.status,
         assigned_user_id=conversation.assigned_user_id,
         contact_id=contact.id,
+        contact_kind=contact.kind,
         contact_name=(
             contact.name
             or contact.push_name
@@ -208,6 +212,7 @@ def ensure_conversation_assignee(conversation: Conversation, user_id: UUID) -> N
 @router.get("", response_model=list[ConversationResponse])
 def list_conversations(
     channel_id: UUID | None = Query(default=None),
+    kind: ContactKind | None = Query(default=None),
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> list[ConversationResponse]:
@@ -230,6 +235,7 @@ def list_conversations(
             context.user.id,
             allowed_channel_ids=accessible_channel_ids(db, context),
             channel_id=channel_id,
+            contact_kind=kind,
         ).order_by(
             Conversation.last_message_at.desc().nullslast(), Conversation.created_at.desc()
         )

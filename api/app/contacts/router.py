@@ -84,6 +84,7 @@ def contact_response(
     )
     return ContactResponse(
         id=contact.id,
+        kind=contact.kind,
         display_name=display_name,
         name=contact.name,
         push_name=contact.push_name,

@@ -9,8 +9,8 @@
 | `TenantUser` | Membership e papel do usuário | `tenant_id` |
 | `TenantUserChannel` | Canais permitidos para um atendente | `tenant_id` |
 | `WhatsAppChannel` | Canal e provider configurado | `tenant_id` |
-| `Contact` | Cliente identificado por telefone | `tenant_id` |
-| `Conversation` | Atendimento de um contato em um canal | `tenant_id` |
+| `Contact` | Cliente (direto) ou grupo WhatsApp | `tenant_id` |
+| `Conversation` | Atendimento de um contato/grupo em um canal | `tenant_id` |
 | `ConversationRead` | Última leitura de uma conversa por usuário | `tenant_id` |
 | `Message` | Mensagem recebida ou enviada | `tenant_id` |
 | `MessageRevision` | Histórico técnico de edição de uma mensagem | `tenant_id` |
@@ -42,13 +42,14 @@
 - `ProviderCredential` pertence a um canal e provider; guarda somente ciphertext autenticado, fingerprint, versão da cifra e estado seguro do provisionamento.
 - `SyncRun` pertence ao tenant, canal e usuário solicitante; guarda somente estado, limites, contadores e erro seguro da execução.
 
-Contatos são únicos por `(tenant_id, phone_number)`. Conversas são únicas por `(tenant_id, channel_id, contact_id)`, mantendo um histórico contínuo de WhatsApp por contato e canal. Além do nome operacional e telefone, contatos podem guardar o último retrato normalizado do WhatsApp (`push_name`, nome comercial/verificado, recado, foto, existência no WhatsApp e data/erro de sincronização). Esses campos são cache e podem ficar ausentes por privacidade; dados históricos continuam derivados da conversa e das mensagens. IDs externos de mensagem são únicos por `(tenant_id, provider_message_id)`. Eventos, quando têm ID externo, são únicos por `(channel_id, provider_event_id)`. Canais guardam o fingerprint da credencial resolvida, único por `(provider, credential_fingerprint)`; canais gerenciados guardam o token somente cifrado em `ProviderCredential`.
+Contatos são únicos por `(tenant_id, phone_number)`. Em contatos `kind=direct`, `phone_number` é o telefone do cliente; em `kind=group`, é o id local do chat `@g.us`, com `provider_address` no formato completo usado no envio. Conversas são únicas por `(tenant_id, channel_id, contact_id)`, mantendo um histórico contínuo de WhatsApp por contato/grupo e canal. Mensagens de grupo podem guardar `participant_phone` e `participant_name` do autor. Além do nome operacional e telefone, contatos diretos podem guardar o último retrato normalizado do WhatsApp (`push_name`, nome comercial/verificado, recado, foto, existência no WhatsApp e data/erro de sincronização). Esses campos são cache e podem ficar ausentes por privacidade; dados históricos continuam derivados da conversa e das mensagens. IDs externos de mensagem são únicos por `(tenant_id, provider_message_id)`. Eventos, quando têm ID externo, são únicos por `(channel_id, provider_event_id)`. Canais guardam o fingerprint da credencial resolvida, único por `(provider, credential_fingerprint)`; canais gerenciados guardam o token somente cifrado em `ProviderCredential`.
 
 ## Enums
 
 - `channel.provider`: `evolution_go`, `meta_cloud`, `bsp`.
 - `channel.status`: `disconnected`, `connecting`, `connected`, `requires_qr`, `failed`.
 - `conversation.status`: `new`, `open`, `closed`.
+- `contact.kind`: `direct`, `group`.
 - `message.direction`: `incoming`, `outgoing`.
 - `message.type`: `text`, `image`, `document`, `audio`, `video`, `sticker`.
 - `message.status`: `pending`, `sent`, `delivered`, `read`, `failed`.

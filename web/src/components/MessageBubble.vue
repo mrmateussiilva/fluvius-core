@@ -217,15 +217,20 @@ function showDetails() {
       </div>
 
       <p
-        v-if="message.direction === 'outgoing' && message.sender_name"
+        v-if="
+          message.sender_name &&
+          (message.direction === 'outgoing' || message.participant_name || message.participant_phone)
+        "
         class="px-0.5 text-[11px] font-semibold"
         :class="
           isNativeSticker
             ? 'absolute left-1 top-1 z-[1] rounded-full bg-black/55 px-2 py-0.5 text-white shadow-sm'
-            : 'mb-0.5 pr-7 text-emerald-700'
+            : message.direction === 'outgoing'
+              ? 'mb-0.5 pr-7 text-emerald-700'
+              : 'mb-0.5 pr-7 text-sky-700'
         "
       >
-        {{ message.sender_name }}
+        {{ message.participant_name || message.sender_name }}
       </p>
 
       <button
@@ -240,7 +245,9 @@ function showDetails() {
         >
           {{
             message.reply_to.direction === 'incoming'
-              ? 'Cliente'
+              ? message.reply_to.participant_name ||
+                message.reply_to.sender_name ||
+                'Cliente'
               : message.reply_to.sender_name || 'Equipe'
           }}
         </span>

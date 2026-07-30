@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { MessageSquareText, Search, Smartphone, X } from 'lucide-vue-next'
+import { MessageSquareText, Search, Smartphone, Users, X } from 'lucide-vue-next'
 import type {
   Channel,
+  ContactKind,
   Conversation,
   ConversationStatus,
   MessageType,
@@ -25,11 +26,17 @@ const emit = defineEmits<{
   channelChange: [channelId: string | null]
 }>()
 const activeStatus = ref<ConversationStatus>('new')
+const kindFilter = ref<'all' | ContactKind>('all')
 const search = ref('')
 const tabs: { label: string; value: ConversationStatus }[] = [
   { label: 'Aguardando', value: 'new' },
   { label: 'Em atendimento', value: 'open' },
   { label: 'Finalizadas', value: 'closed' },
+]
+const kindTabs: { label: string; value: 'all' | ContactKind }[] = [
+  { label: 'Todos', value: 'all' },
+  { label: 'Diretos', value: 'direct' },
+  { label: 'Grupos', value: 'group' },
 ]
 
 function belongsToTab(conversation: Conversation, status: ConversationStatus) {
@@ -64,6 +71,9 @@ const visible = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('pt-BR')
   return props.conversations.filter((conversation) => {
     if (!belongsToTab(conversation, activeStatus.value)) return false
+    if (kindFilter.value !== 'all' && (conversation.contact_kind || 'direct') !== kindFilter.value) {
+      return false
+    }
     if (!query) return true
     return [
       conversation.contact_name,
@@ -105,6 +115,10 @@ function avatarClass(conversation: Conversation) {
     .split('')
     .reduce((sum, character) => sum + character.charCodeAt(0), 0)
   return avatarPalette[seed % avatarPalette.length]
+}
+
+function isGroup(conversation: Conversation) {
+  return (conversation.contact_kind || 'direct') === 'group'
 }
 
 function messagePreview(conversation: Conversation) {
@@ -207,6 +221,21 @@ function timeLabel(value: string | null) {
           </span>
         </button>
       </div>
+      <div class="mt-2 flex gap-1">
+        <button
+          v-for="tab in kindTabs"
+          :key="tab.value"
+          class="rounded-md px-2 py-1 text-[10px] font-medium transition"
+          :class="
+            kindFilter === tab.value
+              ? 'bg-slate-800 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          "
+          @click="kindFilter = tab.value"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
     <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto">
       <button
@@ -217,14 +246,23 @@ function timeLabel(value: string | null) {
         @click="emit('select', conversation.id)"
       >
         <div
-          class="grid h-12 w-12 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ring-black/[0.03]"
+          class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ring-black/[0.03]"
           :class="avatarClass(conversation)"
         >
-          {{ initials(conversation) }}
+          <Users v-if="isGroup(conversation)" class="h-5 w-5" />
+          <template v-else>{{ initials(conversation) }}</template>
         </div>
         <div class="min-w-0 flex-1 border-b border-[#edf0f1] pb-2.5 pt-0.5 group-last:border-transparent">
           <div class="flex items-center gap-2">
-            <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111b21]">{{ displayName(conversation) }}</span>
+            <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111b21]">
+              {{ displayName(conversation) }}
+            </span>
+            <span
+              v-if="isGroup(conversation)"
+              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+            >
+              Grupo
+            </span>
             <time
               class="shrink-0 text-[11px]"
               :class="conversation.unread_count ? 'font-medium text-fluvius-600' : 'text-[#667781]'"

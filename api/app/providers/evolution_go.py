@@ -270,16 +270,17 @@ class EvolutionGoProvider(WhatsAppProvider):
         is_from_me = self._optional_bool(
             info.get("IsFromMe", info.get("isFromMe"))
         ) is True
-        is_group = self._optional_bool(info.get("IsGroup", info.get("isGroup"))) is True
         chat_jid = str(info.get("Chat") or info.get("chat") or "")
+        is_group = (
+            self._optional_bool(info.get("IsGroup", info.get("isGroup"))) is True
+            or "@g.us" in chat_jid
+        )
         if event_type == "sendmessage":
             raise IgnoredWebhookEvent("Confirmação de envio processada pela chamada da API")
         if event_type and event_type != "message":
             raise IgnoredWebhookEvent(
                 f"Evento técnico Evolution Go ignorado: {event_type}"
             )
-        if is_group or "@g.us" in chat_jid:
-            raise IgnoredWebhookEvent("Mensagens de grupo ainda não fazem parte do MVP")
 
         message_id = (
             key.get("id")
@@ -288,8 +289,15 @@ class EvolutionGoProvider(WhatsAppProvider):
             or info.get("id")
             or data.get("id")
         )
-        remote_jid = self._contact_jid(key, info, data, is_from_me=is_from_me)
-        from_number = self._number_from_jid(remote_jid)
+        chat_id, provider_address, participant_phone, from_number = self._chat_identity(
+            key,
+            info,
+            data,
+            chat_jid=chat_jid,
+            is_group=is_group,
+            is_from_me=is_from_me,
+        )
+        push_name = str(info.get("PushName") or info.get("pushName") or "") or None
         raw_timestamp = (
             info.get("Timestamp")
             or info.get("timestamp")
@@ -312,6 +320,8 @@ class EvolutionGoProvider(WhatsAppProvider):
                 provider_event_id=str(message_id),
                 target_provider_message_id=edit_target,
                 from_number=from_number,
+                is_group=is_group,
+                chat_id=chat_id if is_group else None,
                 direction=(
                     MessageDirection.OUTGOING
                     if is_from_me
@@ -343,15 +353,18 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "Mensagem sem conteúdo compatível com o MVP"
             )
 
+        participant_name = None if is_from_me else push_name
         return IncomingMessageResult(
             provider_message_id=str(message_id),
             from_number=from_number,
             to_number=str(data.get("to") or payload.get("instanceId") or ""),
-            sender_name=(
-                None
-                if is_from_me
-                else str(info.get("PushName") or info.get("pushName") or "") or None
-            ),
+            sender_name=participant_name,
+            is_group=is_group,
+            chat_id=chat_id if is_group else None,
+            chat_name=None,
+            provider_address=provider_address if is_group else None,
+            participant_phone=participant_phone if is_group else None,
+            participant_name=participant_name if is_group else None,
             direction=(
                 MessageDirection.OUTGOING if is_from_me else MessageDirection.INCOMING
             ),
@@ -960,13 +973,75 @@ class EvolutionGoProvider(WhatsAppProvider):
             or ""
         )
 
+    @classmethod
+    def _participant_jid(
+        cls,
+        key: dict[str, Any],
+        info: dict[str, Any],
+        data: dict[str, Any],
+        *,
+        is_from_me: bool,
+    ) -> str:
+        if is_from_me:
+            return str(
+                info.get("SenderAlt")
+                or info.get("senderAlt")
+                or info.get("Sender")
+                or info.get("sender")
+                or ""
+            )
+        return cls._contact_jid(key, info, data, is_from_me=False)
+
+    @classmethod
+    def _chat_identity(
+        cls,
+        key: dict[str, Any],
+        info: dict[str, Any],
+        data: dict[str, Any],
+        *,
+        chat_jid: str,
+        is_group: bool,
+        is_from_me: bool,
+    ) -> tuple[str, str | None, str | None, str]:
+        if is_group:
+            resolved_chat = chat_jid or str(
+                info.get("Chat")
+                or info.get("chat")
+                or key.get("remoteJid")
+                or key.get("RemoteJid")
+                or ""
+            )
+            chat_id = cls._number_from_jid(resolved_chat)
+            if not chat_id:
+                raise ValueError("Webhook Evolution Go de grupo sem Chat")
+            provider_address = (
+                resolved_chat
+                if "@" in resolved_chat
+                else f"{chat_id}@g.us"
+            )
+            participant_jid = cls._participant_jid(
+                key, info, data, is_from_me=is_from_me
+            )
+            participant_phone = cls._number_from_jid(participant_jid) or None
+            # Thread key is always the group; participant is metadata only.
+            return chat_id, provider_address, participant_phone, chat_id
+
+        remote_jid = cls._contact_jid(key, info, data, is_from_me=is_from_me)
+        from_number = cls._number_from_jid(remote_jid)
+        return from_number, None, None, from_number
+
     @staticmethod
     def _number_from_jid(value: str) -> str:
         return value.split("@", 1)[0].split(":", 1)[0]
 
     @classmethod
     def _as_jid(cls, value: str) -> str:
-        return value if "@" in value else f"{cls._digits(value)}@s.whatsapp.net"
+        if "@" in value:
+            return value
+        digits = cls._digits(value)
+        if value.endswith("@g.us") or (digits and value.endswith("g.us")):
+            return f"{digits}@g.us"
+        return f"{digits}@s.whatsapp.net"
 
     @staticmethod
     def _timestamp(value: Any) -> datetime:

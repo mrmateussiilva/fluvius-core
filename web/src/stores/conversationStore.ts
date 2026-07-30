@@ -157,10 +157,13 @@ export const useConversationStore = defineStore('conversations', {
               message_type: reply.message_type,
               body: reply.body,
               sender_name: reply.sender_name,
+              participant_name: reply.participant_name,
             }
           : null,
         attachments: [],
         sender_name: senderName,
+        participant_phone: null,
+        participant_name: null,
         provider_message_id: null,
         error: null,
         attempt_count: 1,
@@ -257,6 +260,7 @@ export const useConversationStore = defineStore('conversations', {
               message_type: reply.message_type,
               body: reply.body,
               sender_name: reply.sender_name,
+              participant_name: reply.participant_name,
             }
           : null,
         attachments: [
@@ -269,6 +273,8 @@ export const useConversationStore = defineStore('conversations', {
           },
         ],
         sender_name: senderName,
+        participant_phone: null,
+        participant_name: null,
         provider_message_id: null,
         error: null,
         attempt_count: 1,
