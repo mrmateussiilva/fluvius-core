@@ -147,6 +147,12 @@ export interface Conversation {
   unread_count: number
 }
 
+export interface GroupMemberResponse {
+  phone_number: string
+  name: string | null
+  is_admin: boolean
+}
+
 export interface ContactDetail {
   id: string
   kind: ContactKind
@@ -161,6 +167,8 @@ export interface ContactDetail {
   is_on_whatsapp: boolean | null
   profile_synced_at: string | null
   profile_sync_error: string | null
+  group_member_count: number | null
+  group_members: GroupMemberResponse[]
   first_interaction_at: string | null
   last_interaction_at: string | null
   conversation_count: number

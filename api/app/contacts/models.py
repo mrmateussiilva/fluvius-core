@@ -6,11 +6,13 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     Text,
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.enums import ContactKind
@@ -48,6 +50,8 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_on_whatsapp: Mapped[bool | None] = mapped_column(Boolean)
     profile_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     profile_sync_error: Mapped[str | None] = mapped_column(String(500))
+    group_member_count: Mapped[int | None] = mapped_column(Integer)
+    group_members: Mapped[list | None] = mapped_column(JSONB)
 
     @property
     def delivery_address(self) -> str:

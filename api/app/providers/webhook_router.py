@@ -17,6 +17,10 @@ from app.common.enums import (
 )
 from app.config import settings
 from app.contacts.models import Contact
+from app.contacts.service import (
+    needs_group_profile_import,
+    synchronize_contact_profile,
+)
 from app.conversations.models import Conversation
 from app.database import get_db
 from app.messages.models import Message, MessageRevision
@@ -405,6 +409,22 @@ async def whatsapp_webhook(
                 )
                 if reconciled is not None:
                     reconciled_edits.append(reconciled)
+        group_profile_updated = False
+        if (
+            contact.kind == ContactKind.GROUP
+            and channel.status == ChannelStatus.CONNECTED
+            and needs_group_profile_import(contact)
+        ):
+            try:
+                await synchronize_contact_profile(
+                    db,
+                    channel=channel,
+                    contact=contact,
+                )
+                group_profile_updated = True
+            except (ProviderConfigurationError, NotImplementedError, ValueError):
+                pass
+
         event.processed = True
         db.commit()
         if created_conversation:
@@ -417,6 +437,21 @@ async def whatsapp_webhook(
                 },
             )
         elif reopened_conversation:
+            await realtime_manager.broadcast(
+                channel.tenant_id,
+                "conversation.updated",
+                {
+                    "id": str(conversation.id),
+                    "channel_id": str(channel.id),
+                    "status": conversation.status.value,
+                },
+            )
+        if group_profile_updated:
+            await realtime_manager.broadcast(
+                channel.tenant_id,
+                "contact.updated",
+                {"id": str(contact.id), "channel_id": str(channel.id)},
+            )
             await realtime_manager.broadcast(
                 channel.tenant_id,
                 "conversation.updated",

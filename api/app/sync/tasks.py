@@ -10,7 +10,7 @@ from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
 from app.common.enums import ChannelProvider, ChannelStatus, ContactKind
 from app.contacts.models import Contact
-from app.contacts.service import synchronize_contact_profile
+from app.contacts.service import import_channel_groups, synchronize_contact_profile
 from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.jobs.runtime import prepare_job_runtime
@@ -114,6 +114,15 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
         )
         run.total_items = len(contact_ids) + len(event_ids)
         db.commit()
+
+        if run.sync_type in {"contacts", "all"} and channel.provider == ChannelProvider.EVOLUTION_GO:
+            try:
+                imported = await import_channel_groups(db, channel=channel)
+                if imported:
+                    run.total_items += len(imported)
+                    db.commit()
+            except (ProviderConfigurationError, NotImplementedError):
+                pass
 
     for contact_id in contact_ids:
         await _synchronize_contact(run_id, tenant_id, contact_id)

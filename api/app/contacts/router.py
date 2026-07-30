@@ -82,6 +82,21 @@ def contact_response(
         or contact.verified_name
         or contact.phone_number
     )
+    members = []
+    if isinstance(contact.group_members, list):
+        for item in contact.group_members:
+            if not isinstance(item, dict):
+                continue
+            phone = str(item.get("phone_number") or "").strip()
+            if not phone:
+                continue
+            members.append(
+                {
+                    "phone_number": phone,
+                    "name": item.get("name"),
+                    "is_admin": bool(item.get("is_admin")),
+                }
+            )
     return ContactResponse(
         id=contact.id,
         kind=contact.kind,
@@ -96,6 +111,8 @@ def contact_response(
         is_on_whatsapp=contact.is_on_whatsapp,
         profile_synced_at=contact.profile_synced_at,
         profile_sync_error=contact.profile_sync_error,
+        group_member_count=contact.group_member_count,
+        group_members=members,
         first_interaction_at=first_interaction,
         last_interaction_at=last_interaction,
         conversation_count=conversation_count or 0,

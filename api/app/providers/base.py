@@ -71,6 +71,12 @@ class MessageStatusUpdateResult(BaseModel):
     timestamp: datetime | None = None
 
 
+class GroupMemberProfile(BaseModel):
+    phone_number: str
+    name: str | None = None
+    is_admin: bool = False
+
+
 class ContactProfileResult(BaseModel):
     push_name: str | None = None
     business_name: str | None = None
@@ -78,7 +84,19 @@ class ContactProfileResult(BaseModel):
     about: str | None = None
     profile_picture_url: str | None = None
     is_on_whatsapp: bool | None = None
+    group_member_count: int | None = None
+    group_members: list[GroupMemberProfile] = Field(default_factory=list)
     error: str | None = None
+
+
+class GroupDirectoryEntry(BaseModel):
+    group_id: str
+    provider_address: str
+    name: str | None = None
+    about: str | None = None
+    profile_picture_url: str | None = None
+    member_count: int | None = None
+    members: list[GroupMemberProfile] = Field(default_factory=list)
 
 
 class IgnoredWebhookEvent(ValueError):
@@ -114,6 +132,14 @@ class WhatsAppProvider(ABC):
         self, channel: WhatsAppChannel, phone_number: str
     ) -> ContactProfileResult:
         raise NotImplementedError("Consulta de perfil não implementada para este provider")
+
+    async def get_group_profile(
+        self, channel: WhatsAppChannel, group_address: str
+    ) -> ContactProfileResult:
+        raise NotImplementedError("Consulta de grupo não implementada para este provider")
+
+    async def list_groups(self, channel: WhatsAppChannel) -> list[GroupDirectoryEntry]:
+        raise NotImplementedError("Listagem de grupos não implementada para este provider")
 
     @abstractmethod
     async def send_text(

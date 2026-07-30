@@ -7,6 +7,7 @@ import {
   History,
   MessageCircle,
   RefreshCw,
+  Users,
   X,
 } from 'lucide-vue-next'
 import type { ContactDetail, Conversation } from '../api/types'
@@ -170,9 +171,47 @@ function formatDate(value: string | null | undefined) {
           </div>
         </dl>
 
-        <p v-if="contact.profile_sync_error" class="mx-4 mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
-          {{ contact.profile_sync_error }}
-        </p>
+        <div
+          v-if="(contact?.kind || conversation.contact_kind || 'direct') === 'group' && contact?.group_member_count !== null"
+          class="mx-4 mt-3 rounded-xl bg-white p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-1.5 text-xs text-slate-500">
+            <Users class="h-3.5 w-3.5" /> Membros
+          </div>
+          <p class="mt-1 text-xl font-semibold text-fluvius-700">
+            {{ contact.group_member_count }}
+          </p>
+        </div>
+        <div
+          v-if="contact?.group_members && contact.group_members.length"
+          class="mx-4 mt-3 rounded-xl bg-white p-3 shadow-sm max-h-48 overflow-y-auto"
+        >
+          <div class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400 mb-2">
+            <Users class="h-3.5 w-3.5" /> Participantes
+          </div>
+          <ul class="space-y-1">
+            <li
+              v-for="member in contact.group_members"
+              :key="member.phone_number"
+              class="flex items-center gap-2 text-sm text-slate-700 py-1"
+            >
+              <span
+                class="grid h-7 w-7 place-items-center rounded-full bg-fluvius-50 text-fluvius-700 text-xs font-medium"
+              >
+                {{ member.phone_number.slice(-4) }}
+              </span>
+              <span class="truncate font-medium">
+                {{ member.name || member.phone_number }}
+              </span>
+              <span
+                v-if="member.is_admin"
+                class="ml-auto rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700"
+              >
+                Admin
+              </span>
+            </li>
+          </ul>
+        </div>
         <button
           v-if="(contact?.kind || conversation.contact_kind || 'direct') !== 'group'"
           class="mx-4 mt-3 flex items-center justify-center gap-2 rounded-lg border border-[#d1d7db] bg-white px-3 py-2.5 text-sm font-medium text-fluvius-700 shadow-sm transition hover:bg-fluvius-50 disabled:opacity-50"

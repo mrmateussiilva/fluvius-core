@@ -9,7 +9,7 @@ from app.common.enums import ChannelStatus, MessageDirection, MessageStatus, Mes
 from app.contacts.models import Contact
 from app.database import SessionLocal
 from app.messages.models import Message
-from app.providers.base import ContactProfileResult
+from app.providers.base import ContactProfileResult, GroupDirectoryEntry, GroupMemberProfile
 from app.providers.models import ProviderEvent
 from app.sync.models import SyncRun
 from app.sync.tasks import (
@@ -155,6 +155,7 @@ class AdminSyncTest(PostgresIntegrationTestCase):
                 is_on_whatsapp=True,
             )
         )
+        provider.list_groups = AsyncMock(return_value=[])
         with (
             patch("app.contacts.service.get_provider", return_value=provider),
             patch("app.contacts.service.claim_evolution_credential"),

@@ -20,6 +20,8 @@ from app.config import settings
 from app.providers.base import (
     ChannelStatusResult,
     ContactProfileResult,
+    GroupDirectoryEntry,
+    GroupMemberProfile,
     IgnoredWebhookEvent,
     IncomingMessageEditResult,
     IncomingMessageResult,
@@ -239,6 +241,32 @@ class EvolutionGoProvider(WhatsAppProvider):
                 else "Não foi possível consultar o perfil no WhatsApp."
             )
         return result
+
+    async def get_group_profile(
+        self, channel: WhatsAppChannel, group_address: str
+    ) -> ContactProfileResult:
+        group_jid = self._group_jid(group_address)
+        info, avatar = await asyncio.gather(
+            self._profile_request("/group/info", {"groupJid": group_jid}),
+            self._profile_request(
+                "/user/avatar",
+                {"number": group_jid, "preview": True},
+            ),
+        )
+        result = self._parse_group_profile(info=info, avatar=avatar)
+        if info is None and avatar is None:
+            result.error = "Não foi possível consultar o grupo no WhatsApp."
+        elif info is None:
+            result.error = "Alguns dados do grupo não foram disponibilizados pelo WhatsApp."
+        return result
+
+    async def list_groups(self, channel: WhatsAppChannel) -> list[GroupDirectoryEntry]:
+        payload = await self._profile_request("/group/myall")
+        if payload is None:
+            payload = await self._profile_request("/group/list")
+        if payload is None:
+            return []
+        return self._parse_group_directory(payload)
 
     async def _profile_request(
         self, path: str, payload: dict[str, Any] | None = None
@@ -496,6 +524,190 @@ class EvolutionGoProvider(WhatsAppProvider):
         return str(value) if value else None
 
     @classmethod
+    def _parse_group_profile(
+        cls,
+        *,
+        info: dict[str, Any] | None,
+        avatar: dict[str, Any] | None,
+    ) -> ContactProfileResult:
+        group = cls._group_payload(info)
+        members = cls._group_members(group)
+        subject = cls._text_value(
+            group,
+            "Name",
+            "name",
+            "Subject",
+            "subject",
+            "GroupName",
+            "groupName",
+        )
+        about = cls._text_value(
+            group,
+            "Topic",
+            "topic",
+            "Description",
+            "description",
+            "GroupDescription",
+            "groupDescription",
+        )
+        return ContactProfileResult(
+            push_name=subject,
+            about=about,
+            profile_picture_url=cls._avatar_url(avatar),
+            is_on_whatsapp=True if group else None,
+            group_member_count=len(members) or None,
+            group_members=members,
+        )
+
+    @classmethod
+    def _parse_group_directory(
+        cls, payload: dict[str, Any]
+    ) -> list[GroupDirectoryEntry]:
+        data = cls._response_data(payload)
+        items: list[Any]
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            nested = (
+                data.get("Groups")
+                or data.get("groups")
+                or data.get("data")
+                or data.get("Data")
+            )
+            items = nested if isinstance(nested, list) else [data]
+        else:
+            return []
+
+        entries: list[GroupDirectoryEntry] = []
+        seen: set[str] = set()
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            group = cls._group_payload({"data": item}) or item
+            jid = str(
+                group.get("JID")
+                or group.get("Jid")
+                or group.get("jid")
+                or group.get("GroupJid")
+                or group.get("groupJid")
+                or group.get("ID")
+                or group.get("id")
+                or ""
+            )
+            group_id = cls._number_from_jid(jid)
+            if not group_id or group_id in seen:
+                continue
+            seen.add(group_id)
+            provider_address = jid if "@" in jid else f"{group_id}@g.us"
+            members = cls._group_members(group)
+            entries.append(
+                GroupDirectoryEntry(
+                    group_id=group_id,
+                    provider_address=provider_address,
+                    name=cls._text_value(
+                        group,
+                        "Name",
+                        "name",
+                        "Subject",
+                        "subject",
+                        "GroupName",
+                        "groupName",
+                    ),
+                    about=cls._text_value(
+                        group,
+                        "Topic",
+                        "topic",
+                        "Description",
+                        "description",
+                    ),
+                    member_count=len(members) or None,
+                    members=members,
+                )
+            )
+        return entries
+
+    @classmethod
+    def _group_payload(cls, response: dict[str, Any] | None) -> dict[str, Any]:
+        data = cls._response_data(response)
+        if isinstance(data, dict):
+            nested = data.get("GroupInfo") or data.get("groupInfo") or data.get("Group")
+            if isinstance(nested, dict):
+                return nested
+            return data
+        return {}
+
+    @classmethod
+    def _group_members(cls, group: dict[str, Any]) -> list[GroupMemberProfile]:
+        raw = (
+            group.get("Participants")
+            or group.get("participants")
+            or group.get("Members")
+            or group.get("members")
+            or []
+        )
+        if not isinstance(raw, list):
+            return []
+        members: list[GroupMemberProfile] = []
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            jid = str(
+                item.get("JID")
+                or item.get("Jid")
+                or item.get("jid")
+                or item.get("PhoneNumber")
+                or item.get("phoneNumber")
+                or item.get("ID")
+                or item.get("id")
+                or ""
+            )
+            phone = cls._number_from_jid(jid)
+            if not phone or phone in seen:
+                continue
+            seen.add(phone)
+            members.append(
+                GroupMemberProfile(
+                    phone_number=phone,
+                    name=cls._text_value(
+                        item,
+                        "DisplayName",
+                        "displayName",
+                        "PushName",
+                        "pushName",
+                        "Name",
+                        "name",
+                    ),
+                    is_admin=cls._optional_bool(
+                        item.get("IsAdmin", item.get("isAdmin"))
+                    )
+                    is True
+                    or cls._optional_bool(
+                        item.get("IsSuperAdmin", item.get("isSuperAdmin"))
+                    )
+                    is True,
+                )
+            )
+        return members
+
+    @classmethod
+    def _avatar_url(cls, avatar: dict[str, Any] | None) -> str | None:
+        avatar_payload = cls._response_data(avatar)
+        if not isinstance(avatar_payload, dict):
+            return None
+        value = avatar_payload.get("URL") or avatar_payload.get("url")
+        if isinstance(value, str) and value.startswith(("https://", "http://")):
+            return value
+        return None
+
+    @classmethod
+    def _group_jid(cls, value: str) -> str:
+        if "@" in value:
+            return value
+        digits = cls._digits(value) or value
+        return f"{digits}@g.us"
+
+    @classmethod
     def _parse_contact_profile(
         cls,
         *,
@@ -508,13 +720,6 @@ class EvolutionGoProvider(WhatsAppProvider):
         checked_user = cls._first_user(check)
         info_user = cls._info_user(info, phone_number)
         saved_contact = cls._saved_contact(contacts, phone_number)
-
-        avatar_payload = cls._response_data(avatar)
-        avatar_url = None
-        if isinstance(avatar_payload, dict):
-            value = avatar_payload.get("URL") or avatar_payload.get("url")
-            if isinstance(value, str) and value.startswith(("https://", "http://")):
-                avatar_url = value
 
         verified_name = cls._verified_name(
             checked_user.get("VerifiedName")
@@ -529,7 +734,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             ),
             verified_name=verified_name,
             about=cls._text_value(info_user, "Status", "status"),
-            profile_picture_url=avatar_url,
+            profile_picture_url=cls._avatar_url(avatar),
             is_on_whatsapp=cls._optional_bool(
                 checked_user.get("IsInWhatsapp", checked_user.get("isInWhatsapp"))
             ),
