@@ -113,13 +113,13 @@ verify_datastores_ready() {
 "${COMPOSE[@]}" up -d --remove-orphans --wait --wait-timeout 300 \
   postgres redis
 verify_datastores_ready
-"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 evolution-go
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 evolution-go
 "${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
-"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 api
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 api
 "${COMPOSE[@]}" exec -T api alembic current
-"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 \
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 \
   worker delivery-worker
-"${COMPOSE[@]}" up -d --no-deps --wait --wait-timeout 300 web
+"${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 web
 "${COMPOSE[@]}" ps
 verify_services_running
 
