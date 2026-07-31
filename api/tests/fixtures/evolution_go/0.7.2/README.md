@@ -19,3 +19,8 @@ QR para uma sessão já autenticada. Nesse caso específico, o canal permanece
 texto não foi disponibilizado pela Evolution Go; a segunda representa uma
 remoção de reação. Material criptográfico e identificadores operacionais foram
 removidos.
+
+`group-message-sender-alt.json` e `group-message-lid-participant.json`
+representam mensagens de grupos recebidas após a introdução de LID pelo
+WhatsApp. Elas garantem que `SenderAlt` seja usado quando disponível e que um
+`@lid` sem telefone alternativo não seja persistido como número de participante.

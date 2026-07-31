@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 SyncType = Literal["contacts", "messages", "all"]
 SyncStatus = Literal["queued", "running", "completed", "partial", "failed"]
 
@@ -24,6 +23,10 @@ class SyncRunResponse(BaseModel):
     status: SyncStatus
     recent_days: int
     total_items: int
+    contact_items: int
+    group_items: int
+    message_event_items: int
+    imported_group_items: int
     processed_items: int
     succeeded_items: int
     failed_items: int

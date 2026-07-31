@@ -356,7 +356,9 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             )
 
     def test_parses_group_messages(self) -> None:
-        result = asyncio.run(self.provider.handle_webhook(message_payload(is_group=True)))
+        result = asyncio.run(
+            self.provider.handle_webhook(load_fixture("group-message-sender-alt.json"))
+        )
         self.assertTrue(result.is_group)
         self.assertEqual(result.chat_id, "120363018686549942")
         self.assertEqual(result.chat_name, "Grupo Operacional")
@@ -364,7 +366,32 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(result.from_number, "120363018686549942")
         self.assertEqual(result.participant_phone, "5527999999999")
         self.assertEqual(result.participant_name, "Cliente Teste")
-        self.assertEqual(result.body, "Olá pelo WhatsApp")
+        self.assertEqual(result.body, "Mensagem de participante com SenderAlt")
+
+    def test_group_lid_participant_without_sender_alt_is_not_stored_as_phone(
+        self,
+    ) -> None:
+        result = asyncio.run(
+            self.provider.handle_webhook(load_fixture("group-message-lid-participant.json"))
+        )
+
+        self.assertTrue(result.is_group)
+        self.assertEqual(result.chat_id, "120363018686549942")
+        self.assertEqual(result.from_number, "120363018686549942")
+        self.assertIsNone(result.participant_phone)
+        self.assertEqual(result.participant_name, "Cliente LID")
+
+    def test_direct_lid_without_sender_alt_is_rejected_instead_of_stored_as_phone(
+        self,
+    ) -> None:
+        payload = message_payload()
+        payload["data"]["Info"].pop("SenderAlt")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Webhook Evolution Go sem ID ou remetente",
+        ):
+            asyncio.run(self.provider.handle_webhook(payload))
 
     def test_parses_group_directory_with_explicit_count_and_admin_role(self) -> None:
         result = self.provider._parse_group_directory(
@@ -381,6 +408,11 @@ class EvolutionGoWebhookTest(unittest.TestCase):
                                     "JID": "5527999999999@s.whatsapp.net",
                                     "PushName": "Coordenador",
                                     "Role": "admin",
+                                },
+                                {
+                                    "JID": "172434498003125@lid",
+                                    "PushName": "Participante LID",
+                                    "Role": "member",
                                 }
                             ],
                         }
@@ -396,6 +428,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(group.name, "Grupo Comercial")
         self.assertEqual(group.about, "Atendimento B2B")
         self.assertEqual(group.member_count, 42)
+        self.assertEqual(len(group.members), 1)
         self.assertEqual(group.members[0].phone_number, "5527999999999")
         self.assertEqual(group.members[0].name, "Coordenador")
         self.assertTrue(group.members[0].is_admin)

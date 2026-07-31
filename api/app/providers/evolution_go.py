@@ -688,7 +688,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 or item.get("id")
                 or ""
             )
-            phone = cls._number_from_jid(jid)
+            phone = cls._phone_from_jid(jid)
             if not phone or phone in seen:
                 continue
             seen.add(phone)
@@ -1344,17 +1344,24 @@ class EvolutionGoProvider(WhatsAppProvider):
             participant_jid = cls._participant_jid(
                 key, info, data, is_from_me=is_from_me
             )
-            participant_phone = cls._number_from_jid(participant_jid) or None
+            participant_phone = cls._phone_from_jid(participant_jid)
             # Thread key is always the group; participant is metadata only.
             return chat_id, provider_address, participant_phone, chat_id
 
         remote_jid = cls._contact_jid(key, info, data, is_from_me=is_from_me)
-        from_number = cls._number_from_jid(remote_jid)
+        from_number = cls._phone_from_jid(remote_jid) or ""
         return from_number, None, None, from_number
 
     @staticmethod
     def _number_from_jid(value: str) -> str:
         return value.split("@", 1)[0].split(":", 1)[0]
+
+    @classmethod
+    def _phone_from_jid(cls, value: str) -> str | None:
+        if "@lid" in value:
+            return None
+        number = cls._number_from_jid(value)
+        return number or None
 
     @classmethod
     def _as_jid(cls, value: str) -> str:

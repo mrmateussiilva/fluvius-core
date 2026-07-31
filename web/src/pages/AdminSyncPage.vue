@@ -96,6 +96,15 @@ function progress(run: SyncRun) {
   )
 }
 
+function itemBreakdown(run: SyncRun) {
+  return [
+    { label: 'Contatos', value: run.contact_items },
+    { label: 'Grupos conhecidos', value: run.group_items },
+    { label: 'Eventos', value: run.message_event_items },
+    { label: 'Diretório de grupos', value: run.imported_group_items },
+  ].filter((item) => item.value > 0)
+}
+
 function formatDate(value: string | null) {
   if (!value) return '—'
   return new Intl.DateTimeFormat('pt-BR', {
@@ -447,6 +456,18 @@ onBeforeUnmount(() => {
                     <span>{{ run.succeeded_items }} concluídos</span>
                     <span v-if="run.failed_items" class="text-rose-600">
                       {{ run.failed_items }} falhas
+                    </span>
+                  </div>
+                  <div
+                    v-if="itemBreakdown(run).length"
+                    class="mt-2 flex flex-wrap gap-1.5"
+                  >
+                    <span
+                      v-for="item in itemBreakdown(run)"
+                      :key="item.label"
+                      class="rounded-md bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600"
+                    >
+                      {{ item.label }}: {{ item.value }}
                     </span>
                   </div>
                 </div>

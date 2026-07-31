@@ -84,6 +84,10 @@ export interface SyncRun {
   status: SyncStatus
   recent_days: number
   total_items: number
+  contact_items: number
+  group_items: number
+  message_event_items: number
+  imported_group_items: number
   processed_items: number
   succeeded_items: number
   failed_items: number

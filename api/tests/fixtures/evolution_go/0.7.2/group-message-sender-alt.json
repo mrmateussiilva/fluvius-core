@@ -1,0 +1,23 @@
+{
+  "event": "Message",
+  "instanceId": "instance-id",
+  "instanceName": "pessoal",
+  "instanceToken": "instance-secret",
+  "data": {
+    "Info": {
+      "ID": "GROUP-SENDER-ALT-1",
+      "Sender": "172434498003125@lid",
+      "SenderAlt": "5527999999999@s.whatsapp.net",
+      "Chat": "120363018686549942@g.us",
+      "ChatName": "Grupo Operacional",
+      "IsFromMe": false,
+      "IsGroup": true,
+      "PushName": "Cliente Teste",
+      "Timestamp": "2026-07-30T22:12:00-03:00",
+      "Type": "text"
+    },
+    "Message": {
+      "conversation": "Mensagem de participante com SenderAlt"
+    }
+  }
+}

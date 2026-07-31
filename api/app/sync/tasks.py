@@ -93,11 +93,14 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
 
         run.status = "running"
         run.started_at = datetime.now(UTC)
-        contact_ids = (
-            _contact_ids(db, tenant_id, channel.id)
-            if run.sync_type in {"contacts", "all"}
-            else []
-        )
+        contact_items: list[tuple[UUID, ContactKind]] = []
+        if run.sync_type in {"contacts", "all"}:
+            contact_items = _contact_items(
+                db,
+                tenant_id,
+                channel.id,
+            )
+        contact_ids = [contact_id for contact_id, _kind in contact_items]
         event_ids = (
             _message_event_ids(
                 db,
@@ -108,6 +111,13 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
             if run.sync_type in {"messages", "all"}
             else []
         )
+        run.contact_items = sum(
+            1 for _contact_id, kind in contact_items if kind == ContactKind.DIRECT
+        )
+        run.group_items = sum(
+            1 for _contact_id, kind in contact_items if kind == ContactKind.GROUP
+        )
+        run.message_event_items = len(event_ids)
         run.total_items = len(contact_ids) + len(event_ids)
         db.commit()
 
@@ -116,7 +126,8 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
             and channel.provider == ChannelProvider.EVOLUTION_GO
         ):
             try:
-                await import_channel_groups(db, channel=channel)
+                imported_groups = await import_channel_groups(db, channel=channel)
+                run.imported_group_items = len(imported_groups)
                 db.commit()
             except (ProviderConfigurationError, NotImplementedError):
                 pass
@@ -128,24 +139,27 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
     _finish_run(run_id, tenant_id)
 
 
-def _contact_ids(db: Session, tenant_id: UUID, channel_id: UUID) -> list[UUID]:
-    return list(
-        db.scalars(
-            select(Conversation.contact_id)
-            .join(
-                Contact,
-                (Contact.id == Conversation.contact_id)
-                & (Contact.tenant_id == tenant_id),
-            )
-            .where(
-                Conversation.tenant_id == tenant_id,
-                Conversation.channel_id == channel_id,
-                Contact.kind.in_((ContactKind.DIRECT, ContactKind.GROUP)),
-            )
-            .order_by(Conversation.last_message_at.desc().nullslast())
-            .limit(CONTACT_SYNC_LIMIT)
+def _contact_items(
+    db: Session,
+    tenant_id: UUID,
+    channel_id: UUID,
+) -> list[tuple[UUID, ContactKind]]:
+    rows = db.execute(
+        select(Conversation.contact_id, Contact.kind)
+        .join(
+            Contact,
+            (Contact.id == Conversation.contact_id)
+            & (Contact.tenant_id == tenant_id),
         )
+        .where(
+            Conversation.tenant_id == tenant_id,
+            Conversation.channel_id == channel_id,
+            Contact.kind.in_((ContactKind.DIRECT, ContactKind.GROUP)),
+        )
+        .order_by(Conversation.last_message_at.desc().nullslast())
+        .limit(CONTACT_SYNC_LIMIT)
     )
+    return [(contact_id, kind) for contact_id, kind in rows]
 
 
 def _message_event_ids(
@@ -398,6 +412,10 @@ def _finish_run(run_id: UUID, tenant_id: UUID) -> None:
                     "channel_id": str(run.channel_id),
                     "sync_type": run.sync_type,
                     "total_items": run.total_items,
+                    "contact_items": run.contact_items,
+                    "group_items": run.group_items,
+                    "message_event_items": run.message_event_items,
+                    "imported_group_items": run.imported_group_items,
                     "succeeded_items": run.succeeded_items,
                     "failed_items": run.failed_items,
                 },
