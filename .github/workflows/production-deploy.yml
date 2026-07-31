@@ -240,8 +240,7 @@ jobs:
           echo "Deploy remoto: $deploy_version ($current_sha)."
           REMOTE
           "${ssh_command[@]}" \
-            "FLUVIUS_PROJECT_ROOT=/opt/apps/fluvius-core FLUVIUS_EXPECTED_DEPLOY_SHA='$DEPLOY_SHA' bash -s -- '$DEPLOY_VERSION'" \
-            < deploy/scripts/production-deploy.sh
+            "FLUVIUS_PROJECT_ROOT=/opt/apps/fluvius-core FLUVIUS_EXPECTED_DEPLOY_SHA='$DEPLOY_SHA' bash /opt/apps/fluvius-core/deploy/scripts/production-deploy.sh '$DEPLOY_VERSION'"
 
       - name: Remove temporary SSH credentials
         if: always()

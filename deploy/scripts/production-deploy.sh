@@ -102,9 +102,9 @@ verify_services_running() {
 
 verify_datastores_ready() {
   "${COMPOSE[@]}" exec -T postgres \
-    pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
+    pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null </dev/null
   "${COMPOSE[@]}" exec -T redis \
-    redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping >/dev/null
+    redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping >/dev/null </dev/null
 }
 
 "${COMPOSE[@]}" config --quiet
@@ -114,9 +114,9 @@ verify_datastores_ready() {
   postgres redis
 verify_datastores_ready
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 evolution-go
-"${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
+"${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head </dev/null
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 api
-"${COMPOSE[@]}" exec -T api alembic current
+"${COMPOSE[@]}" exec -T api alembic current </dev/null
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 \
   worker delivery-worker
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 web
