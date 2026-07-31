@@ -5,8 +5,16 @@ from sqlalchemy import select
 
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
-from app.common.enums import ChannelStatus, MessageDirection, MessageStatus, MessageType
+from app.common.enums import (
+    ChannelStatus,
+    ContactKind,
+    ConversationStatus,
+    MessageDirection,
+    MessageStatus,
+    MessageType,
+)
 from app.contacts.models import Contact
+from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.messages.models import Message
 from app.providers.base import ContactProfileResult, GroupDirectoryEntry, GroupMemberProfile
@@ -155,7 +163,23 @@ class AdminSyncTest(PostgresIntegrationTestCase):
                 is_on_whatsapp=True,
             )
         )
-        provider.list_groups = AsyncMock(return_value=[])
+        provider.list_groups = AsyncMock(
+            return_value=[
+                GroupDirectoryEntry(
+                    group_id="120363018686549942",
+                    provider_address="120363018686549942@g.us",
+                    name="Grupo sem conversa",
+                    member_count=3,
+                    members=[
+                        GroupMemberProfile(
+                            phone_number="5527999999999",
+                            name="Admin Grupo",
+                            is_admin=True,
+                        )
+                    ],
+                )
+            ]
+        )
         with (
             patch("app.contacts.service.get_provider", return_value=provider),
             patch("app.contacts.service.claim_evolution_credential"),
@@ -182,6 +206,84 @@ class AdminSyncTest(PostgresIntegrationTestCase):
             self.assertEqual(contact.push_name, "Contato Sincronizado")
             self.assertEqual(contact.about, "Perfil atualizado")
             self.assertIsNotNone(contact.profile_synced_at)
+            imported_group = db.scalar(
+                select(Contact).where(
+                    Contact.tenant_id == self.tenant_a.tenant_id,
+                    Contact.phone_number == "120363018686549942",
+                )
+            )
+            self.assertIsNotNone(imported_group)
+            self.assertEqual(imported_group.kind, ContactKind.GROUP)
+            self.assertEqual(imported_group.group_member_count, 3)
+
+    def test_contact_sync_includes_known_group_conversations(self) -> None:
+        with SessionLocal() as db:
+            group = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                kind=ContactKind.GROUP,
+                name="Grupo 654321",
+                phone_number="120363018686549942",
+                provider_address="120363018686549942@g.us",
+            )
+            db.add(group)
+            db.flush()
+            db.add(
+                Conversation(
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    contact_id=group.id,
+                    status=ConversationStatus.NEW,
+                )
+            )
+            db.commit()
+
+        run = self._request_run("contacts")
+        provider = Mock()
+        provider.get_contact_profile = AsyncMock(
+            return_value=ContactProfileResult(push_name="Contato Sincronizado")
+        )
+        provider.get_group_profile = AsyncMock(
+            return_value=ContactProfileResult(
+                push_name="Grupo Comercial",
+                about="Atendimento B2B",
+                group_member_count=12,
+                group_members=[
+                    GroupMemberProfile(
+                        phone_number="5527999999999",
+                        name="Coordenador",
+                        is_admin=True,
+                    )
+                ],
+            )
+        )
+        provider.list_groups = AsyncMock(return_value=[])
+        with (
+            patch("app.contacts.service.get_provider", return_value=provider),
+            patch("app.contacts.service.claim_evolution_credential"),
+        ):
+            run_sync(run["id"], str(self.tenant_a.tenant_id))
+
+        with SessionLocal() as db:
+            persisted = db.scalar(
+                select(SyncRun).where(
+                    SyncRun.id == UUID(run["id"]),
+                    SyncRun.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            group = db.scalar(
+                select(Contact).where(
+                    Contact.tenant_id == self.tenant_a.tenant_id,
+                    Contact.phone_number == "120363018686549942",
+                )
+            )
+            self.assertEqual(persisted.status, "completed")
+            self.assertEqual(persisted.total_items, 2)
+            self.assertEqual(persisted.succeeded_items, 2)
+            self.assertEqual(group.name, "Grupo Comercial")
+            self.assertEqual(group.about, "Atendimento B2B")
+            self.assertEqual(group.group_member_count, 12)
+            self.assertEqual(group.group_members[0]["name"], "Coordenador")
+            provider.get_group_profile.assert_awaited_once()
 
     def test_message_sync_reconciles_recent_pending_receipt(self) -> None:
         with SessionLocal() as db:

@@ -349,6 +349,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             is_from_me=is_from_me,
         )
         push_name = str(info.get("PushName") or info.get("pushName") or "") or None
+        chat_name = self._group_name(info, data) if is_group else None
         raw_timestamp = (
             info.get("Timestamp")
             or info.get("timestamp")
@@ -412,7 +413,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             sender_name=participant_name,
             is_group=is_group,
             chat_id=chat_id if is_group else None,
-            chat_name=None,
+            chat_name=chat_name,
             provider_address=provider_address if is_group else None,
             participant_phone=participant_phone if is_group else None,
             participant_name=participant_name if is_group else None,
@@ -555,6 +556,7 @@ class EvolutionGoProvider(WhatsAppProvider):
     ) -> ContactProfileResult:
         group = cls._group_payload(info)
         members = cls._group_members(group)
+        member_count = cls._group_member_count(group, members)
         subject = cls._text_value(
             group,
             "Name",
@@ -578,7 +580,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             about=about,
             profile_picture_url=cls._avatar_url(avatar),
             is_on_whatsapp=True if group else None,
-            group_member_count=len(members) or None,
+            group_member_count=member_count,
             group_members=members,
         )
 
@@ -623,6 +625,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             seen.add(group_id)
             provider_address = jid if "@" in jid else f"{group_id}@g.us"
             members = cls._group_members(group)
+            member_count = cls._group_member_count(group, members)
             entries.append(
                 GroupDirectoryEntry(
                     group_id=group_id,
@@ -643,7 +646,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                         "Description",
                         "description",
                     ),
-                    member_count=len(members) or None,
+                    member_count=member_count,
                     members=members,
                 )
             )
@@ -701,17 +704,94 @@ class EvolutionGoProvider(WhatsAppProvider):
                         "Name",
                         "name",
                     ),
-                    is_admin=cls._optional_bool(
-                        item.get("IsAdmin", item.get("isAdmin"))
-                    )
-                    is True
-                    or cls._optional_bool(
-                        item.get("IsSuperAdmin", item.get("isSuperAdmin"))
-                    )
-                    is True,
+                    is_admin=cls._group_member_is_admin(item),
                 )
             )
         return members
+
+    @classmethod
+    def _group_name(cls, info: dict[str, Any], data: dict[str, Any]) -> str | None:
+        group = cls._group_payload(data)
+        return (
+            cls._text_value(
+                info,
+                "ChatName",
+                "chatName",
+                "GroupName",
+                "groupName",
+                "Subject",
+                "subject",
+                "Name",
+                "name",
+            )
+            or cls._text_value(
+                data,
+                "ChatName",
+                "chatName",
+                "GroupName",
+                "groupName",
+                "Subject",
+                "subject",
+                "Name",
+                "name",
+            )
+            or cls._text_value(
+                group,
+                "Name",
+                "name",
+                "Subject",
+                "subject",
+                "GroupName",
+                "groupName",
+            )
+        )
+
+    @classmethod
+    def _group_member_count(
+        cls,
+        group: dict[str, Any],
+        members: list[GroupMemberProfile],
+    ) -> int | None:
+        for key in (
+            "ParticipantCount",
+            "participantCount",
+            "ParticipantsCount",
+            "participantsCount",
+            "MemberCount",
+            "memberCount",
+            "MembersCount",
+            "membersCount",
+            "Size",
+            "size",
+        ):
+            count = cls._optional_int(group.get(key))
+            if count is not None:
+                return count
+        return len(members) or None
+
+    @classmethod
+    def _group_member_is_admin(cls, member: dict[str, Any]) -> bool:
+        admin_flags = (
+            member.get("IsAdmin", member.get("isAdmin")),
+            member.get("IsSuperAdmin", member.get("isSuperAdmin")),
+        )
+        if any(cls._optional_bool(flag) is True for flag in admin_flags):
+            return True
+        role = cls._text_value(
+            member,
+            "Role",
+            "role",
+            "Admin",
+            "admin",
+            "Type",
+            "type",
+        )
+        return role is not None and role.lower() in {
+            "admin",
+            "superadmin",
+            "super_admin",
+            "owner",
+        }
 
     @classmethod
     def _avatar_url(cls, avatar: dict[str, Any] | None) -> str | None:
@@ -835,6 +915,20 @@ class EvolutionGoProvider(WhatsAppProvider):
     @staticmethod
     def _digits(value: str) -> str:
         return "".join(character for character in value if character.isdigit())
+
+    @staticmethod
+    def _optional_int(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value if value >= 0 else None
+        if isinstance(value, str):
+            try:
+                parsed = int(value.strip())
+            except ValueError:
+                return None
+            return parsed if parsed >= 0 else None
+        return None
 
     @staticmethod
     def _message_id(data: dict[str, Any]) -> str | None:

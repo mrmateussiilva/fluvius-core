@@ -213,13 +213,18 @@ function formatDate(value: string | null | undefined) {
           </ul>
         </div>
         <button
-          v-if="(contact?.kind || conversation.contact_kind || 'direct') !== 'group'"
           class="mx-4 mt-3 flex items-center justify-center gap-2 rounded-lg border border-[#d1d7db] bg-white px-3 py-2.5 text-sm font-medium text-fluvius-700 shadow-sm transition hover:bg-fluvius-50 disabled:opacity-50"
           :disabled="loading"
           @click="emit('refresh')"
         >
           <RefreshCw class="h-4 w-4" :class="loading ? 'animate-spin' : ''" />
-          {{ loading ? 'Atualizando...' : 'Atualizar dados do WhatsApp' }}
+          {{
+            loading
+              ? 'Atualizando...'
+              : (contact?.kind || conversation.contact_kind || 'direct') === 'group'
+                ? 'Atualizar dados do grupo'
+                : 'Atualizar dados do WhatsApp'
+          }}
         </button>
         <p class="px-5 pb-5 pt-3 text-center text-[11px] leading-4 text-[#8696a0]">
           {{

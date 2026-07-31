@@ -46,6 +46,7 @@ def message_payload(
                 "SenderAlt": "5527999999999@s.whatsapp.net",
                 "RecipientAlt": "5527998888888@s.whatsapp.net",
                 "Chat": "120363018686549942@g.us" if is_group else "172434498003125@lid",
+                "ChatName": "Grupo Operacional" if is_group else "",
                 "IsFromMe": from_me,
                 "IsGroup": is_group,
                 "PushName": "Cliente Teste",
@@ -358,11 +359,66 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         result = asyncio.run(self.provider.handle_webhook(message_payload(is_group=True)))
         self.assertTrue(result.is_group)
         self.assertEqual(result.chat_id, "120363018686549942")
+        self.assertEqual(result.chat_name, "Grupo Operacional")
         self.assertEqual(result.provider_address, "120363018686549942@g.us")
         self.assertEqual(result.from_number, "120363018686549942")
         self.assertEqual(result.participant_phone, "5527999999999")
         self.assertEqual(result.participant_name, "Cliente Teste")
         self.assertEqual(result.body, "Olá pelo WhatsApp")
+
+    def test_parses_group_directory_with_explicit_count_and_admin_role(self) -> None:
+        result = self.provider._parse_group_directory(
+            {
+                "data": {
+                    "Groups": [
+                        {
+                            "JID": "120363018686549942@g.us",
+                            "Subject": "Grupo Comercial",
+                            "Description": "Atendimento B2B",
+                            "ParticipantCount": "42",
+                            "Participants": [
+                                {
+                                    "JID": "5527999999999@s.whatsapp.net",
+                                    "PushName": "Coordenador",
+                                    "Role": "admin",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual(len(result), 1)
+        group = result[0]
+        self.assertEqual(group.group_id, "120363018686549942")
+        self.assertEqual(group.provider_address, "120363018686549942@g.us")
+        self.assertEqual(group.name, "Grupo Comercial")
+        self.assertEqual(group.about, "Atendimento B2B")
+        self.assertEqual(group.member_count, 42)
+        self.assertEqual(group.members[0].phone_number, "5527999999999")
+        self.assertEqual(group.members[0].name, "Coordenador")
+        self.assertTrue(group.members[0].is_admin)
+
+    def test_parses_group_profile_with_member_count_without_member_list(self) -> None:
+        result = self.provider._parse_group_profile(
+            info={
+                "data": {
+                    "GroupInfo": {
+                        "Name": "Grupo Diretoria",
+                        "Topic": "Decisões operacionais",
+                        "MemberCount": 12,
+                    }
+                }
+            },
+            avatar={"data": {"URL": "https://example.test/group.jpg"}},
+        )
+
+        self.assertEqual(result.push_name, "Grupo Diretoria")
+        self.assertEqual(result.about, "Decisões operacionais")
+        self.assertEqual(result.group_member_count, 12)
+        self.assertEqual(result.group_members, [])
+        self.assertEqual(result.profile_picture_url, "https://example.test/group.jpg")
 
     def test_parses_connected_status_envelope(self) -> None:
         result = self.provider._parse_status(load_fixture("status-connected.json"))

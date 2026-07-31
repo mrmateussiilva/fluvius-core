@@ -58,7 +58,7 @@ Essa versão não envia header customizado no webhook. Ela inclui `instanceToken
 
 Eventos `Message` usam o envelope nativo do Go com `data.Info` e `data.Message`. Mensagens com `Info.IsFromMe=true` originadas no celular são persistidas como `outgoing/sent`; o contato é resolvido por `Info.RecipientAlt`, evitando armazenar LIDs como telefone. Eventos técnicos `SendMessage` são ignorados porque a chamada síncrona da API já persiste esse envio.
 
-Grupos (`Info.IsGroup=true` ou `Chat` com sufixo `@g.us`) entram na mesma inbox operacional. A thread é o chat do grupo (`Chat`), não o participante; o autor da mensagem fica em `participant_phone`/`participant_name` (via `Sender`/`SenderAlt` + `PushName`). O envio usa o endereço `…@g.us` do grupo; respostas citadas exigem o JID do participante original em `quoted.participant`.
+Grupos (`Info.IsGroup=true` ou `Chat` com sufixo `@g.us`) entram na mesma inbox operacional. A thread é o chat do grupo (`Chat`), não o participante; o autor da mensagem fica em `participant_phone`/`participant_name` (via `Sender`/`SenderAlt` + `PushName`). Quando o payload informa o assunto/nome do grupo, o adapter preenche `chat_name` para evitar contatos provisórios como `Grupo 123456`. O envio usa o endereço `…@g.us` do grupo; respostas citadas exigem o JID do participante original em `quoted.participant`.
 
 Edições observadas na 0.7.2 usam `Info.Edit=1` e apontam para a mensagem
 original em `Message.secretEncryptedMessage.targetMessageKey.ID`. O adapter
@@ -94,15 +94,16 @@ Recibos e edições que chegam antes da mensagem original ficam em
 `provider_events` com erros canônicos e são reprocessados automaticamente pelo
 loop de reconciliação da API e pela sincronização administrativa.
 
-O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter normaliza confirmação do número, nome exibido/comercial/verificado, recado e URL da foto. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
+O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter normaliza confirmação do número, nome exibido/comercial/verificado, recado e URL da foto. Grupos usam `/group/info` e `/user/avatar`, normalizando assunto, descrição, foto, contagem de membros e lista parcial de participantes quando o provider disponibiliza esses campos. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 
 O adapter atual não possui um endpoint confirmado para listar ou importar o
 histórico completo de mensagens. Por isso, a sincronização administrativa de
 mensagens não chama uma rota presumida do gateway: ela reprocessa somente
 edições e recibos recentes que o webhook já persistiu como pendentes em
-`provider_events`. A sincronização de contatos também se limita aos contatos já
-associados às conversas do canal; ela atualiza seus perfis pelas rotas
-confirmadas acima, mas não importa toda a agenda do WhatsApp.
+`provider_events`. A sincronização de contatos atualiza contatos e grupos já
+associados às conversas do canal. Para Evolution Go, ela também pode consultar
+`/group/myall` ou `/group/list` para manter um cache auxiliar de grupos, mas
+isso não cria conversas nem atendimento sem mensagem recebida.
 
 ## TODO de compatibilidade Evolution Go
 

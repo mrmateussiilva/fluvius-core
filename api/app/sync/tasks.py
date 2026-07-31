@@ -21,11 +21,10 @@ from app.providers.evolution_credentials import (
 )
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
-from app.providers.status_updates import apply_message_status_update
 from app.providers.pending_events import PENDING_MESSAGE_ERRORS, PENDING_RECEIPT_ERROR
+from app.providers.status_updates import apply_message_status_update
 from app.providers.webhook_router import apply_message_edit
 from app.sync.models import SyncRun
-
 
 CONTACT_SYNC_LIMIT = 50
 MESSAGE_SYNC_LIMIT = 500
@@ -112,12 +111,13 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
         run.total_items = len(contact_ids) + len(event_ids)
         db.commit()
 
-        if run.sync_type in {"contacts", "all"} and channel.provider == ChannelProvider.EVOLUTION_GO:
+        if (
+            run.sync_type in {"contacts", "all"}
+            and channel.provider == ChannelProvider.EVOLUTION_GO
+        ):
             try:
-                imported = await import_channel_groups(db, channel=channel)
-                if imported:
-                    run.total_items += len(imported)
-                    db.commit()
+                await import_channel_groups(db, channel=channel)
+                db.commit()
             except (ProviderConfigurationError, NotImplementedError):
                 pass
 
@@ -140,7 +140,7 @@ def _contact_ids(db: Session, tenant_id: UUID, channel_id: UUID) -> list[UUID]:
             .where(
                 Conversation.tenant_id == tenant_id,
                 Conversation.channel_id == channel_id,
-                Contact.kind == ContactKind.DIRECT,
+                Contact.kind.in_((ContactKind.DIRECT, ContactKind.GROUP)),
             )
             .order_by(Conversation.last_message_at.desc().nullslast())
             .limit(CONTACT_SYNC_LIMIT)
