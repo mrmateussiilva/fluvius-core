@@ -3,12 +3,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
+from redis.exceptions import RedisError
+
 from app.common.enums import MessageStatus
 from app.conversations.router import conversation_query
 from app.delivery.dispatcher import _claim_dispatcher_lock, _release_dispatcher_lock
-from app.messages.router import apply_send_result, format_outgoing_content
+from app.delivery.service import apply_send_result, format_outgoing_content
 from app.providers.base import SendResult
-from redis.exceptions import RedisError
 
 
 class DeliveryInvariantTest(unittest.TestCase):
