@@ -115,12 +115,19 @@ Desativar uma membership invalida imediatamente o acesso porque toda requisiçã
 O quadro operacional e `/api/v1/users/active` exigem papel `admin`. O endpoint expõe somente ID, nome, papel e canais dos usuários ativos do tenant autenticado, sem e-mail ou dados de acesso. Conversas e quadro oferecem seletor de canal; somente o administrador recebe a opção consolidada “Todos os canais”. As colunas são calculadas no navegador a partir das conversas existentes e uma conversa só pode ser atribuída a um atendente autorizado para seu canal. Drag-and-drop e o seletor dos cards chamam exclusivamente os endpoints tenant-scoped de atribuição ou liberação. Liberar move uma conversa `open` para `new`, remove o responsável e registra `conversation.released` em `audit_logs`.
 
 `GET /api/v1/operations/health` também exige papel `admin`. Ele combina o
-registro de workers ativos do RQ com contagens tenant-scoped da outbox e dos
-canais. Uma entrega `pending` há mais de dois minutos é considerada atrasada;
-falhas são contadas numa janela de 24 horas. A resposta nunca contém jobs ou
-dados de outros tenants, mesmo que Redis e os workers sejam compartilhados. O
-frontend consulta esse retrato a cada 30 segundos enquanto a aba está visível e
-mostra um alerta global quando a operação exige atenção.
+registro de workers ativos do RQ com contagens tenant-scoped da outbox, dos
+canais e dos webhooks (`provider_events` pendentes, com erro e canais
+conectados sem nenhum evento). Uma entrega `pending` há mais de dois minutos é
+considerada atrasada; falhas de entrega são contadas numa janela de 24 horas.
+Eventos de webhook aguardando reconciliação há mais de 15 minutos elevam o
+status a crítico. A resposta nunca contém jobs ou dados de outros tenants, mesmo
+que Redis e os workers sejam compartilhados. O frontend consulta esse retrato a
+cada 30 segundos enquanto a aba está visível e mostra um alerta global quando a
+operação exige atenção.
+
+A API também mantém um loop de reconciliação de webhooks pendentes (recibos e
+edições aguardando a mensagem correspondente), com eleição de líder via Redis,
+para não depender só da sincronização administrativa manual.
 
 ## Administração da plataforma
 

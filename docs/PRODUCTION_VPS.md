@@ -249,7 +249,8 @@ vetor de crescimento; o limite por upload continua em 25 MB.
 O timer `fluvius-backup.timer` executa diariamente por volta de 02:30, com
 atraso aleatório de até 15 minutos. Ele:
 
-1. cria `pg_dumpall` dos bancos Fluvius e Evolution;
+  1. cria `pg_dumpall` dos bancos Fluvius e Evolution, mais dumps dedicados
+     de `evogo_auth` (licença) e `evogo_users` (instâncias);
 2. salva dump e `/srv/fluvius/media` em um repositório Restic deduplicado;
 3. mantém 7 diários, 4 semanais e 3 mensais;
 4. remove dados que saíram da retenção.

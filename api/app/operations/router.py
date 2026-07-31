@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from redis.exceptions import RedisError
 from rq import Worker
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
@@ -23,11 +23,14 @@ from app.operations.schemas import (
     OperationalStatus,
 )
 from app.providers.models import ProviderEvent
+from app.providers.pending_events import PENDING_MESSAGE_ERRORS
 
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 DELAYED_DELIVERY_AFTER = timedelta(minutes=2)
 FAILED_DELIVERY_WINDOW = timedelta(hours=24)
+STALE_CONNECTED_AFTER = timedelta(minutes=30)
+DELAYED_PROVIDER_EVENT_AFTER = timedelta(minutes=15)
 ACTIVE_DELIVERY_STATUSES = ("queued", "enqueued", "processing", "retry_wait")
 
 
@@ -96,6 +99,27 @@ def operational_health(
         )
     ) or 0
 
+    pending_event_filter = and_(
+        ProviderEvent.tenant_id == context.tenant_id,
+        ProviderEvent.processed.is_(False),
+        ProviderEvent.processing_error.in_(PENDING_MESSAGE_ERRORS),
+    )
+    failed_event_filter = and_(
+        ProviderEvent.tenant_id == context.tenant_id,
+        ProviderEvent.processed.is_(False),
+        ProviderEvent.processing_error.is_not(None),
+        ProviderEvent.processing_error.notin_(PENDING_MESSAGE_ERRORS),
+    )
+    pending_provider_events = (
+        db.scalar(select(func.count(ProviderEvent.id)).where(pending_event_filter)) or 0
+    )
+    failed_provider_events = (
+        db.scalar(select(func.count(ProviderEvent.id)).where(failed_event_filter)) or 0
+    )
+    oldest_pending_event_at = db.scalar(
+        select(func.min(ProviderEvent.created_at)).where(pending_event_filter)
+    )
+
     last_event_at = (
         select(func.max(ProviderEvent.created_at))
         .where(
@@ -105,21 +129,63 @@ def operational_health(
         .correlate(WhatsAppChannel)
         .scalar_subquery()
     )
+    pending_events_sq = (
+        select(func.count(ProviderEvent.id))
+        .where(
+            ProviderEvent.tenant_id == context.tenant_id,
+            ProviderEvent.channel_id == WhatsAppChannel.id,
+            ProviderEvent.processed.is_(False),
+            ProviderEvent.processing_error.in_(PENDING_MESSAGE_ERRORS),
+        )
+        .correlate(WhatsAppChannel)
+        .scalar_subquery()
+    )
+    failed_events_sq = (
+        select(func.count(ProviderEvent.id))
+        .where(
+            ProviderEvent.tenant_id == context.tenant_id,
+            ProviderEvent.channel_id == WhatsAppChannel.id,
+            ProviderEvent.processed.is_(False),
+            ProviderEvent.processing_error.is_not(None),
+            ProviderEvent.processing_error.notin_(PENDING_MESSAGE_ERRORS),
+        )
+        .correlate(WhatsAppChannel)
+        .scalar_subquery()
+    )
     channel_rows = db.execute(
-        select(WhatsAppChannel, last_event_at.label("last_event_at"))
+        select(
+            WhatsAppChannel,
+            last_event_at.label("last_event_at"),
+            pending_events_sq.label("pending_events"),
+            failed_events_sq.label("failed_events"),
+        )
         .where(WhatsAppChannel.tenant_id == context.tenant_id)
         .order_by(WhatsAppChannel.name, WhatsAppChannel.id)
     ).all()
-    channels = [
-        OperationalChannelHealth(
-            id=channel.id,
-            name=channel.name,
-            phone_number=channel.phone_number,
-            status=channel.status,
-            last_event_at=event_at,
+    channels = []
+    stale_connected_channels = 0
+    for channel, event_at, pending_count, failed_count in channel_rows:
+        pending_count = int(pending_count or 0)
+        failed_count = int(failed_count or 0)
+        webhook_stale = (
+            channel.status == ChannelStatus.CONNECTED
+            and event_at is None
+            and channel.updated_at < now - STALE_CONNECTED_AFTER
         )
-        for channel, event_at in channel_rows
-    ]
+        if webhook_stale:
+            stale_connected_channels += 1
+        channels.append(
+            OperationalChannelHealth(
+                id=channel.id,
+                name=channel.name,
+                phone_number=channel.phone_number,
+                status=channel.status,
+                last_event_at=event_at,
+                pending_events=pending_count,
+                failed_events=failed_count,
+                webhook_stale=webhook_stale,
+            )
+        )
     connected_channels = sum(
         channel.status == ChannelStatus.CONNECTED for channel in channels
     )
@@ -147,6 +213,24 @@ def operational_health(
     if failed_deliveries_24h:
         issues.append(
             f"{failed_deliveries_24h} entrega(s) falharam nas últimas 24 horas."
+        )
+    if pending_provider_events:
+        delayed_pending = (
+            oldest_pending_event_at is not None
+            and oldest_pending_event_at < now - DELAYED_PROVIDER_EVENT_AFTER
+        )
+        issues.append(
+            f"{pending_provider_events} evento(s) de webhook aguardando reconciliação."
+        )
+        if delayed_pending:
+            critical = True
+    if failed_provider_events:
+        issues.append(
+            f"{failed_provider_events} evento(s) de webhook com erro de processamento."
+        )
+    if stale_connected_channels:
+        issues.append(
+            f"{stale_connected_channels} canal(is) conectado(s) sem eventos recentes."
         )
     unavailable_channels = [
         channel
@@ -180,6 +264,10 @@ def operational_health(
         delayed_deliveries=delayed_deliveries,
         failed_deliveries_24h=failed_deliveries_24h,
         oldest_pending_at=oldest_pending_at,
+        pending_provider_events=pending_provider_events,
+        failed_provider_events=failed_provider_events,
+        oldest_pending_event_at=oldest_pending_event_at,
+        stale_connected_channels=stale_connected_channels,
         connected_channels=connected_channels,
         total_channels=len(channels),
         issues=issues,

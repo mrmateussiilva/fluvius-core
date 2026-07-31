@@ -30,6 +30,7 @@ from app.providers.base import (
     SendResult,
     WhatsAppProvider,
 )
+from app.providers.evolution_circuit import evolution_circuit
 
 
 class EvolutionGoProvider(WhatsAppProvider):
@@ -40,6 +41,8 @@ class EvolutionGoProvider(WhatsAppProvider):
     """
 
     webhook_events = ["MESSAGE", "CONNECTION", "QRCODE", "READ_RECEIPT"]
+    default_timeout = httpx.Timeout(12.0, connect=5.0)
+    profile_timeout = httpx.Timeout(6.0, connect=3.0)
 
     def __init__(
         self,
@@ -58,9 +61,27 @@ class EvolutionGoProvider(WhatsAppProvider):
         # Never log this dictionary: it contains the gateway credential.
         return {"apikey": self.api_key, "Content-Type": "application/json"}
 
+    @property
+    def _circuit_key(self) -> str:
+        return self.base_url
+
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=20.0) as client:
-            return await client.request(method, path, headers=self.headers, **kwargs)
+        timeout = kwargs.pop("timeout", self.default_timeout)
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=timeout
+            ) as client:
+                response = await client.request(
+                    method, path, headers=self.headers, **kwargs
+                )
+        except httpx.HTTPError:
+            evolution_circuit.record_failure(self._circuit_key)
+            raise
+        if response.status_code < 500:
+            evolution_circuit.record_success(self._circuit_key)
+        else:
+            evolution_circuit.record_failure(self._circuit_key)
+        return response
 
     async def send_text(
         self,
@@ -271,12 +292,14 @@ class EvolutionGoProvider(WhatsAppProvider):
     async def _profile_request(
         self, path: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
+        if not evolution_circuit.allow(self._circuit_key):
+            return None
         try:
             response = await self._request(
                 "POST" if payload is not None else "GET",
                 path,
                 json=payload,
-                timeout=15.0,
+                timeout=self.profile_timeout,
             )
             response.raise_for_status()
             data = response.json()

@@ -22,6 +22,7 @@ from app.providers.evolution_credentials import (
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
 from app.providers.status_updates import apply_message_status_update
+from app.providers.pending_events import PENDING_MESSAGE_ERRORS, PENDING_RECEIPT_ERROR
 from app.providers.webhook_router import apply_message_edit
 from app.sync.models import SyncRun
 
@@ -29,10 +30,6 @@ from app.sync.models import SyncRun
 CONTACT_SYNC_LIMIT = 50
 MESSAGE_SYNC_LIMIT = 500
 logger = logging.getLogger(__name__)
-PENDING_MESSAGE_ERRORS = (
-    "Aguardando a mensagem correspondente ser confirmada pelo provider",
-    "Aguardando a mensagem original da edição ser persistida",
-)
 CONTACT_OFFLINE_ERROR = "O canal foi desconectado durante a sincronização."
 CONTACT_FAILURE_ERROR = "Não foi possível atualizar um dos perfis de contato."
 MESSAGE_FAILURE_ERROR = "Um evento de mensagem ainda não pôde ser reconciliado."
@@ -306,7 +303,7 @@ async def _reconcile_message_event(
             if channel.provider == ChannelProvider.EVOLUTION_GO:
                 claim_evolution_credential(db, channel)
             adapter = get_provider(channel.provider, channel, db)
-            if event.processing_error == PENDING_MESSAGE_ERRORS[0]:
+            if event.processing_error == PENDING_RECEIPT_ERROR:
                 update = adapter.handle_message_status(event.payload)
                 if update is not None:
                     application = apply_message_status_update(

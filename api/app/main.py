@@ -20,6 +20,7 @@ from app.delivery.dispatcher import delivery_dispatcher_loop
 from app.messages.router import router as messages_router
 from app.operations.router import router as operations_router
 from app.platform.router import router as platform_router
+from app.providers.reconcile import webhook_reconcile_loop
 from app.providers.webhook_router import router as webhook_router
 from app.quick_replies.router import router as quick_replies_router
 from app.realtime.router import router as realtime_router
@@ -38,6 +39,7 @@ async def lifespan(_: FastAPI):
     if settings.environment != "test":
         tasks = [
             asyncio.create_task(delivery_dispatcher_loop(stop_event)),
+            asyncio.create_task(webhook_reconcile_loop(stop_event)),
             asyncio.create_task(consume_realtime_events(stop_event)),
         ]
     try:

@@ -107,5 +107,21 @@ class DeliveryDispatcherLockTest(unittest.TestCase):
             _release_dispatcher_lock()
 
 
+class EvolutionCircuitBreakerTest(unittest.TestCase):
+    def test_opens_after_threshold_and_blocks_calls(self) -> None:
+        from app.providers.evolution_circuit import EvolutionCircuitBreaker
+
+        circuit = EvolutionCircuitBreaker(failure_threshold=3, open_seconds=60)
+        key = "http://evolution-go:8080"
+        self.assertTrue(circuit.allow(key))
+        circuit.record_failure(key)
+        circuit.record_failure(key)
+        self.assertTrue(circuit.allow(key))
+        circuit.record_failure(key)
+        self.assertFalse(circuit.allow(key))
+        circuit.record_success(key)
+        self.assertTrue(circuit.allow(key))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -34,6 +34,7 @@ from app.providers.evolution_credentials import (
 )
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
+from app.providers.pending_events import PENDING_EDIT_ERROR, PENDING_RECEIPT_ERROR
 from app.providers.status_updates import apply_message_status_update
 from app.realtime.manager import realtime_manager
 
@@ -182,7 +183,7 @@ async def whatsapp_webhook(
             event.processing_error = (
                 None
                 if event.processed
-                else "Aguardando a mensagem correspondente ser confirmada pelo provider"
+                else PENDING_RECEIPT_ERROR
             )
             db.commit()
             for message in application.changed_messages:
@@ -220,7 +221,7 @@ async def whatsapp_webhook(
             )
             if edited_message is None:
                 event.processing_error = (
-                    "Aguardando a mensagem original da edição ser persistida"
+                    PENDING_EDIT_ERROR
                 )
                 db.commit()
                 return {"status": "pending"}

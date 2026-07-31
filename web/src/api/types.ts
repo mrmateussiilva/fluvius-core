@@ -109,6 +109,9 @@ export interface OperationalChannelHealth {
   phone_number: string | null
   status: ChannelStatus
   last_event_at: string | null
+  pending_events: number
+  failed_events: number
+  webhook_stale: boolean
 }
 
 export interface OperationalHealth {
@@ -121,6 +124,10 @@ export interface OperationalHealth {
   delayed_deliveries: number
   failed_deliveries_24h: number
   oldest_pending_at: string | null
+  pending_provider_events: number
+  failed_provider_events: number
+  oldest_pending_event_at: string | null
+  stale_connected_channels: number
   connected_channels: number
   total_channels: number
   issues: string[]

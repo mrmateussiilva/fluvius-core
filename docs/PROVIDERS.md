@@ -86,6 +86,14 @@ ambíguo e bloqueiam retry automático para evitar uma segunda mensagem no
 WhatsApp. Confirmar em sessão real que a Evolution deduplica o campo `id`
 continua sendo requisito antes de ampliar essa política.
 
+Timeouts de envio usam 12s (connect 5s); consultas de perfil/grupo usam 6s
+(connect 3s). Chamadas de perfil passam por um circuit breaker em memória por
+`base_url`: após falhas consecutivas o adapter deixa de consultar o gateway por
+alguns segundos e devolve perfil parcial, evitando prender workers HTTP.
+Recibos e edições que chegam antes da mensagem original ficam em
+`provider_events` com erros canônicos e são reprocessados automaticamente pelo
+loop de reconciliação da API e pela sincronização administrativa.
+
 O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter normaliza confirmação do número, nome exibido/comercial/verificado, recado e URL da foto. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 
 O adapter atual não possui um endpoint confirmado para listar ou importar o

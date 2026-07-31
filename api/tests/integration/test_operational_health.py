@@ -13,6 +13,8 @@ from app.common.enums import (
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.messages.models import Message
+from app.providers.models import ProviderEvent
+from app.providers.pending_events import PENDING_RECEIPT_ERROR
 from app.users.models import TenantUser
 
 from .base import PostgresIntegrationTestCase
@@ -141,3 +143,70 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         self.assertTrue(
             any("Worker de entregas offline" in issue for issue in payload["issues"])
         )
+
+    def test_health_surfaces_pending_webhooks_tenant_scoped(self) -> None:
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            db.add(
+                ProviderEvent(
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    provider="evolution_go",
+                    event_type="Receipt",
+                    provider_event_id="receipt-pending-a",
+                    payload={"event": "Receipt"},
+                    processed=False,
+                    processing_error=PENDING_RECEIPT_ERROR,
+                    created_at=now - timedelta(minutes=20),
+                )
+            )
+            db.add(
+                ProviderEvent(
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    provider="evolution_go",
+                    event_type="Message",
+                    provider_event_id="message-failed-a",
+                    payload={"event": "Message"},
+                    processed=False,
+                    processing_error="Payload inválido do gateway",
+                )
+            )
+            db.add(
+                ProviderEvent(
+                    tenant_id=self.tenant_b.tenant_id,
+                    channel_id=self.tenant_b.channel_id,
+                    provider="evolution_go",
+                    event_type="Receipt",
+                    provider_event_id="receipt-pending-b",
+                    payload={"event": "Receipt"},
+                    processed=False,
+                    processing_error=PENDING_RECEIPT_ERROR,
+                )
+            )
+            db.commit()
+
+        with patch(
+            "app.operations.router._worker_health",
+            return_value=(True, True, True),
+        ):
+            response = self.client.get(
+                "/api/v1/operations/health",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["pending_provider_events"], 1)
+        self.assertEqual(payload["failed_provider_events"], 1)
+        self.assertEqual(payload["status"], "critical")
+        self.assertTrue(
+            any("webhook aguardando reconciliação" in issue for issue in payload["issues"])
+        )
+        channel = next(
+            item
+            for item in payload["channels"]
+            if item["id"] == str(self.tenant_a.channel_id)
+        )
+        self.assertEqual(channel["pending_events"], 1)
+        self.assertEqual(channel["failed_events"], 1)

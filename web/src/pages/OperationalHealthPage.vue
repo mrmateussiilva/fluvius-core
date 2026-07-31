@@ -181,7 +181,7 @@ onMounted(async () => {
           </ul>
         </section>
 
-        <section class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <ServerCog class="h-5 w-5 text-fluvius-700" />
             <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -239,6 +239,31 @@ onMounted(async () => {
               {{ formatDate(operations.health.oldest_pending_at) }}
             </p>
           </article>
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <RadioTower class="h-5 w-5 text-violet-700" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Webhooks pendentes
+            </p>
+            <p class="mt-1 text-2xl font-semibold text-slate-900">
+              {{ operations.health.pending_provider_events }}
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              {{ operations.health.failed_provider_events }} com erro · mais antigo:
+              {{ formatDate(operations.health.oldest_pending_event_at) }}
+            </p>
+          </article>
+          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <AlertTriangle class="h-5 w-5 text-amber-600" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Canais sem webhook
+            </p>
+            <p class="mt-1 text-2xl font-semibold text-slate-900">
+              {{ operations.health.stale_connected_channels }}
+            </p>
+            <p class="mt-1 text-xs text-slate-500">
+              Conectados há 30+ min sem nenhum evento
+            </p>
+          </article>
         </section>
 
         <section class="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -273,6 +298,23 @@ onMounted(async () => {
                 </span>
                 <p class="mt-1.5 text-xs text-slate-400">
                   Último evento: {{ formatDate(channel.last_event_at) }}
+                </p>
+                <p
+                  v-if="channel.pending_events || channel.failed_events || channel.webhook_stale"
+                  class="mt-1 text-xs"
+                  :class="
+                    channel.failed_events || channel.webhook_stale
+                      ? 'text-rose-600'
+                      : 'text-amber-600'
+                  "
+                >
+                  <span v-if="channel.pending_events">
+                    {{ channel.pending_events }} pendente(s)
+                  </span>
+                  <span v-if="channel.failed_events">
+                    · {{ channel.failed_events }} erro(s)
+                  </span>
+                  <span v-if="channel.webhook_stale"> · sem webhook</span>
                 </p>
               </div>
             </article>

@@ -30,9 +30,18 @@ trap cleanup EXIT INT TERM
 
 TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
 DATABASE_DUMP="$STAGING_DIR/postgresql-$TIMESTAMP.sql.gz"
+EVOGO_AUTH_DUMP="$STAGING_DIR/evogo_auth-$TIMESTAMP.sql.gz"
+EVOGO_USERS_DUMP="$STAGING_DIR/evogo_users-$TIMESTAMP.sql.gz"
 "${COMPOSE[@]}" exec -T postgres \
   pg_dumpall --clean --if-exists -U "$POSTGRES_USER" |
   gzip -9 > "$DATABASE_DUMP"
+# Dumps dedicados da Evolution (licença + instâncias) para restore seletivo.
+"${COMPOSE[@]}" exec -T postgres \
+  pg_dump --clean --if-exists -U "$POSTGRES_USER" -d evogo_auth |
+  gzip -9 > "$EVOGO_AUTH_DUMP"
+"${COMPOSE[@]}" exec -T postgres \
+  pg_dump --clean --if-exists -U "$POSTGRES_USER" -d evogo_users |
+  gzip -9 > "$EVOGO_USERS_DUMP"
 
 export RESTIC_REPOSITORY="$FLUVIUS_DATA_DIR/backups/restic"
 export RESTIC_PASSWORD_FILE
@@ -41,6 +50,8 @@ if ! restic snapshots >/dev/null 2>&1; then
 fi
 restic backup \
   "$DATABASE_DUMP" \
+  "$EVOGO_AUTH_DUMP" \
+  "$EVOGO_USERS_DUMP" \
   "$FLUVIUS_DATA_DIR/media" \
   --tag fluvius-production
 restic forget \
