@@ -14,7 +14,8 @@ import {
   X,
   Zap,
 } from 'lucide-vue-next'
-import type { Message } from '../api/types'
+import { listQuickReplies } from '../api/quickReplies'
+import type { Message, QuickReply } from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
 import EmojiPicker from './EmojiPicker.vue'
 import QuickReplyPicker from './QuickReplyPicker.vue'
@@ -37,6 +38,17 @@ const emit = defineEmits<{
 }>()
 const text = ref('')
 const showReplies = ref(false)
+const quickReplies = ref<QuickReply[]>([])
+const quickRepliesLoaded = ref(false)
+const quickRepliesLoading = ref(false)
+const quickRepliesError = ref<string | null>(null)
+const quickReplyActiveIndex = ref(0)
+const quickReplyMode = ref<'button' | 'slash' | null>(null)
+const quickReplyTrigger = ref<{
+  start: number
+  end: number
+  query: string
+} | null>(null)
 const showAttachments = ref(false)
 const showEmojis = ref(false)
 const attachmentAccept = ref('')
@@ -49,6 +61,14 @@ const fileError = ref<string | null>(null)
 const filePreviewUrl = ref<string | null>(null)
 const dragActive = ref(false)
 const isDisabled = computed(() => Boolean(props.disabledReason))
+const quickReplyQuery = computed(() =>
+  quickReplyMode.value === 'slash'
+    ? quickReplyTrigger.value?.query || ''
+    : '',
+)
+const filteredQuickReplies = computed(() =>
+  filterQuickReplies(quickReplies.value, quickReplyQuery.value),
+)
 const selectedFileKind = computed(() => {
   const file = selectedFile.value
   if (!file) return 'document'
@@ -102,7 +122,7 @@ watch(
       text.value = ''
     }
     clearFile()
-    showReplies.value = false
+    closeQuickReplies()
     showAttachments.value = false
     showEmojis.value = false
     nextTick(() => {
@@ -138,6 +158,16 @@ watch(selectedFile, (file) => {
       : null
 })
 
+watch(filteredQuickReplies, (replies) => {
+  if (!replies.length) {
+    quickReplyActiveIndex.value = 0
+    return
+  }
+  if (quickReplyActiveIndex.value >= replies.length) {
+    quickReplyActiveIndex.value = replies.length - 1
+  }
+})
+
 onBeforeUnmount(() => {
   if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
 })
@@ -146,6 +176,91 @@ function resizeTextarea() {
   if (!textarea.value) return
   textarea.value.style.height = '44px'
   textarea.value.style.height = `${Math.min(textarea.value.scrollHeight, 120)}px`
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function quickReplyScore(reply: QuickReply, query: string) {
+  if (!query) return 0
+  const shortcut = normalizeSearch(reply.shortcut)
+  const title = normalizeSearch(reply.title)
+  const content = normalizeSearch(reply.content)
+  if (shortcut.startsWith(query)) return 0
+  if (title.startsWith(query)) return 1
+  if (shortcut.includes(query)) return 2
+  if (title.includes(query)) return 3
+  if (content.includes(query)) return 4
+  return 99
+}
+
+function filterQuickReplies(replies: QuickReply[], rawQuery: string) {
+  const query = normalizeSearch(rawQuery.trim())
+  if (!query) return replies
+  return replies
+    .map((reply) => ({ reply, score: quickReplyScore(reply, query) }))
+    .filter((item) => item.score < 99)
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score
+      return a.reply.title.localeCompare(b.reply.title, 'pt-BR')
+    })
+    .map((item) => item.reply)
+}
+
+async function ensureQuickRepliesLoaded() {
+  if (quickRepliesLoaded.value || quickRepliesLoading.value) return
+  quickRepliesLoading.value = true
+  quickRepliesError.value = null
+  try {
+    quickReplies.value = await listQuickReplies()
+    quickRepliesLoaded.value = true
+  } catch {
+    quickReplies.value = []
+    quickRepliesError.value = 'Não foi possível carregar as respostas.'
+  } finally {
+    quickRepliesLoading.value = false
+  }
+}
+
+function currentQuickReplyTrigger() {
+  const field = textarea.value
+  if (!field || field.selectionStart !== field.selectionEnd) return null
+  const cursor = field.selectionStart
+  const beforeCursor = text.value.slice(0, cursor)
+  const match = beforeCursor.match(/(^|\s)\/([^\s/]*)$/)
+  if (!match) return null
+  const query = match[2] || ''
+  return {
+    start: cursor - query.length - 1,
+    end: cursor,
+    query,
+  }
+}
+
+function closeQuickReplies() {
+  showReplies.value = false
+  quickReplyMode.value = null
+  quickReplyTrigger.value = null
+  quickReplyActiveIndex.value = 0
+}
+
+function updateQuickReplyTrigger() {
+  const trigger = currentQuickReplyTrigger()
+  quickReplyTrigger.value = trigger
+  if (!trigger) {
+    if (quickReplyMode.value === 'slash') closeQuickReplies()
+    return
+  }
+  showAttachments.value = false
+  showEmojis.value = false
+  showReplies.value = true
+  quickReplyMode.value = 'slash'
+  quickReplyActiveIndex.value = 0
+  void ensureQuickRepliesLoaded()
 }
 
 function submit() {
@@ -204,7 +319,7 @@ async function selectFile(event: Event) {
 }
 
 function toggleAttachmentMenu() {
-  showReplies.value = false
+  closeQuickReplies()
   showEmojis.value = false
   showAttachments.value = !showAttachments.value
 }
@@ -215,7 +330,7 @@ function openAttachmentPicker(
 ) {
   attachmentMode.value = mode
   attachmentAccept.value = accept
-  showReplies.value = false
+  closeQuickReplies()
   showEmojis.value = false
   showAttachments.value = false
   if (fileInput.value) fileInput.value.value = ''
@@ -290,23 +405,39 @@ function fileSize(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function useReply(content: string) {
-  text.value = content
-  showReplies.value = false
+function useReply(reply: QuickReply) {
+  const trigger = quickReplyMode.value === 'slash' ? quickReplyTrigger.value : null
+  if (trigger) {
+    text.value = `${text.value.slice(0, trigger.start)}${reply.content}${text.value.slice(trigger.end)}`
+  } else {
+    text.value = reply.content
+  }
+  closeQuickReplies()
   nextTick(() => {
     resizeTextarea()
     textarea.value?.focus()
+    if (!trigger) return
+    const cursor = trigger.start + reply.content.length
+    textarea.value?.setSelectionRange(cursor, cursor)
   })
 }
 
 function toggleReplies() {
   showAttachments.value = false
   showEmojis.value = false
-  showReplies.value = !showReplies.value
+  if (showReplies.value && quickReplyMode.value === 'button') {
+    closeQuickReplies()
+    return
+  }
+  showReplies.value = true
+  quickReplyMode.value = 'button'
+  quickReplyTrigger.value = null
+  quickReplyActiveIndex.value = 0
+  void ensureQuickRepliesLoaded()
 }
 
 function toggleEmojis() {
-  showReplies.value = false
+  closeQuickReplies()
   showAttachments.value = false
   showEmojis.value = !showEmojis.value
 }
@@ -337,6 +468,59 @@ function handlePaste(event: ClipboardEvent) {
   if (!file) return
   event.preventDefault()
   setFile(file)
+}
+
+function handleTextInput() {
+  resizeTextarea()
+  updateQuickReplyTrigger()
+}
+
+function handleTextareaNavigation(event?: Event) {
+  if (
+    event instanceof KeyboardEvent &&
+    ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)
+  ) {
+    return
+  }
+  nextTick(updateQuickReplyTrigger)
+}
+
+function handleTextareaKeydown(event: KeyboardEvent) {
+  if (showReplies.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeQuickReplies()
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (filteredQuickReplies.value.length) {
+        quickReplyActiveIndex.value =
+          (quickReplyActiveIndex.value + 1) % filteredQuickReplies.value.length
+      }
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (filteredQuickReplies.value.length) {
+        quickReplyActiveIndex.value =
+          (quickReplyActiveIndex.value - 1 + filteredQuickReplies.value.length) %
+          filteredQuickReplies.value.length
+      }
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      const reply = filteredQuickReplies.value[quickReplyActiveIndex.value]
+      if (reply) useReply(reply)
+      return
+    }
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    submit()
+  }
 }
 
 function handleDragEnter() {
@@ -482,13 +666,29 @@ function handleDrop(event: DragEvent) {
         <button
           type="button"
           class="grid h-11 w-11 place-items-center rounded-full text-[#54656f] transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40"
+          :class="{ 'bg-black/5 text-fluvius-700': showReplies }"
           :disabled="isDisabled"
           title="Respostas rápidas"
           @click="toggleReplies"
         >
           <Zap class="h-5 w-5" />
         </button>
-        <QuickReplyPicker v-if="showReplies" @select="useReply" />
+        <div
+          v-if="showReplies"
+          class="fixed inset-0 z-20"
+          aria-hidden="true"
+          @click="closeQuickReplies"
+        />
+        <QuickReplyPicker
+          v-if="showReplies"
+          :active-index="quickReplyActiveIndex"
+          :error="quickRepliesError"
+          :loading="quickRepliesLoading"
+          :query="quickReplyQuery"
+          :replies="filteredQuickReplies"
+          @hover="quickReplyActiveIndex = $event"
+          @select="useReply"
+        />
       </div>
       <div class="relative">
         <input
@@ -595,8 +795,11 @@ function handleDrop(event: DragEvent) {
         class="soft-scrollbar min-h-11 flex-1 resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[13.5px] leading-5 text-[#111b21] shadow-sm outline-none placeholder:text-[#667781] focus:ring-1 focus:ring-fluvius-500/30 disabled:bg-[#e2e6e8]"
         placeholder="Digite uma mensagem..."
         :disabled="isDisabled"
-        @input="resizeTextarea"
-        @keydown.enter.exact.prevent="submit"
+        @click="handleTextareaNavigation"
+        @focus="handleTextareaNavigation"
+        @input="handleTextInput"
+        @keydown="handleTextareaKeydown"
+        @keyup="handleTextareaNavigation"
         @paste="handlePaste"
       />
       <button
