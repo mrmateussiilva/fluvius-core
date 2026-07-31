@@ -46,6 +46,12 @@ Estas regras valem para todo o repositório.
 - Rodar, no mínimo, compilação/import da API, validação Alembic, build TypeScript e `docker compose config` quando essas áreas forem alteradas.
 - Preferir mudanças pequenas, rastreáveis e compatíveis com o escopo em `docs/MVP_SCOPE.md`.
 
+## Release e deploy
+
+- Mudanças que precisam aparecer em produção exigem nova versão e nova tag semver.
+- O deploy de produção usa tag, não apenas o `main`; após commit funcional, atualizar `api/pyproject.toml`, `web/package.json`, `web/package-lock.json`, `web/src/config/app.ts` e `web/index.html`, criar commit de release, criar tag `vX.Y.Z`, fazer push da branch e da tag, e disparar o workflow `Production deploy` com `version=vX.Y.Z`.
+- Não considerar uma mudança disponível para teste em produção enquanto o HTML público não refletir a nova versão e `/health/ready` não responder `ready`.
+
 <!-- ai-memory:start -->
 ## Long-term memory (ai-memory)
 
