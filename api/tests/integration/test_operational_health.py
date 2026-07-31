@@ -4,6 +4,7 @@ from unittest.mock import patch
 from sqlalchemy import select
 
 from app.channels.models import WhatsAppChannel
+from app.common.audit_models import AuditLog
 from app.common.enums import (
     ChannelStatus,
     MessageDirection,
@@ -13,8 +14,10 @@ from app.common.enums import (
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.messages.models import Message
+from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.models import ProviderEvent
 from app.providers.pending_events import PENDING_RECEIPT_ERROR
+from app.providers.reconcile import WebhookReconcileRuntime
 from app.users.models import TenantUser
 
 from .base import PostgresIntegrationTestCase
@@ -210,3 +213,139 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(channel["pending_events"], 1)
         self.assertEqual(channel["failed_events"], 1)
+
+    def test_health_surfaces_webhook_reconcile_runtime(self) -> None:
+        now = datetime.now(UTC)
+        with patch(
+            "app.operations.router._worker_health",
+            return_value=(True, True, True),
+        ), patch(
+            "app.operations.router.get_webhook_reconcile_runtime",
+            return_value=WebhookReconcileRuntime(
+                active=True,
+                heartbeat_at=now,
+                last_started_at=now,
+                last_finished_at=now,
+                last_scanned_channels=2,
+                last_checked_events=10,
+                last_resolved_events=7,
+            ),
+        ):
+            response = self.client.get(
+                "/api/v1/operations/health",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        runtime = response.json()["webhook_reconcile"]
+        self.assertTrue(runtime["active"])
+        self.assertEqual(runtime["last_scanned_channels"], 2)
+        self.assertEqual(runtime["last_checked_events"], 10)
+        self.assertEqual(runtime["last_resolved_events"], 7)
+
+    def test_reconcile_webhooks_endpoint_is_tenant_scoped(self) -> None:
+        with SessionLocal() as db:
+            message = Message(
+                tenant_id=self.tenant_a.tenant_id,
+                conversation_id=self.tenant_a.conversation_id,
+                direction=MessageDirection.OUTGOING,
+                message_type=MessageType.TEXT,
+                status=MessageStatus.SENT,
+                body="Mensagem com recibo pendente",
+                provider_message_id="ops-reconcile-outgoing-1",
+            )
+            event_a = ProviderEvent(
+                tenant_id=self.tenant_a.tenant_id,
+                channel_id=self.tenant_a.channel_id,
+                provider="evolution_go",
+                event_type="Receipt",
+                provider_event_id="ops-reconcile-receipt-a",
+                payload={
+                    "event": "Receipt",
+                    "state": "Delivered",
+                    "data": {
+                        "MessageIDs": ["ops-reconcile-outgoing-1"],
+                        "Timestamp": "2026-07-27T00:00:00-03:00",
+                        "Type": "delivered",
+                    },
+                },
+                processed=False,
+                processing_error=PENDING_RECEIPT_ERROR,
+            )
+            event_b = ProviderEvent(
+                tenant_id=self.tenant_b.tenant_id,
+                channel_id=self.tenant_b.channel_id,
+                provider="evolution_go",
+                event_type="Receipt",
+                provider_event_id="ops-reconcile-receipt-b",
+                payload={
+                    "event": "Receipt",
+                    "state": "Delivered",
+                    "data": {"MessageIDs": ["tenant-b-message"]},
+                },
+                processed=False,
+                processing_error=PENDING_RECEIPT_ERROR,
+            )
+            db.add_all([message, event_a, event_b])
+            db.commit()
+            message_id = message.id
+            event_a_id = event_a.id
+            event_b_id = event_b.id
+
+        provider = EvolutionGoProvider(api_key="test-token")
+        with patch(
+            "app.providers.reconcile.claim_evolution_credential",
+        ), patch(
+            "app.providers.reconcile.get_provider",
+            return_value=provider,
+        ):
+            response = self.client.post(
+                "/api/v1/operations/webhooks/reconcile",
+                headers=self.headers_a,
+                json={"channel_id": str(self.tenant_a.channel_id)},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["scanned_channels"], 1)
+        self.assertEqual(payload["checked_events"], 1)
+        self.assertEqual(payload["resolved_events"], 1)
+        self.assertEqual(payload["remaining_pending_events"], 0)
+
+        cross_tenant = self.client.post(
+            "/api/v1/operations/webhooks/reconcile",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_b.channel_id)},
+        )
+        self.assertEqual(cross_tenant.status_code, 404)
+
+        with SessionLocal() as db:
+            message = db.scalar(
+                select(Message).where(
+                    Message.id == message_id,
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            event_a = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.id == event_a_id,
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            event_b = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.id == event_b_id,
+                    ProviderEvent.tenant_id == self.tenant_b.tenant_id,
+                )
+            )
+            audit = db.scalar(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == self.tenant_a.tenant_id,
+                    AuditLog.action == "operations.webhooks.reconciled",
+                )
+            )
+            self.assertEqual(message.status, MessageStatus.DELIVERED)
+            self.assertTrue(event_a.processed)
+            self.assertIsNone(event_a.processing_error)
+            self.assertFalse(event_b.processed)
+            self.assertIsNotNone(audit)

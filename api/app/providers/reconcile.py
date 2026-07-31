@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -22,26 +23,58 @@ from app.providers.pending_events import PENDING_EDIT_ERROR, PENDING_RECEIPT_ERR
 from app.providers.status_updates import apply_message_status_update
 from app.providers.webhook_router import apply_message_edit
 
-
 logger = logging.getLogger(__name__)
 RECONCILE_LOCK_KEY = "fluvius:webhook-reconcile-lock"
+RECONCILE_HEARTBEAT_KEY = "fluvius:webhook-reconcile-heartbeat"
+RECONCILE_STATS_KEY = "fluvius:webhook-reconcile-stats"
 RECONCILE_LOCK_TTL_SECONDS = 45
 RECONCILE_BATCH_PER_CHANNEL = 40
 RECONCILE_MAX_AGE = timedelta(days=7)
 RECONCILE_LOOP_SECONDS = 30
+RECONCILE_HEARTBEAT_TTL_SECONDS = RECONCILE_LOOP_SECONDS * 3
+
+
+@dataclass(frozen=True)
+class WebhookReconcileRuntime:
+    active: bool
+    heartbeat_at: datetime | None = None
+    last_started_at: datetime | None = None
+    last_finished_at: datetime | None = None
+    last_error_at: datetime | None = None
+    last_error: str | None = None
+    last_scanned_channels: int = 0
+    last_checked_events: int = 0
+    last_resolved_events: int = 0
+
+
+@dataclass(frozen=True)
+class WebhookReconcileChannelResult:
+    checked_events: int = 0
+    resolved_events: int = 0
+
+
+@dataclass(frozen=True)
+class WebhookReconcileBatchResult:
+    scanned_channels: int = 0
+    checked_events: int = 0
+    resolved_events: int = 0
 
 
 async def webhook_reconcile_loop(stop_event: asyncio.Event) -> None:
     while not stop_event.is_set():
         try:
+            await asyncio.to_thread(_record_reconcile_heartbeat)
             if await asyncio.to_thread(_claim_reconcile_lock):
                 try:
-                    await _run_reconcile_batch()
+                    await asyncio.to_thread(_record_reconcile_started)
+                    result = await _run_reconcile_batch()
+                    await asyncio.to_thread(_record_reconcile_finished, result)
                 finally:
                     await asyncio.to_thread(_release_reconcile_lock)
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
+            await asyncio.to_thread(_record_reconcile_error, exc)
             logger.warning("Reconcile de webhooks pendentes repetirá a varredura")
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=RECONCILE_LOOP_SECONDS)
@@ -56,6 +89,22 @@ async def reconcile_pending_events_for_channel(
     channel_id: UUID,
     limit: int = RECONCILE_BATCH_PER_CHANNEL,
 ) -> int:
+    result = await reconcile_pending_events_for_channel_report(
+        db,
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        limit=limit,
+    )
+    return result.resolved_events
+
+
+async def reconcile_pending_events_for_channel_report(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    channel_id: UUID,
+    limit: int = RECONCILE_BATCH_PER_CHANNEL,
+) -> WebhookReconcileChannelResult:
     channel = db.scalar(
         select(WhatsAppChannel).where(
             WhatsAppChannel.id == channel_id,
@@ -63,7 +112,7 @@ async def reconcile_pending_events_for_channel(
         )
     )
     if channel is None:
-        return 0
+        return WebhookReconcileChannelResult()
     cutoff = datetime.now(UTC) - RECONCILE_MAX_AGE
     events = list(
         db.scalars(
@@ -83,13 +132,13 @@ async def reconcile_pending_events_for_channel(
         )
     )
     if not events:
-        return 0
+        return WebhookReconcileChannelResult()
     try:
         if channel.provider == ChannelProvider.EVOLUTION_GO:
             claim_evolution_credential(db, channel)
         adapter = get_provider(channel.provider, channel, db)
     except ProviderConfigurationError:
-        return 0
+        return WebhookReconcileChannelResult(checked_events=len(events))
 
     resolved = 0
     for event in events:
@@ -130,13 +179,20 @@ async def reconcile_pending_events_for_channel(
                 channel_id,
             )
             db.rollback()
-            return resolved
+            return WebhookReconcileChannelResult(
+                checked_events=len(events),
+                resolved_events=resolved,
+            )
     db.commit()
-    return resolved
+    return WebhookReconcileChannelResult(
+        checked_events=len(events),
+        resolved_events=resolved,
+    )
 
 
-async def _run_reconcile_batch() -> int:
-    total = 0
+async def _run_reconcile_batch() -> WebhookReconcileBatchResult:
+    checked_events = 0
+    resolved_events = 0
     with SessionLocal() as db:
         channels = list(
             db.execute(
@@ -162,12 +218,43 @@ async def _run_reconcile_batch() -> int:
         )
     for tenant_id, channel_id in channels:
         with SessionLocal() as db:
-            total += await reconcile_pending_events_for_channel(
+            result = await reconcile_pending_events_for_channel_report(
                 db,
                 tenant_id=tenant_id,
                 channel_id=channel_id,
             )
-    return total
+            checked_events += result.checked_events
+            resolved_events += result.resolved_events
+    return WebhookReconcileBatchResult(
+        scanned_channels=len(channels),
+        checked_events=checked_events,
+        resolved_events=resolved_events,
+    )
+
+
+def get_webhook_reconcile_runtime() -> WebhookReconcileRuntime:
+    try:
+        raw_heartbeat = redis_connection.get(RECONCILE_HEARTBEAT_KEY)
+        raw_stats = redis_connection.hgetall(RECONCILE_STATS_KEY)
+    except RedisError:
+        return WebhookReconcileRuntime(active=False)
+
+    heartbeat = _decode_datetime(raw_heartbeat)
+    stats = {
+        _decode_text(key): _decode_text(value)
+        for key, value in raw_stats.items()
+    }
+    return WebhookReconcileRuntime(
+        active=heartbeat is not None,
+        heartbeat_at=heartbeat,
+        last_started_at=_decode_datetime(stats.get("last_started_at")),
+        last_finished_at=_decode_datetime(stats.get("last_finished_at")),
+        last_error_at=_decode_datetime(stats.get("last_error_at")),
+        last_error=stats.get("last_error") or None,
+        last_scanned_channels=_decode_int(stats.get("last_scanned_channels")),
+        last_checked_events=_decode_int(stats.get("last_checked_events")),
+        last_resolved_events=_decode_int(stats.get("last_resolved_events")),
+    )
 
 
 def _claim_reconcile_lock() -> bool:
@@ -189,3 +276,78 @@ def _release_reconcile_lock() -> None:
         redis_connection.delete(RECONCILE_LOCK_KEY)
     except RedisError:
         return
+
+
+def _record_reconcile_heartbeat() -> None:
+    try:
+        redis_connection.set(
+            RECONCILE_HEARTBEAT_KEY,
+            datetime.now(UTC).isoformat(),
+            ex=RECONCILE_HEARTBEAT_TTL_SECONDS,
+        )
+    except RedisError:
+        return
+
+
+def _record_reconcile_started() -> None:
+    try:
+        redis_connection.hset(
+            RECONCILE_STATS_KEY,
+            mapping={"last_started_at": datetime.now(UTC).isoformat()},
+        )
+    except RedisError:
+        return
+
+
+def _record_reconcile_finished(result: WebhookReconcileBatchResult) -> None:
+    try:
+        redis_connection.hset(
+            RECONCILE_STATS_KEY,
+            mapping={
+                "last_finished_at": datetime.now(UTC).isoformat(),
+                "last_scanned_channels": str(result.scanned_channels),
+                "last_checked_events": str(result.checked_events),
+                "last_resolved_events": str(result.resolved_events),
+                "last_error": "",
+            },
+        )
+    except RedisError:
+        return
+
+
+def _record_reconcile_error(exc: Exception) -> None:
+    try:
+        redis_connection.hset(
+            RECONCILE_STATS_KEY,
+            mapping={
+                "last_error_at": datetime.now(UTC).isoformat(),
+                "last_error": exc.__class__.__name__,
+            },
+        )
+    except RedisError:
+        return
+
+
+def _decode_text(value: object) -> str:
+    if isinstance(value, bytes):
+        return value.decode()
+    return str(value or "")
+
+
+def _decode_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    raw = _decode_text(value)
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _decode_int(value: object) -> int:
+    try:
+        return int(_decode_text(value))
+    except ValueError:
+        return 0

@@ -114,6 +114,18 @@ export interface OperationalChannelHealth {
   webhook_stale: boolean
 }
 
+export interface WebhookReconcileRuntime {
+  active: boolean
+  heartbeat_at: string | null
+  last_started_at: string | null
+  last_finished_at: string | null
+  last_error_at: string | null
+  last_error: string | null
+  last_scanned_channels: number
+  last_checked_events: number
+  last_resolved_events: number
+}
+
 export interface OperationalHealth {
   status: OperationalStatus
   generated_at: string
@@ -127,11 +139,21 @@ export interface OperationalHealth {
   pending_provider_events: number
   failed_provider_events: number
   oldest_pending_event_at: string | null
+  webhook_reconcile: WebhookReconcileRuntime
   stale_connected_channels: number
   connected_channels: number
   total_channels: number
   issues: string[]
   channels: OperationalChannelHealth[]
+}
+
+export interface WebhookReconcileResult {
+  channel_id: string | null
+  scanned_channels: number
+  checked_events: number
+  resolved_events: number
+  remaining_pending_events: number
+  oldest_pending_event_at: string | null
 }
 
 export type ContactKind = 'direct' | 'group'

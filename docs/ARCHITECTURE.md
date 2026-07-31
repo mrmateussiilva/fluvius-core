@@ -120,14 +120,18 @@ canais e dos webhooks (`provider_events` pendentes, com erro e canais
 conectados sem nenhum evento). Uma entrega `pending` há mais de dois minutos é
 considerada atrasada; falhas de entrega são contadas numa janela de 24 horas.
 Eventos de webhook aguardando reconciliação há mais de 15 minutos elevam o
-status a crítico. A resposta nunca contém jobs ou dados de outros tenants, mesmo
-que Redis e os workers sejam compartilhados. O frontend consulta esse retrato a
-cada 30 segundos enquanto a aba está visível e mostra um alerta global quando a
-operação exige atenção.
+status a crítico. A resposta também expõe o heartbeat e o último lote do
+reconciliador automático de webhooks, sem incluir payloads externos. A resposta
+nunca contém jobs ou dados de outros tenants, mesmo que Redis e os workers sejam
+compartilhados. O frontend consulta esse retrato a cada 30 segundos enquanto a
+aba está visível e mostra um alerta global quando a operação exige atenção.
 
 A API também mantém um loop de reconciliação de webhooks pendentes (recibos e
 edições aguardando a mensagem correspondente), com eleição de líder via Redis,
-para não depender só da sincronização administrativa manual.
+para não depender só da sincronização administrativa manual. Administradores
+podem acionar `POST /api/v1/operations/webhooks/reconcile` para reprocessar, de
+forma tenant-scoped e auditada, eventos pendentes do tenant ou de um canal
+específico.
 
 ## Administração da plataforma
 

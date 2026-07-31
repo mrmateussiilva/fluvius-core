@@ -1,13 +1,21 @@
 import { defineStore } from 'pinia'
-import { getOperationalHealth } from '../api/operations'
-import type { OperationalHealth } from '../api/types'
+import {
+  getOperationalHealth,
+  reconcileWebhooks,
+} from '../api/operations'
+import type {
+  OperationalHealth,
+  WebhookReconcileResult,
+} from '../api/types'
 
 const POLL_INTERVAL = 30_000
 
 export const useOperationalStore = defineStore('operational', {
   state: () => ({
     health: null as OperationalHealth | null,
+    lastReconcile: null as WebhookReconcileResult | null,
     loading: false,
+    reconciling: false,
     error: '',
     pollTimer: null as number | null,
   }),
@@ -25,6 +33,25 @@ export const useOperationalStore = defineStore('operational', {
             : 'Não foi possível consultar a saúde operacional'
       } finally {
         this.loading = false
+      }
+    },
+    async reconcile(channelId?: string) {
+      if (this.reconciling) return
+      this.reconciling = true
+      try {
+        this.lastReconcile = await reconcileWebhooks({
+          channel_id: channelId || null,
+          limit_per_channel: 1000,
+        })
+        this.error = ''
+        await this.refresh()
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : 'Não foi possível reconciliar os webhooks'
+      } finally {
+        this.reconciling = false
       }
     },
     startPolling() {

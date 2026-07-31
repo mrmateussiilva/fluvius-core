@@ -81,6 +81,12 @@ function channelStatusClass(status: ChannelStatus) {
   return 'bg-rose-50 text-rose-700 ring-rose-100'
 }
 
+function reconcileStatusClass(active: boolean) {
+  return active
+    ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+    : 'bg-rose-50 text-rose-700 ring-rose-100'
+}
+
 onMounted(async () => {
   await auth.restore()
   if (auth.user?.role !== 'admin') {
@@ -240,7 +246,19 @@ onMounted(async () => {
             </p>
           </article>
           <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <RadioTower class="h-5 w-5 text-violet-700" />
+            <div class="flex items-start justify-between gap-3">
+              <RadioTower class="h-5 w-5 text-violet-700" />
+              <span
+                class="rounded-full px-2 py-1 text-[10px] font-semibold ring-1"
+                :class="reconcileStatusClass(operations.health.webhook_reconcile.active)"
+              >
+                {{
+                  operations.health.webhook_reconcile.active
+                    ? 'Auto ativo'
+                    : 'Auto parado'
+                }}
+              </span>
+            </div>
             <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Webhooks pendentes
             </p>
@@ -251,6 +269,36 @@ onMounted(async () => {
               {{ operations.health.failed_provider_events }} com erro · mais antigo:
               {{ formatDate(operations.health.oldest_pending_event_at) }}
             </p>
+            <p class="mt-2 text-xs text-slate-500">
+              Último lote:
+              {{ operations.health.webhook_reconcile.last_resolved_events }}
+              resolvido(s) de
+              {{ operations.health.webhook_reconcile.last_checked_events }}
+              verificado(s)
+            </p>
+            <p
+              v-if="operations.lastReconcile"
+              class="mt-1 text-xs text-emerald-700"
+            >
+              Agora:
+              {{ operations.lastReconcile.resolved_events }} resolvido(s);
+              {{ operations.lastReconcile.remaining_pending_events }} pendente(s)
+            </p>
+            <button
+              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="
+                operations.reconciling ||
+                operations.health.pending_provider_events === 0
+              "
+              @click="operations.reconcile()"
+            >
+              <LoaderCircle
+                v-if="operations.reconciling"
+                class="h-4 w-4 animate-spin"
+              />
+              <RefreshCw v-else class="h-4 w-4" />
+              Reconciliar agora
+            </button>
           </article>
           <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <AlertTriangle class="h-5 w-5 text-amber-600" />
