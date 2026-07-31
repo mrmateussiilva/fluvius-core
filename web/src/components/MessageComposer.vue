@@ -15,29 +15,38 @@ import {
   Zap,
 } from 'lucide-vue-next'
 import { listQuickReplies } from '../api/quickReplies'
-import type { Message, QuickReply } from '../api/types'
+import type { GroupMemberResponse, Message, QuickReply } from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
 import EmojiPicker from './EmojiPicker.vue'
+import GroupMentionPicker from './GroupMentionPicker.vue'
 import QuickReplyPicker from './QuickReplyPicker.vue'
 
 const props = defineProps<{
   draftKey: string | null
   disabledReason: string | null
+  groupMembers: GroupMemberResponse[]
+  isGroup: boolean
   replyTo: Message | null
   sending: boolean
   sendError: string | null
 }>()
 const emit = defineEmits<{
-  send: [text: string, done: (accepted: boolean) => void]
+  send: [
+    text: string,
+    mentionedPhones: string[],
+    done: (accepted: boolean) => void,
+  ]
   sendAttachment: [
     file: File,
     caption: string | null,
+    mentionedPhones: string[],
     done: (accepted: boolean) => void,
   ]
   cancelReply: []
 }>()
 const text = ref('')
 const showReplies = ref(false)
+const showMentions = ref(false)
 const quickReplies = ref<QuickReply[]>([])
 const quickRepliesLoaded = ref(false)
 const quickRepliesLoading = ref(false)
@@ -49,6 +58,13 @@ const quickReplyTrigger = ref<{
   end: number
   query: string
 } | null>(null)
+const mentionActiveIndex = ref(0)
+const mentionTrigger = ref<{
+  start: number
+  end: number
+  query: string
+} | null>(null)
+const selectedMentions = ref<GroupMemberResponse[]>([])
 const showAttachments = ref(false)
 const showEmojis = ref(false)
 const attachmentAccept = ref('')
@@ -68,6 +84,10 @@ const quickReplyQuery = computed(() =>
 )
 const filteredQuickReplies = computed(() =>
   filterQuickReplies(quickReplies.value, quickReplyQuery.value),
+)
+const mentionQuery = computed(() => mentionTrigger.value?.query || '')
+const mentionCandidates = computed(() =>
+  filterGroupMembers(props.groupMembers, mentionQuery.value),
 )
 const selectedFileKind = computed(() => {
   const file = selectedFile.value
@@ -123,6 +143,8 @@ watch(
     }
     clearFile()
     closeQuickReplies()
+    closeMentions()
+    selectedMentions.value = []
     showAttachments.value = false
     showEmojis.value = false
     nextTick(() => {
@@ -168,6 +190,16 @@ watch(filteredQuickReplies, (replies) => {
   }
 })
 
+watch(mentionCandidates, (members) => {
+  if (!members.length) {
+    mentionActiveIndex.value = 0
+    return
+  }
+  if (mentionActiveIndex.value >= members.length) {
+    mentionActiveIndex.value = members.length - 1
+  }
+})
+
 onBeforeUnmount(() => {
   if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
 })
@@ -183,6 +215,42 @@ function normalizeSearch(value: string) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+}
+
+function memberLabel(member: GroupMemberResponse) {
+  return (member.name || member.phone_number).replace(/\s+/g, ' ').trim()
+}
+
+function mentionText(member: GroupMemberResponse) {
+  return `@${memberLabel(member).replace(/\s+/g, ' ')}`
+}
+
+function groupMemberScore(member: GroupMemberResponse, query: string) {
+  if (!query) return 0
+  const name = normalizeSearch(member.name || '')
+  const phone = normalizeSearch(member.phone_number)
+  if (name.startsWith(query)) return 0
+  if (phone.startsWith(query)) return 1
+  if (name.includes(query)) return 2
+  if (phone.includes(query)) return 3
+  return 99
+}
+
+function filterGroupMembers(
+  members: GroupMemberResponse[],
+  rawQuery: string,
+) {
+  if (!props.isGroup) return []
+  const query = normalizeSearch(rawQuery.trim())
+  return members
+    .filter((member) => Boolean(member.phone_number))
+    .map((member) => ({ member, score: groupMemberScore(member, query) }))
+    .filter((item) => item.score < 99)
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score
+      return memberLabel(a.member).localeCompare(memberLabel(b.member), 'pt-BR')
+    })
+    .map((item) => item.member)
 }
 
 function quickReplyScore(reply: QuickReply, query: string) {
@@ -241,11 +309,33 @@ function currentQuickReplyTrigger() {
   }
 }
 
+function currentMentionTrigger() {
+  if (!props.isGroup || !props.groupMembers.length) return null
+  const field = textarea.value
+  if (!field || field.selectionStart !== field.selectionEnd) return null
+  const cursor = field.selectionStart
+  const beforeCursor = text.value.slice(0, cursor)
+  const match = beforeCursor.match(/(^|\s)@([^@\s]*)$/)
+  if (!match) return null
+  const query = match[2] || ''
+  return {
+    start: cursor - query.length - 1,
+    end: cursor,
+    query,
+  }
+}
+
 function closeQuickReplies() {
   showReplies.value = false
   quickReplyMode.value = null
   quickReplyTrigger.value = null
   quickReplyActiveIndex.value = 0
+}
+
+function closeMentions() {
+  showMentions.value = false
+  mentionTrigger.value = null
+  mentionActiveIndex.value = 0
 }
 
 function updateQuickReplyTrigger() {
@@ -255,6 +345,7 @@ function updateQuickReplyTrigger() {
     if (quickReplyMode.value === 'slash') closeQuickReplies()
     return
   }
+  closeMentions()
   showAttachments.value = false
   showEmojis.value = false
   showReplies.value = true
@@ -263,27 +354,61 @@ function updateQuickReplyTrigger() {
   void ensureQuickRepliesLoaded()
 }
 
+function updateMentionTrigger() {
+  const trigger = currentMentionTrigger()
+  mentionTrigger.value = trigger
+  if (!trigger) {
+    closeMentions()
+    return
+  }
+  closeQuickReplies()
+  showAttachments.value = false
+  showEmojis.value = false
+  showMentions.value = true
+  mentionActiveIndex.value = 0
+}
+
+function mentionedPhonesForText(value: string) {
+  return selectedMentions.value
+    .filter((member) => value.includes(mentionText(member)))
+    .map((member) => member.phone_number)
+}
+
 function submit() {
   const content = text.value.trim()
   if (isDisabled.value || props.sending || preparingSticker.value) return
   if (selectedFile.value) {
     const submittedFile = selectedFile.value
     const isSticker = selectedFileKind.value === 'sticker'
-    emit('sendAttachment', submittedFile, isSticker ? null : content || null, (accepted) => {
-      if (!accepted || selectedFile.value !== submittedFile) return
-      clearFile()
-      if (!isSticker && text.value.trim() === content) text.value = ''
-      nextTick(resizeTextarea)
-    })
+    const submittedMentions = isSticker ? [] : mentionedPhonesForText(content)
+    emit(
+      'sendAttachment',
+      submittedFile,
+      isSticker ? null : content || null,
+      submittedMentions,
+      (accepted) => {
+        if (!accepted || selectedFile.value !== submittedFile) return
+        clearFile()
+        if (!isSticker && text.value.trim() === content) {
+          text.value = ''
+          selectedMentions.value = []
+        }
+        nextTick(resizeTextarea)
+      },
+    )
   } else {
     if (!content) return
+    const submittedMentions = mentionedPhonesForText(content)
+    const submittedSelectedMentions = selectedMentions.value
     text.value = ''
+    selectedMentions.value = []
     nextTick(resizeTextarea)
-    emit('send', content, (accepted) => {
+    emit('send', content, submittedMentions, (accepted) => {
       if (accepted) return
       text.value = text.value.trim()
         ? `${content}\n${text.value}`
         : content
+      selectedMentions.value = submittedSelectedMentions
       nextTick(() => {
         resizeTextarea()
         textarea.value?.focus()
@@ -320,6 +445,7 @@ async function selectFile(event: Event) {
 
 function toggleAttachmentMenu() {
   closeQuickReplies()
+  closeMentions()
   showEmojis.value = false
   showAttachments.value = !showAttachments.value
 }
@@ -331,6 +457,7 @@ function openAttachmentPicker(
   attachmentMode.value = mode
   attachmentAccept.value = accept
   closeQuickReplies()
+  closeMentions()
   showEmojis.value = false
   showAttachments.value = false
   if (fileInput.value) fileInput.value.value = ''
@@ -413,6 +540,8 @@ function useReply(reply: QuickReply) {
     text.value = reply.content
   }
   closeQuickReplies()
+  closeMentions()
+  selectedMentions.value = []
   nextTick(() => {
     resizeTextarea()
     textarea.value?.focus()
@@ -422,7 +551,30 @@ function useReply(reply: QuickReply) {
   })
 }
 
+function useMention(member: GroupMemberResponse) {
+  const trigger = mentionTrigger.value
+  if (!trigger) return
+  const label = mentionText(member)
+  const needsTrailingSpace = !/^\s/.test(text.value.slice(trigger.end, trigger.end + 1))
+  text.value = `${text.value.slice(0, trigger.start)}${label}${needsTrailingSpace ? ' ' : ''}${text.value.slice(trigger.end)}`
+  if (
+    !selectedMentions.value.some(
+      (selected) => selected.phone_number === member.phone_number,
+    )
+  ) {
+    selectedMentions.value = [...selectedMentions.value, member]
+  }
+  closeMentions()
+  nextTick(() => {
+    resizeTextarea()
+    textarea.value?.focus()
+    const cursor = trigger.start + label.length + (needsTrailingSpace ? 1 : 0)
+    textarea.value?.setSelectionRange(cursor, cursor)
+  })
+}
+
 function toggleReplies() {
+  closeMentions()
   showAttachments.value = false
   showEmojis.value = false
   if (showReplies.value && quickReplyMode.value === 'button') {
@@ -438,6 +590,7 @@ function toggleReplies() {
 
 function toggleEmojis() {
   closeQuickReplies()
+  closeMentions()
   showAttachments.value = false
   showEmojis.value = !showEmojis.value
 }
@@ -473,6 +626,7 @@ function handlePaste(event: ClipboardEvent) {
 function handleTextInput() {
   resizeTextarea()
   updateQuickReplyTrigger()
+  updateMentionTrigger()
 }
 
 function handleTextareaNavigation(event?: Event) {
@@ -482,10 +636,44 @@ function handleTextareaNavigation(event?: Event) {
   ) {
     return
   }
-  nextTick(updateQuickReplyTrigger)
+  nextTick(() => {
+    updateQuickReplyTrigger()
+    updateMentionTrigger()
+  })
 }
 
 function handleTextareaKeydown(event: KeyboardEvent) {
+  if (showMentions.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMentions()
+      return
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (mentionCandidates.value.length) {
+        mentionActiveIndex.value =
+          (mentionActiveIndex.value + 1) % mentionCandidates.value.length
+      }
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (mentionCandidates.value.length) {
+        mentionActiveIndex.value =
+          (mentionActiveIndex.value - 1 + mentionCandidates.value.length) %
+          mentionCandidates.value.length
+      }
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      const member = mentionCandidates.value[mentionActiveIndex.value]
+      if (member) useMention(member)
+      return
+    }
+  }
+
   if (showReplies.value) {
     if (event.key === 'Escape') {
       event.preventDefault()
@@ -788,20 +976,36 @@ function handleDrop(event: DragEvent) {
         />
         <Sticker v-else class="h-5 w-5" />
       </button>
-      <textarea
-        ref="textarea"
-        v-model="text"
-        rows="1"
-        class="soft-scrollbar min-h-11 flex-1 resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[13.5px] leading-5 text-[#111b21] shadow-sm outline-none placeholder:text-[#667781] focus:ring-1 focus:ring-fluvius-500/30 disabled:bg-[#e2e6e8]"
-        placeholder="Digite uma mensagem..."
-        :disabled="isDisabled"
-        @click="handleTextareaNavigation"
-        @focus="handleTextareaNavigation"
-        @input="handleTextInput"
-        @keydown="handleTextareaKeydown"
-        @keyup="handleTextareaNavigation"
-        @paste="handlePaste"
-      />
+      <div class="relative flex-1">
+        <div
+          v-if="showMentions"
+          class="fixed inset-0 z-20"
+          aria-hidden="true"
+          @click="closeMentions"
+        />
+        <GroupMentionPicker
+          v-if="showMentions"
+          :active-index="mentionActiveIndex"
+          :members="mentionCandidates"
+          :query="mentionQuery"
+          @hover="mentionActiveIndex = $event"
+          @select="useMention"
+        />
+        <textarea
+          ref="textarea"
+          v-model="text"
+          rows="1"
+          class="soft-scrollbar min-h-11 w-full resize-none rounded-2xl border-0 bg-white px-4 py-3 text-[13.5px] leading-5 text-[#111b21] shadow-sm outline-none placeholder:text-[#667781] focus:ring-1 focus:ring-fluvius-500/30 disabled:bg-[#e2e6e8]"
+          placeholder="Digite uma mensagem..."
+          :disabled="isDisabled"
+          @click="handleTextareaNavigation"
+          @focus="handleTextareaNavigation"
+          @input="handleTextInput"
+          @keydown="handleTextareaKeydown"
+          @keyup="handleTextareaNavigation"
+          @paste="handlePaste"
+        />
+      </div>
       <button
         class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white shadow-sm transition hover:bg-fluvius-700 disabled:cursor-not-allowed disabled:bg-[#c6cccf] disabled:shadow-none"
         :disabled="

@@ -215,6 +215,7 @@ export interface Message {
   message_type: MessageType
   status: MessageStatus
   body: string | null
+  mentioned_phones: string[]
   reply_to_message_id: string | null
   reply_to_provider_message_id: string | null
   reply_to: {

@@ -4,9 +4,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 
-from app.channels.models import WhatsAppChannel
 from app.attachments.models import MessageAttachment
-from app.common.enums import ChannelStatus, MessageStatus
+from app.channels.models import WhatsAppChannel
+from app.common.enums import ChannelStatus, ContactKind, ConversationStatus, MessageStatus
 from app.config import settings
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
@@ -16,6 +16,7 @@ from app.delivery.tasks import run_delivery
 from app.messages.models import Message, MessageRevision
 from app.providers.base import SendResult
 from app.storage.base import StoredFile
+
 from .base import PostgresIntegrationTestCase
 
 
@@ -31,6 +32,7 @@ class ConfirmingProvider:
                 "to": to,
                 "text": text,
                 "idempotency_key": kwargs.get("idempotency_key"),
+                "mentioned_phones": kwargs.get("mentioned_phones"),
             }
         )
         return SendResult(
@@ -54,6 +56,7 @@ class ConfirmingProvider:
                 "file_url": file_url,
                 "caption": caption,
                 "idempotency_key": kwargs.get("idempotency_key"),
+                "mentioned_phones": kwargs.get("mentioned_phones"),
             }
         )
         return SendResult(
@@ -669,3 +672,75 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(tenant_b_message.body, "Mensagem do tenant B")
         self.assertIsNone(tenant_b_message.edited_at)
         self.assertEqual(revision_count, 0)
+
+    def test_group_message_mentions_are_validated_and_delivered(self) -> None:
+        with SessionLocal() as db:
+            group = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                kind=ContactKind.GROUP,
+                name="Grupo Operacional",
+                phone_number="120363018686549942",
+                provider_address="120363018686549942@g.us",
+                group_members=[
+                    {
+                        "phone_number": "5527999999999",
+                        "name": "Maria Operacao",
+                        "is_admin": False,
+                    }
+                ],
+            )
+            db.add(group)
+            db.flush()
+            conversation = Conversation(
+                tenant_id=self.tenant_a.tenant_id,
+                channel_id=self.tenant_a.channel_id,
+                contact_id=group.id,
+                status=ConversationStatus.NEW,
+            )
+            db.add(conversation)
+            db.commit()
+            conversation_id = conversation.id
+
+        assigned = self.client.post(
+            f"/api/v1/conversations/{conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        unknown = self.client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=self.headers_a,
+            json={
+                "text": "Oi @Pessoa",
+                "mentioned_phones": ["5527888888888"],
+            },
+        )
+        self.assertEqual(unknown.status_code, 422, unknown.text)
+
+        provider = ConfirmingProvider("group-mention-1")
+        client_message_id = str(uuid4())
+        with patch("app.delivery.service.get_provider", return_value=provider):
+            created = self.client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                headers=self.headers_a,
+                json={
+                    "text": "Oi @Maria Operacao",
+                    "mentioned_phones": ["+55 (27) 99999-9999"],
+                    "client_message_id": client_message_id,
+                },
+            )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(created.json()["mentioned_phones"], ["5527999999999"])
+        self.assertEqual(provider.calls[0]["to"], "120363018686549942@g.us")
+        self.assertEqual(provider.calls[0]["mentioned_phones"], ["5527999999999"])

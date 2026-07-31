@@ -272,6 +272,31 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(body["quoted"]["messageId"], "ORIGINAL-123")
         self.assertEqual(body["quoted"]["participant"], "5527999999999@s.whatsapp.net")
 
+    def test_sends_group_mentions_as_jids(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/text"),
+            json={"data": {"Info": {"ID": "MENTION-MESSAGE-ID"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(
+                self.provider.send_text(
+                    None,
+                    "120363018686549942@g.us",
+                    "Oi @Maria",
+                    mentioned_phones=["+55 (27) 99999-9999"],
+                    idempotency_key="MENTION-MESSAGE-ID",
+                )
+            )
+
+        body = request.await_args.kwargs["json"]
+        self.assertTrue(result.success)
+        self.assertEqual(body["mentionedJid"], ["5527999999999@s.whatsapp.net"])
+
     def test_retries_only_failures_that_are_safe_before_delivery(self) -> None:
         request = httpx.Request("POST", "http://evolution-go:8080/send/text")
         connect_failure = self.provider._send_error_result(

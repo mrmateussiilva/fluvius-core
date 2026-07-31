@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -121,6 +120,7 @@ async def call_provider(
                 reply_to.provider_message_id if reply_to else None
             ),
             reply_to_participant=participant,
+            mentioned_phones=message.mentioned_phones,
             idempotency_key=str(message.id),
         )
 
@@ -148,6 +148,7 @@ async def call_provider(
             reply_to.provider_message_id if reply_to else None
         ),
         reply_to_participant=participant,
+        mentioned_phones=message.mentioned_phones,
         idempotency_key=str(message.id),
     )
 

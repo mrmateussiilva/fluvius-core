@@ -126,6 +126,7 @@ export const useConversationStore = defineStore('conversations', {
     async send(
       text: string,
       replyToMessageId: string | null = null,
+      mentionedPhones: string[] = [],
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -148,6 +149,7 @@ export const useConversationStore = defineStore('conversations', {
         message_type: 'text',
         status: 'pending',
         body: text,
+        mentioned_phones: mentionedPhones,
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -184,6 +186,7 @@ export const useConversationStore = defineStore('conversations', {
           text,
           clientMessageId,
           replyToMessageId,
+          mentionedPhones,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)
@@ -217,6 +220,7 @@ export const useConversationStore = defineStore('conversations', {
       file: File,
       caption: string | null = null,
       replyToMessageId: string | null = null,
+      mentionedPhones: string[] = [],
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -251,6 +255,7 @@ export const useConversationStore = defineStore('conversations', {
         message_type: messageType,
         status: 'pending',
         body: caption,
+        mentioned_phones: mentionedPhones,
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -296,6 +301,7 @@ export const useConversationStore = defineStore('conversations', {
           clientMessageId,
           caption,
           replyToMessageId,
+          mentionedPhones,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)

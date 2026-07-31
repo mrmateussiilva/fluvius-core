@@ -18,6 +18,7 @@ from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelProvider,
     ChannelStatus,
+    ContactKind,
     MessageDirection,
     MessageStatus,
     MessageType,
@@ -36,11 +37,7 @@ from app.conversations.router import (
 from app.database import get_db
 from app.delivery.dispatcher import create_delivery, dispatch_delivery
 from app.delivery.models import MessageDelivery
-from app.delivery.service import (
-    apply_send_result as apply_send_result,
-    format_outgoing_content as format_outgoing_content,
-    normalized_sender_name,
-)
+from app.delivery.service import normalized_sender_name
 from app.messages.models import Message
 from app.messages.schemas import MessageCreate
 from app.providers.evolution_credentials import (
@@ -52,6 +49,7 @@ from app.storage.local import LocalStorageProvider
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
+MAX_MENTIONS = 50
 
 
 def attachment_response(
@@ -124,6 +122,61 @@ def get_tenant_message(
             detail="Mensagem não encontrada",
         )
     return message
+
+
+def normalize_phone(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def group_member_phones(contact: Contact) -> set[str]:
+    phones: set[str] = set()
+    if isinstance(contact.group_members, list):
+        for item in contact.group_members:
+            if not isinstance(item, dict):
+                continue
+            phone = normalize_phone(str(item.get("phone_number") or ""))
+            if phone:
+                phones.add(phone)
+    return phones
+
+
+def validate_mentioned_phones(
+    contact: Contact,
+    mentioned_phones: list[str] | None,
+) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in mentioned_phones or []:
+        phone = normalize_phone(value)
+        if not phone or phone in seen:
+            continue
+        seen.add(phone)
+        normalized.append(phone)
+    if not normalized:
+        return []
+    if len(normalized) > MAX_MENTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Marque no máximo {MAX_MENTIONS} participantes por mensagem.",
+        )
+    if contact.kind != ContactKind.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Menções só estão disponíveis em conversas de grupo.",
+        )
+    allowed_phones = group_member_phones(contact)
+    if not allowed_phones:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Atualize os dados do grupo antes de mencionar participantes.",
+        )
+    unknown = [phone for phone in normalized if phone not in allowed_phones]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Participante mencionado não pertence ao grupo sincronizado.",
+        )
+    return normalized
 
 
 def message_response(
@@ -272,11 +325,12 @@ async def send_message(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    conversation, _, _ = conversation_delivery_context(
+    conversation, _, contact = conversation_delivery_context(
         db,
         context,
         conversation_id,
     )
+    mentioned_phones = validate_mentioned_phones(contact, payload.mentioned_phones)
     existing = db.scalar(
         select(Message).where(
             Message.id == payload.client_message_id,
@@ -291,6 +345,7 @@ async def send_message(
             and existing.sender_user_id == context.user.id
             and existing.body == payload.text
             and existing.reply_to_message_id == payload.reply_to_message_id
+            and (existing.mentioned_phones or []) == mentioned_phones
         ):
             if existing.status == MessageStatus.PENDING:
                 delivery = ensure_delivery(db, existing)
@@ -331,6 +386,7 @@ async def send_message(
         message_type=MessageType.TEXT,
         status=MessageStatus.PENDING,
         body=payload.text,
+        mentioned_phones=mentioned_phones,
         attempt_count=0,
     )
     db.add(message)
@@ -374,15 +430,17 @@ async def send_attachment(
     file: UploadFile = File(...),
     caption: str | None = Form(default=None),
     reply_to_message_id: UUID | None = Form(default=None),
+    mentioned_phones: list[str] | None = Form(default=None),
     client_message_id: UUID | None = Form(default=None),
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    conversation, _, _ = conversation_delivery_context(
+    conversation, _, contact = conversation_delivery_context(
         db,
         context,
         conversation_id,
     )
+    normalized_mentions = validate_mentioned_phones(contact, mentioned_phones)
     reply_to = None
     if reply_to_message_id:
         reply_to = get_tenant_message(
@@ -450,6 +508,7 @@ async def send_attachment(
             and existing.sender_user_id == context.user.id
             and existing.body == normalized_caption
             and existing.reply_to_message_id == reply_to_message_id
+            and (existing.mentioned_phones or []) == normalized_mentions
             and same_content
         ):
             if existing.status == MessageStatus.PENDING:
@@ -487,6 +546,7 @@ async def send_attachment(
         message_type=validated.message_type,
         status=MessageStatus.PENDING,
         body=normalized_caption,
+        mentioned_phones=normalized_mentions,
         attempt_count=0,
     )
     db.add(message)

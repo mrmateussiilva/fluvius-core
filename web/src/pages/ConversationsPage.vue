@@ -39,18 +39,20 @@ async function selectChannel(channelId: string | null) {
 async function sendMessage(
   text: string,
   replyToMessageId: string | null,
+  mentionedPhones: string[],
   done: (accepted: boolean) => void,
 ) {
-  done(await store.send(text, replyToMessageId))
+  done(await store.send(text, replyToMessageId, mentionedPhones))
 }
 
 async function sendAttachment(
   file: File,
   caption: string | null,
   replyToMessageId: string | null,
+  mentionedPhones: string[],
   done: (accepted: boolean) => void,
 ) {
-  done(await store.sendAttachment(file, caption, replyToMessageId))
+  done(await store.sendAttachment(file, caption, replyToMessageId, mentionedPhones))
 }
 
 async function refreshVisibleConversation() {

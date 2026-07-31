@@ -60,6 +60,8 @@ Eventos `Message` usam o envelope nativo do Go com `data.Info` e `data.Message`.
 
 Grupos (`Info.IsGroup=true` ou `Chat` com sufixo `@g.us`) entram na mesma inbox operacional. A thread é o chat do grupo (`Chat`), não o participante; o autor da mensagem fica em `participant_phone`/`participant_name` (via `Sender`/`SenderAlt` + `PushName`). Quando `Sender` vier como `@lid`, o adapter só preenche `participant_phone` se existir `SenderAlt` com JID `@s.whatsapp.net`; sem esse alternativo, preserva o nome do participante e deixa o telefone vazio para não persistir LID como número real. Quando o payload informa o assunto/nome do grupo, o adapter preenche `chat_name` para evitar contatos provisórios como `Grupo 123456`. O envio usa o endereço `…@g.us` do grupo; respostas citadas exigem o JID do participante original em `quoted.participant`.
 
+Menções em grupos são enviadas pelo contrato do Evolution Go em `/send/text` e `/send/media` com `mentionedJid` contendo JIDs `@s.whatsapp.net`. O frontend envia apenas telefones selecionados dos membros sincronizados; a API valida esses telefones contra `contact.group_members` do grupo e o adapter converte para JID. Não aceitar menção para contato fora do grupo sincronizado nem montar JID no frontend.
+
 Edições observadas na 0.7.2 usam `Info.Edit=1` e apontam para a mensagem
 original em `Message.secretEncryptedMessage.targetMessageKey.ID`. O adapter
 também aceita a variante descriptografada

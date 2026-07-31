@@ -35,6 +35,7 @@ class MessageResponse(ORMModel):
     sender_name: str | None
     participant_phone: str | None = None
     participant_name: str | None = None
+    mentioned_phones: list[str] = Field(default_factory=list)
     reply_to_message_id: UUID | None
     reply_to_provider_message_id: str | None
     reply_to: QuotedMessageResponse | None = None

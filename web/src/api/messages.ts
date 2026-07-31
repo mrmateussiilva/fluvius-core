@@ -8,12 +8,14 @@ export const sendMessage = (
   text: string,
   clientMessageId: string,
   replyToMessageId: string | null = null,
+  mentionedPhones: string[] = [],
 ) =>
   http<Message>(`/api/v1/conversations/${conversationId}/messages`, {
     method: 'POST',
     body: JSON.stringify({
       text,
       reply_to_message_id: replyToMessageId,
+      mentioned_phones: mentionedPhones,
       client_message_id: clientMessageId,
     }),
   })
@@ -24,12 +26,14 @@ export const sendAttachment = (
   clientMessageId: string,
   caption: string | null = null,
   replyToMessageId: string | null = null,
+  mentionedPhones: string[] = [],
 ) => {
   const body = new FormData()
   body.append('file', file)
   body.append('client_message_id', clientMessageId)
   if (caption) body.append('caption', caption)
   if (replyToMessageId) body.append('reply_to_message_id', replyToMessageId)
+  for (const phone of mentionedPhones) body.append('mentioned_phones', phone)
   return http<Message>(`/api/v1/conversations/${conversationId}/attachments`, {
     method: 'POST',
     body,

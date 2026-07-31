@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.enums import MessageDirection, MessageStatus, MessageType
@@ -59,6 +60,7 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     body: Mapped[str | None] = mapped_column(Text)
+    mentioned_phones: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     provider_message_id: Mapped[str | None] = mapped_column(String(255))
     reply_to_provider_message_id: Mapped[str | None] = mapped_column(String(255), index=True)
     error: Mapped[str | None] = mapped_column(Text)

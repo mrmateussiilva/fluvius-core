@@ -150,6 +150,7 @@ class WhatsAppProvider(ABC):
         *,
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
+        mentioned_phones: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         raise NotImplementedError
@@ -164,6 +165,7 @@ class WhatsAppProvider(ABC):
         *,
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
+        mentioned_phones: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         raise NotImplementedError

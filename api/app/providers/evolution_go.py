@@ -91,10 +91,14 @@ class EvolutionGoProvider(WhatsAppProvider):
         *,
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
+        mentioned_phones: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         try:
             request_payload: dict[str, Any] = {"number": to, "text": text}
+            mentioned_jids = self._mentioned_jids(mentioned_phones)
+            if mentioned_jids:
+                request_payload["mentionedJid"] = mentioned_jids
             if idempotency_key:
                 request_payload["id"] = idempotency_key
             if reply_to_provider_message_id and reply_to_participant:
@@ -133,6 +137,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         *,
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
+        mentioned_phones: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         try:
@@ -150,6 +155,9 @@ class EvolutionGoProvider(WhatsAppProvider):
                     "filename": file_url.rsplit("/", 1)[-1].split("?", 1)[0],
                     "type": media_type,
                 }
+            mentioned_jids = self._mentioned_jids(mentioned_phones)
+            if mentioned_jids:
+                request_payload["mentionedJid"] = mentioned_jids
             if idempotency_key:
                 request_payload["id"] = idempotency_key
             if reply_to_provider_message_id and reply_to_participant:
@@ -1371,6 +1379,18 @@ class EvolutionGoProvider(WhatsAppProvider):
         if value.endswith("@g.us") or (digits and value.endswith("g.us")):
             return f"{digits}@g.us"
         return f"{digits}@s.whatsapp.net"
+
+    @classmethod
+    def _mentioned_jids(cls, values: list[str] | None) -> list[str]:
+        mentioned: list[str] = []
+        seen: set[str] = set()
+        for value in values or []:
+            digits = cls._digits(value)
+            if not digits or digits in seen:
+                continue
+            seen.add(digits)
+            mentioned.append(f"{digits}@s.whatsapp.net")
+        return mentioned
 
     @staticmethod
     def _timestamp(value: Any) -> datetime:

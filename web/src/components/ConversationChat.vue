@@ -53,12 +53,14 @@ const emit = defineEmits<{
   send: [
     text: string,
     replyToMessageId: string | null,
+    mentionedPhones: string[],
     done: (accepted: boolean) => void,
   ]
   sendAttachment: [
     file: File,
     caption: string | null,
     replyToMessageId: string | null,
+    mentionedPhones: string[],
     done: (accepted: boolean) => void,
   ]
   retry: [messageId: string]
@@ -424,11 +426,15 @@ function toggleContactPanel() {
   if (contactPanelOpen.value) emit('showContact')
 }
 
-function sendMessage(text: string, done: (accepted: boolean) => void) {
+function sendMessage(
+  text: string,
+  mentionedPhones: string[],
+  done: (accepted: boolean) => void,
+) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
   replyingTo.value = null
-  emit('send', text, reply?.id || null, (accepted) => {
+  emit('send', text, reply?.id || null, mentionedPhones, (accepted) => {
     if (
       !accepted &&
       props.conversation?.id === conversationId &&
@@ -443,12 +449,13 @@ function sendMessage(text: string, done: (accepted: boolean) => void) {
 function sendAttachment(
   file: File,
   caption: string | null,
+  mentionedPhones: string[],
   done: (accepted: boolean) => void,
 ) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
   replyingTo.value = null
-  emit('sendAttachment', file, caption, reply?.id || null, (accepted) => {
+  emit('sendAttachment', file, caption, reply?.id || null, mentionedPhones, (accepted) => {
     if (
       !accepted &&
       props.conversation?.id === conversationId &&
@@ -670,6 +677,8 @@ function previewMedia(
       <MessageComposer
         :draft-key="draftStorageKey"
         :disabled-reason="composerDisabledReason"
+        :group-members="contact?.group_members || []"
+        :is-group="(conversation.contact_kind || 'direct') === 'group'"
         :reply-to="replyingTo"
         :sending="sending"
         :send-error="sendError"
