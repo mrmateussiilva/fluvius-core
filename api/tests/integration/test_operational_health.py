@@ -192,6 +192,9 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         with patch(
             "app.operations.router._worker_health",
             return_value=(True, True, True),
+        ), patch(
+            "app.operations.router.get_webhook_reconcile_runtime",
+            return_value=WebhookReconcileRuntime(active=True, heartbeat_at=now),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -202,7 +205,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         payload = response.json()
         self.assertEqual(payload["pending_provider_events"], 1)
         self.assertEqual(payload["failed_provider_events"], 1)
-        self.assertEqual(payload["status"], "critical")
+        self.assertEqual(payload["status"], "attention")
         self.assertTrue(
             any("webhook aguardando reconciliação" in issue for issue in payload["issues"])
         )
@@ -213,6 +216,43 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(channel["pending_events"], 1)
         self.assertEqual(channel["failed_events"], 1)
+
+    def test_stale_pending_webhooks_are_critical_when_reconciler_is_inactive(self) -> None:
+        now = datetime.now(UTC)
+        with SessionLocal() as db:
+            db.add(
+                ProviderEvent(
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    provider="evolution_go",
+                    event_type="Receipt",
+                    provider_event_id="receipt-pending-inactive-reconciler",
+                    payload={"event": "Receipt"},
+                    processed=False,
+                    processing_error=PENDING_RECEIPT_ERROR,
+                    created_at=now - timedelta(minutes=20),
+                )
+            )
+            db.commit()
+
+        with patch(
+            "app.operations.router._worker_health",
+            return_value=(True, True, True),
+        ), patch(
+            "app.operations.router.get_webhook_reconcile_runtime",
+            return_value=WebhookReconcileRuntime(active=False),
+        ):
+            response = self.client.get(
+                "/api/v1/operations/health",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["status"], "critical")
+        self.assertTrue(
+            any("sem heartbeat recente" in issue for issue in payload["issues"])
+        )
 
     def test_health_surfaces_webhook_reconcile_runtime(self) -> None:
         now = datetime.now(UTC)
