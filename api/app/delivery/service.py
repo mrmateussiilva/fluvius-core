@@ -121,6 +121,7 @@ async def call_provider(
             ),
             reply_to_participant=participant,
             mentioned_phones=message.mentioned_phones,
+            mentioned_jids=message.mentioned_jids,
             idempotency_key=str(message.id),
         )
 
@@ -149,6 +150,7 @@ async def call_provider(
         ),
         reply_to_participant=participant,
         mentioned_phones=message.mentioned_phones,
+        mentioned_jids=message.mentioned_jids,
         idempotency_key=str(message.id),
     )
 

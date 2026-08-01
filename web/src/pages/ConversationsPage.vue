@@ -40,10 +40,19 @@ async function sendMessage(
   text: string,
   replyToMessageId: string | null,
   mentionedPhones: string[],
+  mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
 ) {
-  done(await store.send(text, replyToMessageId, mentionedPhones, referencedContactIds))
+  done(
+    await store.send(
+      text,
+      replyToMessageId,
+      mentionedPhones,
+      mentionedJids,
+      referencedContactIds,
+    ),
+  )
 }
 
 async function sendAttachment(
@@ -51,10 +60,20 @@ async function sendAttachment(
   caption: string | null,
   replyToMessageId: string | null,
   mentionedPhones: string[],
+  mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
 ) {
-  done(await store.sendAttachment(file, caption, replyToMessageId, mentionedPhones, referencedContactIds))
+  done(
+    await store.sendAttachment(
+      file,
+      caption,
+      replyToMessageId,
+      mentionedPhones,
+      mentionedJids,
+      referencedContactIds,
+    ),
+  )
 }
 
 async function refreshVisibleConversation() {

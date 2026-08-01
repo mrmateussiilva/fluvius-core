@@ -54,6 +54,7 @@ const emit = defineEmits<{
     text: string,
     replyToMessageId: string | null,
     mentionedPhones: string[],
+    mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
@@ -62,6 +63,7 @@ const emit = defineEmits<{
     caption: string | null,
     replyToMessageId: string | null,
     mentionedPhones: string[],
+    mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
@@ -431,44 +433,63 @@ function toggleContactPanel() {
 function sendMessage(
   text: string,
   mentionedPhones: string[],
+  mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
 ) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
   replyingTo.value = null
-  emit('send', text, reply?.id || null, mentionedPhones, referencedContactIds, (accepted) => {
-    if (
-      !accepted &&
-      props.conversation?.id === conversationId &&
-      !replyingTo.value
-    ) {
-      replyingTo.value = reply
-    }
-    done(accepted)
-  })
+  emit(
+    'send',
+    text,
+    reply?.id || null,
+    mentionedPhones,
+    mentionedJids,
+    referencedContactIds,
+    (accepted) => {
+      if (
+        !accepted &&
+        props.conversation?.id === conversationId &&
+        !replyingTo.value
+      ) {
+        replyingTo.value = reply
+      }
+      done(accepted)
+    },
+  )
 }
 
 function sendAttachment(
   file: File,
   caption: string | null,
   mentionedPhones: string[],
+  mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
 ) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
   replyingTo.value = null
-  emit('sendAttachment', file, caption, reply?.id || null, mentionedPhones, referencedContactIds, (accepted) => {
-    if (
-      !accepted &&
-      props.conversation?.id === conversationId &&
-      !replyingTo.value
-    ) {
-      replyingTo.value = reply
-    }
-    done(accepted)
-  })
+  emit(
+    'sendAttachment',
+    file,
+    caption,
+    reply?.id || null,
+    mentionedPhones,
+    mentionedJids,
+    referencedContactIds,
+    (accepted) => {
+      if (
+        !accepted &&
+        props.conversation?.id === conversationId &&
+        !replyingTo.value
+      ) {
+        replyingTo.value = reply
+      }
+      done(accepted)
+    },
+  )
 }
 
 function jumpToMessage(messageId: string) {

@@ -92,13 +92,14 @@ class EvolutionGoProvider(WhatsAppProvider):
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
         mentioned_phones: list[str] | None = None,
+        mentioned_jids: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         try:
             request_payload: dict[str, Any] = {"number": to, "text": text}
-            mentioned_jids = self._mentioned_jids(mentioned_phones)
-            if mentioned_jids:
-                request_payload["mentionedJid"] = mentioned_jids
+            mention_targets = self._mentioned_jids(mentioned_phones, mentioned_jids)
+            if mention_targets:
+                request_payload["mentionedJid"] = mention_targets
             if idempotency_key:
                 request_payload["id"] = idempotency_key
             if reply_to_provider_message_id and reply_to_participant:
@@ -138,6 +139,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         reply_to_provider_message_id: str | None = None,
         reply_to_participant: str | None = None,
         mentioned_phones: list[str] | None = None,
+        mentioned_jids: list[str] | None = None,
         idempotency_key: str | None = None,
     ) -> SendResult:
         try:
@@ -155,9 +157,9 @@ class EvolutionGoProvider(WhatsAppProvider):
                     "filename": file_url.rsplit("/", 1)[-1].split("?", 1)[0],
                     "type": media_type,
                 }
-            mentioned_jids = self._mentioned_jids(mentioned_phones)
-            if mentioned_jids:
-                request_payload["mentionedJid"] = mentioned_jids
+            mention_targets = self._mentioned_jids(mentioned_phones, mentioned_jids)
+            if mention_targets:
+                request_payload["mentionedJid"] = mention_targets
             if idempotency_key:
                 request_payload["id"] = idempotency_key
             if reply_to_provider_message_id and reply_to_participant:
@@ -686,13 +688,16 @@ class EvolutionGoProvider(WhatsAppProvider):
         for item in raw:
             if not isinstance(item, dict):
                 continue
-            phone = cls._group_member_phone(item)
-            if not phone or phone in seen:
+            provider_jid = cls._group_member_jid(item)
+            phone = cls._group_member_phone(item, provider_jid)
+            member_key = provider_jid or phone
+            if not member_key or member_key in seen:
                 continue
-            seen.add(phone)
+            seen.add(member_key)
             members.append(
                 GroupMemberProfile(
-                    phone_number=phone,
+                    phone_number=phone or cls._number_from_jid(provider_jid),
+                    provider_jid=provider_jid,
                     name=cls._text_value(
                         item,
                         "DisplayName",
@@ -708,12 +713,28 @@ class EvolutionGoProvider(WhatsAppProvider):
         return members
 
     @classmethod
-    def _group_member_phone(cls, member: dict[str, Any]) -> str | None:
+    def _group_member_jid(cls, member: dict[str, Any]) -> str | None:
         jid = cls._text_value(member, "JID", "Jid", "jid")
         if jid:
-            phone = cls._phone_from_jid(jid)
-            return phone if cls._is_mentionable_phone(phone) else None
+            return cls._mention_jid(jid)
 
+        lid = cls._text_value(member, "LID", "Lid", "lid")
+        if lid:
+            return cls._mention_jid(lid)
+
+        raw_id = cls._text_value(member, "ID", "id")
+        digits = cls._digits(raw_id or "")
+        if len(digits) > 15:
+            return f"{digits}@lid"
+
+        return None
+
+    @classmethod
+    def _group_member_phone(
+        cls,
+        member: dict[str, Any],
+        provider_jid: str | None,
+    ) -> str | None:
         value = cls._text_value(
             member,
             "PhoneNumber",
@@ -724,6 +745,8 @@ class EvolutionGoProvider(WhatsAppProvider):
             "number",
         )
         phone = cls._digits(value or "")
+        if not phone and provider_jid and provider_jid.endswith("@s.whatsapp.net"):
+            phone = cls._number_from_jid(provider_jid)
         return phone if cls._is_mentionable_phone(phone) else None
 
     @classmethod
@@ -1385,6 +1408,25 @@ class EvolutionGoProvider(WhatsAppProvider):
         return bool(value and 10 <= len(value) <= 15)
 
     @classmethod
+    def _mention_jid(cls, value: str | None) -> str | None:
+        if not value:
+            return None
+        raw = value.strip()
+        lower = raw.lower()
+        if lower.endswith("@lid"):
+            digits = cls._digits(raw.split("@", 1)[0])
+            return f"{digits}@lid" if digits else None
+        if lower.endswith("@s.whatsapp.net"):
+            digits = cls._digits(raw.split("@", 1)[0])
+            return f"{digits}@s.whatsapp.net" if cls._is_mentionable_phone(digits) else None
+        digits = cls._digits(raw)
+        if cls._is_mentionable_phone(digits):
+            return f"{digits}@s.whatsapp.net"
+        if len(digits) > 15:
+            return f"{digits}@lid"
+        return None
+
+    @classmethod
     def _as_jid(cls, value: str) -> str:
         if "@" in value:
             return value
@@ -1394,15 +1436,25 @@ class EvolutionGoProvider(WhatsAppProvider):
         return f"{digits}@s.whatsapp.net"
 
     @classmethod
-    def _mentioned_jids(cls, values: list[str] | None) -> list[str]:
+    def _mentioned_jids(
+        cls,
+        phones: list[str] | None,
+        jids: list[str] | None = None,
+    ) -> list[str]:
         mentioned: list[str] = []
         seen: set[str] = set()
-        for value in values or []:
-            digits = cls._digits(value)
-            if not digits or digits in seen:
+        for value in jids or []:
+            jid = cls._mention_jid(value)
+            if not jid or jid in seen:
                 continue
-            seen.add(digits)
-            mentioned.append(f"{digits}@s.whatsapp.net")
+            seen.add(jid)
+            mentioned.append(jid)
+        for value in phones or []:
+            jid = cls._mention_jid(value)
+            if not jid or jid in seen:
+                continue
+            seen.add(jid)
+            mentioned.append(jid)
         return mentioned
 
     @staticmethod

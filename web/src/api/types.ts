@@ -182,6 +182,7 @@ export interface Conversation {
 
 export interface GroupMemberResponse {
   phone_number: string
+  provider_jid: string | null
   name: string | null
   is_admin: boolean
 }
@@ -230,6 +231,7 @@ export interface Message {
   status: MessageStatus
   body: string | null
   mentioned_phones: string[]
+  mentioned_jids: string[]
   referenced_contacts: ReferencedContact[]
   reply_to_message_id: string | null
   reply_to_provider_message_id: string | null

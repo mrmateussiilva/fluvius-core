@@ -134,6 +134,25 @@ def is_mentionable_phone(value: str) -> bool:
     return 10 <= len(normalize_phone(value)) <= 15
 
 
+def mention_jid(value: str | None) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    lower = raw.lower()
+    if lower.endswith("@lid"):
+        digits = normalize_phone(raw.split("@", 1)[0])
+        return f"{digits}@lid" if digits else None
+    if lower.endswith("@s.whatsapp.net"):
+        digits = normalize_phone(raw.split("@", 1)[0])
+        return f"{digits}@s.whatsapp.net" if is_mentionable_phone(digits) else None
+    digits = normalize_phone(raw)
+    if len(digits) > 15:
+        return f"{digits}@lid"
+    if is_mentionable_phone(digits):
+        return f"{digits}@s.whatsapp.net"
+    return None
+
+
 def group_member_phones(contact: Contact) -> set[str]:
     phones: set[str] = set()
     if isinstance(contact.group_members, list):
@@ -146,6 +165,28 @@ def group_member_phones(contact: Contact) -> set[str]:
     return phones
 
 
+def group_member_jids(contact: Contact) -> set[str]:
+    jids: set[str] = set()
+    if isinstance(contact.group_members, list):
+        for item in contact.group_members:
+            if not isinstance(item, dict):
+                continue
+            provider_jid = mention_jid(
+                item.get("provider_jid")
+                or item.get("jid")
+                or item.get("JID")
+                or item.get("lid")
+                or item.get("LID")
+            )
+            if provider_jid:
+                jids.add(provider_jid)
+            phone = normalize_phone(str(item.get("phone_number") or ""))
+            phone_jid = mention_jid(phone)
+            if phone_jid:
+                jids.add(phone_jid)
+    return jids
+
+
 def contact_display_name(contact: Contact) -> str:
     return (
         contact.name
@@ -156,10 +197,11 @@ def contact_display_name(contact: Contact) -> str:
     )
 
 
-def validate_mentioned_phones(
+def validate_message_mentions(
     contact: Contact,
     mentioned_phones: list[str] | None,
-) -> list[str]:
+    mentioned_jids: list[str] | None,
+) -> tuple[list[str], list[str]]:
     normalized: list[str] = []
     seen: set[str] = set()
     for value in mentioned_phones or []:
@@ -168,9 +210,23 @@ def validate_mentioned_phones(
             continue
         seen.add(phone)
         normalized.append(phone)
-    if not normalized:
-        return []
+
+    normalized_jids: list[str] = []
+    seen_jids: set[str] = set()
+    for value in mentioned_jids or []:
+        jid = mention_jid(value)
+        if not jid or jid in seen_jids:
+            continue
+        seen_jids.add(jid)
+        normalized_jids.append(jid)
+    if not normalized and not normalized_jids:
+        return [], []
     if len(normalized) > MAX_MENTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Marque no máximo {MAX_MENTIONS} participantes por mensagem.",
+        )
+    if len(normalized) + len(normalized_jids) > MAX_MENTIONS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Marque no máximo {MAX_MENTIONS} participantes por mensagem.",
@@ -181,18 +237,20 @@ def validate_mentioned_phones(
             detail="Menções só estão disponíveis em conversas de grupo.",
         )
     allowed_phones = group_member_phones(contact)
-    if not allowed_phones:
+    allowed_jids = group_member_jids(contact)
+    if not allowed_phones and not allowed_jids:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Atualize os dados do grupo antes de mencionar participantes.",
         )
     unknown = [phone for phone in normalized if phone not in allowed_phones]
-    if unknown:
+    unknown_jids = [jid for jid in normalized_jids if jid not in allowed_jids]
+    if unknown or unknown_jids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Participante mencionado não pertence ao grupo sincronizado.",
         )
-    return normalized
+    return normalized, normalized_jids
 
 
 def validate_referenced_contacts(
@@ -421,7 +479,11 @@ async def send_message(
         context,
         conversation_id,
     )
-    mentioned_phones = validate_mentioned_phones(contact, payload.mentioned_phones)
+    mentioned_phones, mentioned_jids = validate_message_mentions(
+        contact,
+        payload.mentioned_phones,
+        payload.mentioned_jids,
+    )
     referenced_contacts = validate_referenced_contacts(
         db,
         context,
@@ -443,6 +505,7 @@ async def send_message(
             and existing.body == payload.text
             and existing.reply_to_message_id == payload.reply_to_message_id
             and (existing.mentioned_phones or []) == mentioned_phones
+            and (existing.mentioned_jids or []) == mentioned_jids
             and (existing.referenced_contacts or []) == referenced_contacts
         ):
             if existing.status == MessageStatus.PENDING:
@@ -485,6 +548,7 @@ async def send_message(
         status=MessageStatus.PENDING,
         body=payload.text,
         mentioned_phones=mentioned_phones,
+        mentioned_jids=mentioned_jids,
         referenced_contacts=referenced_contacts,
         attempt_count=0,
     )
@@ -530,6 +594,7 @@ async def send_attachment(
     caption: str | None = Form(default=None),
     reply_to_message_id: UUID | None = Form(default=None),
     mentioned_phones: list[str] | None = Form(default=None),
+    mentioned_jids: list[str] | None = Form(default=None),
     referenced_contact_ids: list[UUID] | None = Form(default=None),
     client_message_id: UUID | None = Form(default=None),
     context: AuthContext = Depends(get_auth_context),
@@ -540,7 +605,11 @@ async def send_attachment(
         context,
         conversation_id,
     )
-    normalized_mentions = validate_mentioned_phones(contact, mentioned_phones)
+    normalized_mentions, normalized_mention_jids = validate_message_mentions(
+        contact,
+        mentioned_phones,
+        mentioned_jids,
+    )
     referenced_contacts = validate_referenced_contacts(
         db,
         context,
@@ -615,6 +684,7 @@ async def send_attachment(
             and existing.body == normalized_caption
             and existing.reply_to_message_id == reply_to_message_id
             and (existing.mentioned_phones or []) == normalized_mentions
+            and (existing.mentioned_jids or []) == normalized_mention_jids
             and (existing.referenced_contacts or []) == referenced_contacts
             and same_content
         ):
@@ -654,6 +724,7 @@ async def send_attachment(
         status=MessageStatus.PENDING,
         body=normalized_caption,
         mentioned_phones=normalized_mentions,
+        mentioned_jids=normalized_mention_jids,
         referenced_contacts=referenced_contacts,
         attempt_count=0,
     )

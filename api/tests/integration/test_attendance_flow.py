@@ -33,6 +33,7 @@ class ConfirmingProvider:
                 "text": text,
                 "idempotency_key": kwargs.get("idempotency_key"),
                 "mentioned_phones": kwargs.get("mentioned_phones"),
+                "mentioned_jids": kwargs.get("mentioned_jids"),
             }
         )
         return SendResult(
@@ -57,6 +58,7 @@ class ConfirmingProvider:
                 "caption": caption,
                 "idempotency_key": kwargs.get("idempotency_key"),
                 "mentioned_phones": kwargs.get("mentioned_phones"),
+                "mentioned_jids": kwargs.get("mentioned_jids"),
             }
         )
         return SendResult(
@@ -686,6 +688,12 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                         "phone_number": "5527999999999",
                         "name": "Maria Operacao",
                         "is_admin": False,
+                    },
+                    {
+                        "phone_number": "964169518424559641",
+                        "provider_jid": "964169518424559641@lid",
+                        "name": "Participante LID",
+                        "is_admin": True,
                     }
                 ],
             )
@@ -718,6 +726,16 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(unknown.status_code, 422, unknown.text)
 
+        unknown_lid = self.client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=self.headers_a,
+            json={
+                "text": "Oi @Pessoa",
+                "mentioned_jids": ["8833139028242378833@lid"],
+            },
+        )
+        self.assertEqual(unknown_lid.status_code, 422, unknown_lid.text)
+
         provider = ConfirmingProvider("group-mention-1")
         client_message_id = str(uuid4())
         with patch("app.delivery.service.get_provider", return_value=provider):
@@ -725,8 +743,9 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                 f"/api/v1/conversations/{conversation_id}/messages",
                 headers=self.headers_a,
                 json={
-                    "text": "Oi @Maria Operacao",
+                    "text": "Oi @Maria Operacao e @Participante LID",
                     "mentioned_phones": ["+55 (27) 99999-9999"],
+                    "mentioned_jids": ["964169518424559641@lid"],
                     "client_message_id": client_message_id,
                 },
             )
@@ -742,8 +761,10 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
 
         self.assertEqual(created.status_code, 202, created.text)
         self.assertEqual(created.json()["mentioned_phones"], ["5527999999999"])
+        self.assertEqual(created.json()["mentioned_jids"], ["964169518424559641@lid"])
         self.assertEqual(provider.calls[0]["to"], "120363018686549942@g.us")
         self.assertEqual(provider.calls[0]["mentioned_phones"], ["5527999999999"])
+        self.assertEqual(provider.calls[0]["mentioned_jids"], ["964169518424559641@lid"])
 
     def test_group_message_contact_references_are_internal_only(self) -> None:
         with SessionLocal() as db:

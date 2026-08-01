@@ -297,6 +297,31 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertTrue(result.success)
         self.assertEqual(body["mentionedJid"], ["5527999999999@s.whatsapp.net"])
 
+    def test_sends_group_lid_mentions_as_jids(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/text"),
+            json={"data": {"Info": {"ID": "MENTION-LID-MESSAGE-ID"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(
+                self.provider.send_text(
+                    None,
+                    "120363018686549942@g.us",
+                    "Oi @Participante",
+                    mentioned_jids=["964169518424559641@lid"],
+                    idempotency_key="MENTION-LID-MESSAGE-ID",
+                )
+            )
+
+        body = request.await_args.kwargs["json"]
+        self.assertTrue(result.success)
+        self.assertEqual(body["mentionedJid"], ["964169518424559641@lid"])
+
     def test_retries_only_failures_that_are_safe_before_delivery(self) -> None:
         request = httpx.Request("POST", "http://evolution-go:8080/send/text")
         connect_failure = self.provider._send_error_result(
@@ -438,7 +463,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
                                     "JID": "172434498003125@lid",
                                     "PushName": "Participante LID",
                                     "Role": "member",
-                                }
+                                },
                             ],
                         }
                     ]
@@ -453,10 +478,14 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(group.name, "Grupo Comercial")
         self.assertEqual(group.about, "Atendimento B2B")
         self.assertEqual(group.member_count, 42)
-        self.assertEqual(len(group.members), 1)
+        self.assertEqual(len(group.members), 2)
         self.assertEqual(group.members[0].phone_number, "5527999999999")
+        self.assertEqual(group.members[0].provider_jid, "5527999999999@s.whatsapp.net")
         self.assertEqual(group.members[0].name, "Coordenador")
         self.assertTrue(group.members[0].is_admin)
+        self.assertEqual(group.members[1].phone_number, "172434498003125")
+        self.assertEqual(group.members[1].provider_jid, "172434498003125@lid")
+        self.assertEqual(group.members[1].name, "Participante LID")
 
     def test_parses_group_profile_with_member_count_without_member_list(self) -> None:
         result = self.provider._parse_group_profile(
@@ -478,7 +507,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(result.group_members, [])
         self.assertEqual(result.profile_picture_url, "https://example.test/group.jpg")
 
-    def test_group_members_ignore_internal_ids_as_phones(self) -> None:
+    def test_group_members_preserve_lid_targets_without_real_phone(self) -> None:
         result = self.provider._parse_group_profile(
             info={
                 "data": {
@@ -505,9 +534,16 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             avatar=None,
         )
 
-        self.assertEqual(len(result.group_members), 1)
-        self.assertEqual(result.group_members[0].phone_number, "5527999999999")
-        self.assertEqual(result.group_members[0].name, "Telefone Real")
+        self.assertEqual(len(result.group_members), 3)
+        self.assertEqual(result.group_members[0].phone_number, "964169518424559641")
+        self.assertEqual(result.group_members[0].provider_jid, "964169518424559641@lid")
+        self.assertEqual(result.group_members[0].name, "ID Interno")
+        self.assertTrue(result.group_members[0].is_admin)
+        self.assertEqual(result.group_members[1].phone_number, "5527999999999")
+        self.assertIsNone(result.group_members[1].provider_jid)
+        self.assertEqual(result.group_members[1].name, "Telefone Real")
+        self.assertEqual(result.group_members[2].phone_number, "172434498003125")
+        self.assertEqual(result.group_members[2].provider_jid, "172434498003125@lid")
 
     def test_parses_connected_status_envelope(self) -> None:
         result = self.provider._parse_status(load_fixture("status-connected.json"))

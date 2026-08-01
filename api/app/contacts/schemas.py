@@ -8,6 +8,7 @@ from app.common.enums import ContactKind
 
 class GroupMemberResponse(BaseModel):
     phone_number: str
+    provider_jid: str | None = None
     name: str | None = None
     is_admin: bool = False
 

@@ -40,6 +40,7 @@ const emit = defineEmits<{
   send: [
     text: string,
     mentionedPhones: string[],
+    mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
@@ -47,6 +48,7 @@ const emit = defineEmits<{
     file: File,
     caption: string | null,
     mentionedPhones: string[],
+    mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
@@ -57,6 +59,7 @@ type MentionCandidate = {
   key: string
   kind: 'member' | 'contact'
   phone_number: string
+  mention_jid?: string | null
   label: string
   subtitle: string
   is_admin?: boolean
@@ -255,8 +258,27 @@ function isMentionablePhone(value: string) {
   return phone.length >= 10 && phone.length <= 15
 }
 
+function mentionJid(value: string | null | undefined) {
+  const raw = (value || '').trim()
+  const lower = raw.toLowerCase()
+  if (lower.endsWith('@lid')) {
+    const digits = normalizePhone(raw.split('@')[0])
+    return digits ? `${digits}@lid` : null
+  }
+  if (lower.endsWith('@s.whatsapp.net')) {
+    const digits = normalizePhone(raw.split('@')[0])
+    return isMentionablePhone(digits) ? `${digits}@s.whatsapp.net` : null
+  }
+  const digits = normalizePhone(raw)
+  if (digits.length > 15) return `${digits}@lid`
+  if (isMentionablePhone(digits)) return `${digits}@s.whatsapp.net`
+  return null
+}
+
 function memberLabel(member: GroupMemberResponse) {
-  return (member.name || member.phone_number).replace(/\s+/g, ' ').trim()
+  return (member.name || member.phone_number || member.provider_jid || '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function contactLabel(contact: ContactSearchResult) {
@@ -271,10 +293,13 @@ function groupMemberScore(member: GroupMemberResponse, query: string) {
   if (!query) return 0
   const name = normalizeSearch(member.name || '')
   const phone = normalizeSearch(member.phone_number)
+  const jid = normalizeSearch(member.provider_jid || '')
   if (name.startsWith(query)) return 0
   if (phone.startsWith(query)) return 1
-  if (name.includes(query)) return 2
-  if (phone.includes(query)) return 3
+  if (jid.startsWith(query)) return 2
+  if (name.includes(query)) return 3
+  if (phone.includes(query)) return 4
+  if (jid.includes(query)) return 5
   return 99
 }
 
@@ -285,17 +310,24 @@ function filterGroupMembers(
   if (!props.isGroup) return []
   const query = normalizeSearch(rawQuery.trim())
   return members
-    .filter((member) => isMentionablePhone(member.phone_number))
-    .map((member) => ({ member, score: groupMemberScore(member, query) }))
+    .map((member) => ({
+      member,
+      jid: mentionJid(member.provider_jid) || mentionJid(member.phone_number),
+      score: groupMemberScore(member, query),
+    }))
+    .filter(
+      (item) => isMentionablePhone(item.member.phone_number) || Boolean(item.jid),
+    )
     .filter((item) => item.score < 99)
     .sort((a, b) => {
       if (a.score !== b.score) return a.score - b.score
       return memberLabel(a.member).localeCompare(memberLabel(b.member), 'pt-BR')
     })
     .map((item) => ({
-      key: `member:${item.member.phone_number}`,
+      key: `member:${item.jid || normalizePhone(item.member.phone_number)}`,
       kind: 'member' as const,
       phone_number: normalizePhone(item.member.phone_number),
+      mention_jid: item.jid,
       label: memberLabel(item.member),
       subtitle: `${item.member.phone_number}${item.member.is_admin ? ' · Admin' : ''}`,
       is_admin: item.member.is_admin,
@@ -469,9 +501,25 @@ function updateMentionTrigger() {
 }
 
 function mentionedPhonesForText(value: string) {
-  return selectedMentions.value
-    .filter((candidate) => value.includes(mentionText(candidate)))
-    .map((candidate) => candidate.phone_number)
+  return Array.from(
+    new Set(
+      selectedMentions.value
+        .filter((candidate) => value.includes(mentionText(candidate)))
+        .filter((candidate) => isMentionablePhone(candidate.phone_number))
+        .map((candidate) => candidate.phone_number),
+    ),
+  )
+}
+
+function mentionedJidsForText(value: string) {
+  return Array.from(
+    new Set(
+      selectedMentions.value
+        .filter((candidate) => value.includes(mentionText(candidate)))
+        .map((candidate) => candidate.mention_jid)
+        .filter((jid): jid is string => Boolean(jid)),
+    ),
+  )
 }
 
 function referencedContactIdsForText(value: string) {
@@ -488,6 +536,7 @@ function submit() {
     const submittedFile = selectedFile.value
     const isSticker = selectedFileKind.value === 'sticker'
     const submittedMentions = isSticker ? [] : mentionedPhonesForText(content)
+    const submittedMentionJids = isSticker ? [] : mentionedJidsForText(content)
     const submittedContactReferences = isSticker
       ? []
       : referencedContactIdsForText(content)
@@ -496,6 +545,7 @@ function submit() {
       submittedFile,
       isSticker ? null : content || null,
       submittedMentions,
+      submittedMentionJids,
       submittedContactReferences,
       (accepted) => {
         if (!accepted || selectedFile.value !== submittedFile) return
@@ -511,6 +561,7 @@ function submit() {
   } else {
     if (!content) return
     const submittedMentions = mentionedPhonesForText(content)
+    const submittedMentionJids = mentionedJidsForText(content)
     const submittedContactReferences = referencedContactIdsForText(content)
     const submittedSelectedMentions = selectedMentions.value
     const submittedSelectedContactReferences = selectedContactReferences.value
@@ -518,18 +569,25 @@ function submit() {
     selectedMentions.value = []
     selectedContactReferences.value = []
     nextTick(resizeTextarea)
-    emit('send', content, submittedMentions, submittedContactReferences, (accepted) => {
-      if (accepted) return
-      text.value = text.value.trim()
-        ? `${content}\n${text.value}`
-        : content
-      selectedMentions.value = submittedSelectedMentions
-      selectedContactReferences.value = submittedSelectedContactReferences
-      nextTick(() => {
-        resizeTextarea()
-        textarea.value?.focus()
-      })
-    })
+    emit(
+      'send',
+      content,
+      submittedMentions,
+      submittedMentionJids,
+      submittedContactReferences,
+      (accepted) => {
+        if (accepted) return
+        text.value = text.value.trim()
+          ? `${content}\n${text.value}`
+          : content
+        selectedMentions.value = submittedSelectedMentions
+        selectedContactReferences.value = submittedSelectedContactReferences
+        nextTick(() => {
+          resizeTextarea()
+          textarea.value?.focus()
+        })
+      },
+    )
   }
 }
 
@@ -677,7 +735,7 @@ function useMention(candidate: MentionCandidate) {
   if (candidate.kind === 'member') {
     if (
       !selectedMentions.value.some(
-        (selected) => selected.phone_number === candidate.phone_number,
+        (selected) => selected.key === candidate.key,
       )
     ) {
       selectedMentions.value = [...selectedMentions.value, candidate]

@@ -33,6 +33,25 @@ def is_mentionable_phone(value: str) -> bool:
     return 10 <= len(normalize_phone(value)) <= 15
 
 
+def mention_jid(value: str | None) -> str | None:
+    if not value:
+        return None
+    raw = value.strip()
+    lower = raw.lower()
+    if lower.endswith("@lid"):
+        digits = normalize_phone(raw.split("@", 1)[0])
+        return f"{digits}@lid" if digits else None
+    if lower.endswith("@s.whatsapp.net"):
+        digits = normalize_phone(raw.split("@", 1)[0])
+        return f"{digits}@s.whatsapp.net" if is_mentionable_phone(digits) else None
+    digits = normalize_phone(raw)
+    if len(digits) > 15:
+        return f"{digits}@lid"
+    if 10 <= len(digits) <= 15:
+        return f"{digits}@s.whatsapp.net"
+    return None
+
+
 def get_tenant_contact(db: Session, tenant_id: UUID, contact_id: UUID) -> Contact:
     contact = db.scalar(
         select(Contact).where(Contact.id == contact_id, Contact.tenant_id == tenant_id)
@@ -100,11 +119,17 @@ def contact_response(
             if not isinstance(item, dict):
                 continue
             phone = str(item.get("phone_number") or "").strip()
-            if not is_mentionable_phone(phone):
+            provider_jid = mention_jid(
+                str(item.get("provider_jid") or item.get("jid") or "")
+            )
+            if not provider_jid and len(normalize_phone(phone)) > 15:
+                provider_jid = mention_jid(phone)
+            if not provider_jid and not is_mentionable_phone(phone):
                 continue
             members.append(
                 {
                     "phone_number": normalize_phone(phone),
+                    "provider_jid": provider_jid,
                     "name": item.get("name"),
                     "is_admin": bool(item.get("is_admin")),
                 }

@@ -42,6 +42,7 @@ class MessageResponse(ORMModel):
     participant_phone: str | None = None
     participant_name: str | None = None
     mentioned_phones: list[str] = Field(default_factory=list)
+    mentioned_jids: list[str] = Field(default_factory=list)
     referenced_contacts: list[ReferencedContactResponse] = Field(default_factory=list)
     reply_to_message_id: UUID | None
     reply_to_provider_message_id: str | None
