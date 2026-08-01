@@ -34,5 +34,13 @@ class ContactResponse(BaseModel):
     closed_conversation_count: int
 
 
+class ContactSearchResponse(BaseModel):
+    id: UUID
+    kind: ContactKind = ContactKind.DIRECT
+    display_name: str
+    phone_number: str
+    profile_picture_url: str | None = None
+
+
 class ContactRefreshRequest(BaseModel):
     channel_id: UUID

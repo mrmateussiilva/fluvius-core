@@ -208,6 +208,20 @@ export interface ContactDetail {
   closed_conversation_count: number
 }
 
+export interface ContactSearchResult {
+  id: string
+  kind: ContactKind
+  display_name: string
+  phone_number: string
+  profile_picture_url: string | null
+}
+
+export interface ReferencedContact {
+  contact_id: string
+  phone_number: string
+  display_name: string
+}
+
 export interface Message {
   id: string
   conversation_id: string
@@ -216,6 +230,7 @@ export interface Message {
   status: MessageStatus
   body: string | null
   mentioned_phones: string[]
+  referenced_contacts: ReferencedContact[]
   reply_to_message_id: string | null
   reply_to_provider_message_id: string | null
   reply_to: {

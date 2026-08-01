@@ -46,10 +46,12 @@ from app.providers.evolution_credentials import (
 )
 from app.realtime.manager import realtime_manager
 from app.storage.local import LocalStorageProvider
+from app.users.channel_access import accessible_channel_ids
 
 router = APIRouter(tags=["messages"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de enviar mensagens."
 MAX_MENTIONS = 50
+MAX_CONTACT_REFERENCES = 50
 
 
 def attachment_response(
@@ -140,6 +142,16 @@ def group_member_phones(contact: Contact) -> set[str]:
     return phones
 
 
+def contact_display_name(contact: Contact) -> str:
+    return (
+        contact.name
+        or contact.push_name
+        or contact.business_name
+        or contact.verified_name
+        or contact.phone_number
+    )
+
+
 def validate_mentioned_phones(
     contact: Contact,
     mentioned_phones: list[str] | None,
@@ -179,6 +191,80 @@ def validate_mentioned_phones(
     return normalized
 
 
+def validate_referenced_contacts(
+    db: Session,
+    context: AuthContext,
+    conversation_contact: Contact,
+    referenced_contact_ids: list[UUID] | None,
+) -> list[dict[str, str]]:
+    unique_ids: list[UUID] = []
+    seen: set[UUID] = set()
+    for contact_id in referenced_contact_ids or []:
+        if contact_id in seen:
+            continue
+        seen.add(contact_id)
+        unique_ids.append(contact_id)
+    if not unique_ids:
+        return []
+    if len(unique_ids) > MAX_CONTACT_REFERENCES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Referencie no máximo {MAX_CONTACT_REFERENCES} contatos por mensagem.",
+        )
+    if conversation_contact.kind != ContactKind.GROUP:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Referências a contatos só estão disponíveis em conversas de grupo.",
+        )
+
+    contacts = list(
+        db.scalars(
+            select(Contact).where(
+                Contact.id.in_(unique_ids),
+                Contact.tenant_id == context.tenant_id,
+                Contact.kind == ContactKind.DIRECT,
+            )
+        )
+    )
+    contacts_by_id = {contact.id: contact for contact in contacts}
+    missing = [contact_id for contact_id in unique_ids if contact_id not in contacts_by_id]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Contato referenciado não pertence ao tenant ou não é um contato direto.",
+        )
+
+    allowed_channel_ids = accessible_channel_ids(db, context)
+    if allowed_channel_ids is not None:
+        accessible_contacts = set(
+            db.scalars(
+                select(Conversation.contact_id).where(
+                    Conversation.tenant_id == context.tenant_id,
+                    Conversation.contact_id.in_(unique_ids),
+                    Conversation.channel_id.in_(allowed_channel_ids),
+                )
+            )
+        )
+        blocked = [
+            contact_id for contact_id in unique_ids if contact_id not in accessible_contacts
+        ]
+        if blocked:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contato referenciado não encontrado",
+            )
+
+    return [
+        {
+            "contact_id": str(contact.id),
+            "phone_number": contact.phone_number,
+            "display_name": contact_display_name(contact),
+        }
+        for contact_id in unique_ids
+        for contact in [contacts_by_id[contact_id]]
+    ]
+
+
 def message_response(
     db: Session,
     tenant_id: UUID,
@@ -214,9 +300,10 @@ def message_response(
                     MessageAttachment.message_id == message.id,
                 )
             )
-        )
+    )
     return MessageResponse.model_validate(message).model_copy(
         update={
+            "referenced_contacts": message.referenced_contacts or [],
             "reply_to": quoted,
             "attachments": [
                 attachment_response(attachment)
@@ -331,6 +418,12 @@ async def send_message(
         conversation_id,
     )
     mentioned_phones = validate_mentioned_phones(contact, payload.mentioned_phones)
+    referenced_contacts = validate_referenced_contacts(
+        db,
+        context,
+        contact,
+        payload.referenced_contact_ids,
+    )
     existing = db.scalar(
         select(Message).where(
             Message.id == payload.client_message_id,
@@ -346,6 +439,7 @@ async def send_message(
             and existing.body == payload.text
             and existing.reply_to_message_id == payload.reply_to_message_id
             and (existing.mentioned_phones or []) == mentioned_phones
+            and (existing.referenced_contacts or []) == referenced_contacts
         ):
             if existing.status == MessageStatus.PENDING:
                 delivery = ensure_delivery(db, existing)
@@ -387,6 +481,7 @@ async def send_message(
         status=MessageStatus.PENDING,
         body=payload.text,
         mentioned_phones=mentioned_phones,
+        referenced_contacts=referenced_contacts,
         attempt_count=0,
     )
     db.add(message)
@@ -431,6 +526,7 @@ async def send_attachment(
     caption: str | None = Form(default=None),
     reply_to_message_id: UUID | None = Form(default=None),
     mentioned_phones: list[str] | None = Form(default=None),
+    referenced_contact_ids: list[UUID] | None = Form(default=None),
     client_message_id: UUID | None = Form(default=None),
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
@@ -441,6 +537,12 @@ async def send_attachment(
         conversation_id,
     )
     normalized_mentions = validate_mentioned_phones(contact, mentioned_phones)
+    referenced_contacts = validate_referenced_contacts(
+        db,
+        context,
+        contact,
+        referenced_contact_ids,
+    )
     reply_to = None
     if reply_to_message_id:
         reply_to = get_tenant_message(
@@ -509,6 +611,7 @@ async def send_attachment(
             and existing.body == normalized_caption
             and existing.reply_to_message_id == reply_to_message_id
             and (existing.mentioned_phones or []) == normalized_mentions
+            and (existing.referenced_contacts or []) == referenced_contacts
             and same_content
         ):
             if existing.status == MessageStatus.PENDING:
@@ -547,6 +650,7 @@ async def send_attachment(
         status=MessageStatus.PENDING,
         body=normalized_caption,
         mentioned_phones=normalized_mentions,
+        referenced_contacts=referenced_contacts,
         attempt_count=0,
     )
     db.add(message)

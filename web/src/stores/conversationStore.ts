@@ -127,6 +127,7 @@ export const useConversationStore = defineStore('conversations', {
       text: string,
       replyToMessageId: string | null = null,
       mentionedPhones: string[] = [],
+      referencedContactIds: string[] = [],
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -150,6 +151,7 @@ export const useConversationStore = defineStore('conversations', {
         status: 'pending',
         body: text,
         mentioned_phones: mentionedPhones,
+        referenced_contacts: [],
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -187,6 +189,7 @@ export const useConversationStore = defineStore('conversations', {
           clientMessageId,
           replyToMessageId,
           mentionedPhones,
+          referencedContactIds,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)
@@ -221,6 +224,7 @@ export const useConversationStore = defineStore('conversations', {
       caption: string | null = null,
       replyToMessageId: string | null = null,
       mentionedPhones: string[] = [],
+      referencedContactIds: string[] = [],
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -256,6 +260,7 @@ export const useConversationStore = defineStore('conversations', {
         status: 'pending',
         body: caption,
         mentioned_phones: mentionedPhones,
+        referenced_contacts: [],
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -302,6 +307,7 @@ export const useConversationStore = defineStore('conversations', {
           caption,
           replyToMessageId,
           mentionedPhones,
+          referencedContactIds,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)

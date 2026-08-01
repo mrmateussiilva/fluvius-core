@@ -25,6 +25,12 @@ class MessageAttachmentResponse(ORMModel):
     public_url: str
 
 
+class ReferencedContactResponse(BaseModel):
+    contact_id: UUID
+    phone_number: str
+    display_name: str
+
+
 class MessageResponse(ORMModel):
     id: UUID
     conversation_id: UUID
@@ -36,6 +42,7 @@ class MessageResponse(ORMModel):
     participant_phone: str | None = None
     participant_name: str | None = None
     mentioned_phones: list[str] = Field(default_factory=list)
+    referenced_contacts: list[ReferencedContactResponse] = Field(default_factory=list)
     reply_to_message_id: UUID | None
     reply_to_provider_message_id: str | None
     reply_to: QuotedMessageResponse | None = None

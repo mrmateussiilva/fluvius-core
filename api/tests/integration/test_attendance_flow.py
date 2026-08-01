@@ -744,3 +744,98 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(created.json()["mentioned_phones"], ["5527999999999"])
         self.assertEqual(provider.calls[0]["to"], "120363018686549942@g.us")
         self.assertEqual(provider.calls[0]["mentioned_phones"], ["5527999999999"])
+
+    def test_group_message_contact_references_are_internal_only(self) -> None:
+        with SessionLocal() as db:
+            group = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                kind=ContactKind.GROUP,
+                name="Grupo Operacional",
+                phone_number="120363018686549942",
+                provider_address="120363018686549942@g.us",
+                group_members=[
+                    {
+                        "phone_number": "5527999999999",
+                        "name": "Maria Operacao",
+                        "is_admin": False,
+                    }
+                ],
+            )
+            referenced = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                name="Joao Comercial",
+                phone_number="5527993333333",
+            )
+            db.add_all([group, referenced])
+            db.flush()
+            conversation = Conversation(
+                tenant_id=self.tenant_a.tenant_id,
+                channel_id=self.tenant_a.channel_id,
+                contact_id=group.id,
+                status=ConversationStatus.NEW,
+            )
+            db.add(conversation)
+            db.commit()
+            conversation_id = conversation.id
+            referenced_id = referenced.id
+
+        assigned = self.client.post(
+            f"/api/v1/conversations/{conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        search = self.client.get(
+            "/api/v1/contacts/search?q=Joao",
+            headers=self.headers_a,
+        )
+        self.assertEqual(search.status_code, 200, search.text)
+        self.assertEqual(search.json()[0]["id"], str(referenced_id))
+
+        cross_tenant = self.client.post(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=self.headers_a,
+            json={
+                "text": "Falar com @Contato B",
+                "referenced_contact_ids": [str(self.tenant_b.contact_id)],
+            },
+        )
+        self.assertEqual(cross_tenant.status_code, 422, cross_tenant.text)
+
+        provider = ConfirmingProvider("group-reference-1")
+        client_message_id = str(uuid4())
+        with patch("app.delivery.service.get_provider", return_value=provider):
+            created = self.client.post(
+                f"/api/v1/conversations/{conversation_id}/messages",
+                headers=self.headers_a,
+                json={
+                    "text": "Falar com @Joao Comercial",
+                    "referenced_contact_ids": [str(referenced_id)],
+                    "client_message_id": client_message_id,
+                },
+            )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(created.json()["mentioned_phones"], [])
+        self.assertEqual(
+            created.json()["referenced_contacts"],
+            [
+                {
+                    "contact_id": str(referenced_id),
+                    "phone_number": "5527993333333",
+                    "display_name": "Joao Comercial",
+                }
+            ],
+        )
+        self.assertEqual(provider.calls[0]["to"], "120363018686549942@g.us")
+        self.assertEqual(provider.calls[0]["mentioned_phones"], [])

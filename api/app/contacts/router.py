@@ -1,14 +1,18 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
-from app.common.enums import ChannelStatus, ConversationStatus
+from app.common.enums import ChannelStatus, ContactKind, ConversationStatus
 from app.contacts.models import Contact
-from app.contacts.schemas import ContactRefreshRequest, ContactResponse
+from app.contacts.schemas import (
+    ContactRefreshRequest,
+    ContactResponse,
+    ContactSearchResponse,
+)
 from app.contacts.service import synchronize_contact_profile
 from app.conversations.models import Conversation
 from app.database import get_db
@@ -118,6 +122,61 @@ def contact_response(
         conversation_count=conversation_count or 0,
         closed_conversation_count=closed_count or 0,
     )
+
+
+@router.get("/search", response_model=list[ContactSearchResponse])
+def search_contacts(
+    q: str = Query(default="", max_length=80),
+    limit: int = Query(default=20, ge=1, le=50),
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> list[ContactSearchResponse]:
+    query = q.strip()
+    if len(query) < 2:
+        return []
+
+    pattern = f"%{query}%"
+    statement = select(Contact).where(
+        Contact.tenant_id == context.tenant_id,
+        Contact.kind == ContactKind.DIRECT,
+        or_(
+            Contact.phone_number.ilike(pattern),
+            Contact.name.ilike(pattern),
+            Contact.push_name.ilike(pattern),
+            Contact.business_name.ilike(pattern),
+            Contact.verified_name.ilike(pattern),
+        ),
+    )
+    allowed_channel_ids = accessible_channel_ids(db, context)
+    if allowed_channel_ids is not None:
+        statement = (
+            statement.join(
+                Conversation,
+                (Conversation.contact_id == Contact.id)
+                & (Conversation.tenant_id == context.tenant_id),
+            )
+            .where(Conversation.channel_id.in_(allowed_channel_ids))
+            .distinct()
+        )
+    contacts = list(
+        db.scalars(statement.order_by(Contact.name, Contact.phone_number).limit(limit))
+    )
+    return [
+        ContactSearchResponse(
+            id=contact.id,
+            kind=contact.kind,
+            display_name=(
+                contact.name
+                or contact.push_name
+                or contact.business_name
+                or contact.verified_name
+                or contact.phone_number
+            ),
+            phone_number=contact.phone_number,
+            profile_picture_url=contact.profile_picture_url,
+        )
+        for contact in contacts
+    ]
 
 
 @router.get("/{contact_id}", response_model=ContactResponse)

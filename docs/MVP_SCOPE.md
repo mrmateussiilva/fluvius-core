@@ -16,7 +16,9 @@
 - Grupos do WhatsApp na mesma inbox: uma conversa por grupo/canal, badge e
   filtro na lista, nome do participante nas mensagens incoming e resposta
   enviada ao JID do grupo. Membros sincronizados podem ser mencionados no
-  composer com `@`, sem administração de membros nesta etapa.
+  composer com `@`; outros contatos do tenant podem ser referenciados
+  internamente no grupo sem virar menção do WhatsApp, sem administração de
+  membros nesta etapa.
 - Painel operacional do contato com perfil básico do WhatsApp e histórico de atendimentos.
 - Filas `new`, `open` e `closed`.
 - Assumir e finalizar atendimento, com takeover e transferência por administradores para usuários ativos da própria empresa.

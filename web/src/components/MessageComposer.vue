@@ -14,8 +14,14 @@ import {
   X,
   Zap,
 } from 'lucide-vue-next'
+import { searchContacts } from '../api/contacts'
 import { listQuickReplies } from '../api/quickReplies'
-import type { GroupMemberResponse, Message, QuickReply } from '../api/types'
+import type {
+  ContactSearchResult,
+  GroupMemberResponse,
+  Message,
+  QuickReply,
+} from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
 import EmojiPicker from './EmojiPicker.vue'
 import GroupMentionPicker from './GroupMentionPicker.vue'
@@ -34,16 +40,29 @@ const emit = defineEmits<{
   send: [
     text: string,
     mentionedPhones: string[],
+    referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
   sendAttachment: [
     file: File,
     caption: string | null,
     mentionedPhones: string[],
+    referencedContactIds: string[],
     done: (accepted: boolean) => void,
   ]
   cancelReply: []
 }>()
+
+type MentionCandidate = {
+  key: string
+  kind: 'member' | 'contact'
+  phone_number: string
+  label: string
+  subtitle: string
+  is_admin?: boolean
+  contact_id?: string
+}
+
 const text = ref('')
 const showReplies = ref(false)
 const showMentions = ref(false)
@@ -64,7 +83,12 @@ const mentionTrigger = ref<{
   end: number
   query: string
 } | null>(null)
-const selectedMentions = ref<GroupMemberResponse[]>([])
+const selectedMentions = ref<MentionCandidate[]>([])
+const selectedContactReferences = ref<MentionCandidate[]>([])
+const contactMentionResults = ref<ContactSearchResult[]>([])
+const contactSearchLoading = ref(false)
+const contactSearchError = ref<string | null>(null)
+let contactSearchRequest = 0
 const showAttachments = ref(false)
 const showEmojis = ref(false)
 const attachmentAccept = ref('')
@@ -87,7 +111,7 @@ const filteredQuickReplies = computed(() =>
 )
 const mentionQuery = computed(() => mentionTrigger.value?.query || '')
 const mentionCandidates = computed(() =>
-  filterGroupMembers(props.groupMembers, mentionQuery.value),
+  combinedMentionCandidates(mentionQuery.value),
 )
 const selectedFileKind = computed(() => {
   const file = selectedFile.value
@@ -145,6 +169,7 @@ watch(
     closeQuickReplies()
     closeMentions()
     selectedMentions.value = []
+    selectedContactReferences.value = []
     showAttachments.value = false
     showEmojis.value = false
     nextTick(() => {
@@ -200,6 +225,10 @@ watch(mentionCandidates, (members) => {
   }
 })
 
+watch([mentionQuery, showMentions], ([query, visible]) => {
+  void loadContactMentionResults(visible ? query : '')
+})
+
 onBeforeUnmount(() => {
   if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
 })
@@ -221,8 +250,12 @@ function memberLabel(member: GroupMemberResponse) {
   return (member.name || member.phone_number).replace(/\s+/g, ' ').trim()
 }
 
-function mentionText(member: GroupMemberResponse) {
-  return `@${memberLabel(member).replace(/\s+/g, ' ')}`
+function contactLabel(contact: ContactSearchResult) {
+  return contact.display_name.replace(/\s+/g, ' ').trim() || contact.phone_number
+}
+
+function mentionText(candidate: MentionCandidate) {
+  return `@${candidate.label.replace(/\s+/g, ' ')}`
 }
 
 function groupMemberScore(member: GroupMemberResponse, query: string) {
@@ -250,7 +283,62 @@ function filterGroupMembers(
       if (a.score !== b.score) return a.score - b.score
       return memberLabel(a.member).localeCompare(memberLabel(b.member), 'pt-BR')
     })
-    .map((item) => item.member)
+    .map((item) => ({
+      key: `member:${item.member.phone_number}`,
+      kind: 'member' as const,
+      phone_number: item.member.phone_number,
+      label: memberLabel(item.member),
+      subtitle: `${item.member.phone_number}${item.member.is_admin ? ' · Admin' : ''}`,
+      is_admin: item.member.is_admin,
+    }))
+}
+
+function contactMentionCandidates(
+  contacts: ContactSearchResult[],
+  blockedPhones: Set<string>,
+) {
+  return contacts
+    .filter((contact) => contact.phone_number && !blockedPhones.has(contact.phone_number))
+    .map((contact) => ({
+      key: `contact:${contact.id}`,
+      kind: 'contact' as const,
+      contact_id: contact.id,
+      phone_number: contact.phone_number,
+      label: contactLabel(contact),
+      subtitle: `${contact.phone_number} · Contato`,
+    }))
+}
+
+function combinedMentionCandidates(rawQuery: string) {
+  const members = filterGroupMembers(props.groupMembers, rawQuery)
+  const memberPhones = new Set(members.map((member) => member.phone_number))
+  return [
+    ...members,
+    ...contactMentionCandidates(contactMentionResults.value, memberPhones),
+  ]
+}
+
+async function loadContactMentionResults(rawQuery: string) {
+  const query = rawQuery.trim()
+  const request = ++contactSearchRequest
+  contactSearchError.value = null
+  if (!props.isGroup || query.length < 2) {
+    contactMentionResults.value = []
+    contactSearchLoading.value = false
+    return
+  }
+  contactSearchLoading.value = true
+  try {
+    const contacts = await searchContacts(query)
+    if (request !== contactSearchRequest) return
+    contactMentionResults.value = contacts
+  } catch {
+    if (request !== contactSearchRequest) return
+    contactMentionResults.value = []
+    contactSearchError.value = 'Não foi possível buscar contatos.'
+  } finally {
+    if (request === contactSearchRequest) contactSearchLoading.value = false
+  }
 }
 
 function quickReplyScore(reply: QuickReply, query: string) {
@@ -310,7 +398,7 @@ function currentQuickReplyTrigger() {
 }
 
 function currentMentionTrigger() {
-  if (!props.isGroup || !props.groupMembers.length) return null
+  if (!props.isGroup) return null
   const field = textarea.value
   if (!field || field.selectionStart !== field.selectionEnd) return null
   const cursor = field.selectionStart
@@ -370,8 +458,15 @@ function updateMentionTrigger() {
 
 function mentionedPhonesForText(value: string) {
   return selectedMentions.value
-    .filter((member) => value.includes(mentionText(member)))
-    .map((member) => member.phone_number)
+    .filter((candidate) => value.includes(mentionText(candidate)))
+    .map((candidate) => candidate.phone_number)
+}
+
+function referencedContactIdsForText(value: string) {
+  return selectedContactReferences.value
+    .filter((candidate) => value.includes(mentionText(candidate)))
+    .map((candidate) => candidate.contact_id)
+    .filter((contactId): contactId is string => Boolean(contactId))
 }
 
 function submit() {
@@ -381,17 +476,22 @@ function submit() {
     const submittedFile = selectedFile.value
     const isSticker = selectedFileKind.value === 'sticker'
     const submittedMentions = isSticker ? [] : mentionedPhonesForText(content)
+    const submittedContactReferences = isSticker
+      ? []
+      : referencedContactIdsForText(content)
     emit(
       'sendAttachment',
       submittedFile,
       isSticker ? null : content || null,
       submittedMentions,
+      submittedContactReferences,
       (accepted) => {
         if (!accepted || selectedFile.value !== submittedFile) return
         clearFile()
         if (!isSticker && text.value.trim() === content) {
           text.value = ''
           selectedMentions.value = []
+          selectedContactReferences.value = []
         }
         nextTick(resizeTextarea)
       },
@@ -399,16 +499,20 @@ function submit() {
   } else {
     if (!content) return
     const submittedMentions = mentionedPhonesForText(content)
+    const submittedContactReferences = referencedContactIdsForText(content)
     const submittedSelectedMentions = selectedMentions.value
+    const submittedSelectedContactReferences = selectedContactReferences.value
     text.value = ''
     selectedMentions.value = []
+    selectedContactReferences.value = []
     nextTick(resizeTextarea)
-    emit('send', content, submittedMentions, (accepted) => {
+    emit('send', content, submittedMentions, submittedContactReferences, (accepted) => {
       if (accepted) return
       text.value = text.value.trim()
         ? `${content}\n${text.value}`
         : content
       selectedMentions.value = submittedSelectedMentions
+      selectedContactReferences.value = submittedSelectedContactReferences
       nextTick(() => {
         resizeTextarea()
         textarea.value?.focus()
@@ -542,6 +646,7 @@ function useReply(reply: QuickReply) {
   closeQuickReplies()
   closeMentions()
   selectedMentions.value = []
+  selectedContactReferences.value = []
   nextTick(() => {
     resizeTextarea()
     textarea.value?.focus()
@@ -551,18 +656,30 @@ function useReply(reply: QuickReply) {
   })
 }
 
-function useMention(member: GroupMemberResponse) {
+function useMention(candidate: MentionCandidate) {
   const trigger = mentionTrigger.value
   if (!trigger) return
-  const label = mentionText(member)
+  const label = mentionText(candidate)
   const needsTrailingSpace = !/^\s/.test(text.value.slice(trigger.end, trigger.end + 1))
   text.value = `${text.value.slice(0, trigger.start)}${label}${needsTrailingSpace ? ' ' : ''}${text.value.slice(trigger.end)}`
-  if (
-    !selectedMentions.value.some(
-      (selected) => selected.phone_number === member.phone_number,
+  if (candidate.kind === 'member') {
+    if (
+      !selectedMentions.value.some(
+        (selected) => selected.phone_number === candidate.phone_number,
+      )
+    ) {
+      selectedMentions.value = [...selectedMentions.value, candidate]
+    }
+  } else if (
+    candidate.contact_id &&
+    !selectedContactReferences.value.some(
+      (selected) => selected.contact_id === candidate.contact_id,
     )
   ) {
-    selectedMentions.value = [...selectedMentions.value, member]
+    selectedContactReferences.value = [
+      ...selectedContactReferences.value,
+      candidate,
+    ]
   }
   closeMentions()
   nextTick(() => {
@@ -986,7 +1103,9 @@ function handleDrop(event: DragEvent) {
         <GroupMentionPicker
           v-if="showMentions"
           :active-index="mentionActiveIndex"
-          :members="mentionCandidates"
+          :candidates="mentionCandidates"
+          :loading="contactSearchLoading"
+          :error="contactSearchError"
           :query="mentionQuery"
           @hover="mentionActiveIndex = $event"
           @select="useMention"
