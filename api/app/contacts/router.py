@@ -25,6 +25,14 @@ router = APIRouter(prefix="/contacts", tags=["contacts"])
 OFFLINE_MESSAGE = "WhatsApp desconectado. Reconecte o canal antes de atualizar o contato."
 
 
+def normalize_phone(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def is_mentionable_phone(value: str) -> bool:
+    return 10 <= len(normalize_phone(value)) <= 15
+
+
 def get_tenant_contact(db: Session, tenant_id: UUID, contact_id: UUID) -> Contact:
     contact = db.scalar(
         select(Contact).where(Contact.id == contact_id, Contact.tenant_id == tenant_id)
@@ -92,11 +100,11 @@ def contact_response(
             if not isinstance(item, dict):
                 continue
             phone = str(item.get("phone_number") or "").strip()
-            if not phone:
+            if not is_mentionable_phone(phone):
                 continue
             members.append(
                 {
-                    "phone_number": phone,
+                    "phone_number": normalize_phone(phone),
                     "name": item.get("name"),
                     "is_admin": bool(item.get("is_admin")),
                 }

@@ -130,6 +130,10 @@ def normalize_phone(value: str) -> str:
     return "".join(character for character in value if character.isdigit())
 
 
+def is_mentionable_phone(value: str) -> bool:
+    return 10 <= len(normalize_phone(value)) <= 15
+
+
 def group_member_phones(contact: Contact) -> set[str]:
     phones: set[str] = set()
     if isinstance(contact.group_members, list):
@@ -137,7 +141,7 @@ def group_member_phones(contact: Contact) -> set[str]:
             if not isinstance(item, dict):
                 continue
             phone = normalize_phone(str(item.get("phone_number") or ""))
-            if phone:
+            if is_mentionable_phone(phone):
                 phones.add(phone)
     return phones
 
@@ -160,7 +164,7 @@ def validate_mentioned_phones(
     seen: set[str] = set()
     for value in mentioned_phones or []:
         phone = normalize_phone(value)
-        if not phone or phone in seen:
+        if not is_mentionable_phone(phone) or phone in seen:
             continue
         seen.add(phone)
         normalized.append(phone)

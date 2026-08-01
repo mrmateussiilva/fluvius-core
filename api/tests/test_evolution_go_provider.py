@@ -478,6 +478,37 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(result.group_members, [])
         self.assertEqual(result.profile_picture_url, "https://example.test/group.jpg")
 
+    def test_group_members_ignore_internal_ids_as_phones(self) -> None:
+        result = self.provider._parse_group_profile(
+            info={
+                "data": {
+                    "GroupInfo": {
+                        "Name": "Grupo Operacional",
+                        "Participants": [
+                            {
+                                "ID": "964169518424559641",
+                                "PushName": "ID Interno",
+                                "Role": "admin",
+                            },
+                            {
+                                "PhoneNumber": "5527999999999",
+                                "PushName": "Telefone Real",
+                            },
+                            {
+                                "JID": "172434498003125@lid",
+                                "PushName": "Participante LID",
+                            },
+                        ],
+                    }
+                }
+            },
+            avatar=None,
+        )
+
+        self.assertEqual(len(result.group_members), 1)
+        self.assertEqual(result.group_members[0].phone_number, "5527999999999")
+        self.assertEqual(result.group_members[0].name, "Telefone Real")
+
     def test_parses_connected_status_envelope(self) -> None:
         result = self.provider._parse_status(load_fixture("status-connected.json"))
         self.assertEqual(result.status, ChannelStatus.CONNECTED)

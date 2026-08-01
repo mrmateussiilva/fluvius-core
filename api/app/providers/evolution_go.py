@@ -686,17 +686,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         for item in raw:
             if not isinstance(item, dict):
                 continue
-            jid = str(
-                item.get("JID")
-                or item.get("Jid")
-                or item.get("jid")
-                or item.get("PhoneNumber")
-                or item.get("phoneNumber")
-                or item.get("ID")
-                or item.get("id")
-                or ""
-            )
-            phone = cls._phone_from_jid(jid)
+            phone = cls._group_member_phone(item)
             if not phone or phone in seen:
                 continue
             seen.add(phone)
@@ -716,6 +706,25 @@ class EvolutionGoProvider(WhatsAppProvider):
                 )
             )
         return members
+
+    @classmethod
+    def _group_member_phone(cls, member: dict[str, Any]) -> str | None:
+        jid = cls._text_value(member, "JID", "Jid", "jid")
+        if jid:
+            phone = cls._phone_from_jid(jid)
+            return phone if cls._is_mentionable_phone(phone) else None
+
+        value = cls._text_value(
+            member,
+            "PhoneNumber",
+            "phoneNumber",
+            "Phone",
+            "phone",
+            "Number",
+            "number",
+        )
+        phone = cls._digits(value or "")
+        return phone if cls._is_mentionable_phone(phone) else None
 
     @classmethod
     def _group_name(cls, info: dict[str, Any], data: dict[str, Any]) -> str | None:
@@ -1369,7 +1378,11 @@ class EvolutionGoProvider(WhatsAppProvider):
         if "@lid" in value:
             return None
         number = cls._number_from_jid(value)
-        return number or None
+        return cls._digits(number) or None
+
+    @staticmethod
+    def _is_mentionable_phone(value: str | None) -> bool:
+        return bool(value and 10 <= len(value) <= 15)
 
     @classmethod
     def _as_jid(cls, value: str) -> str:

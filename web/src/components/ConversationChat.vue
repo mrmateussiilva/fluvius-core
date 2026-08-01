@@ -682,7 +682,7 @@ function previewMedia(
         :draft-key="draftStorageKey"
         :disabled-reason="composerDisabledReason"
         :group-members="contact?.group_members || []"
-        :is-group="(conversation.contact_kind || 'direct') === 'group'"
+        :is-group="(contact?.kind || conversation.contact_kind || 'direct') === 'group'"
         :reply-to="replyingTo"
         :sending="sending"
         :send-error="sendError"

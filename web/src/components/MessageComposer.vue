@@ -246,6 +246,15 @@ function normalizeSearch(value: string) {
     .toLowerCase()
 }
 
+function normalizePhone(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function isMentionablePhone(value: string) {
+  const phone = normalizePhone(value)
+  return phone.length >= 10 && phone.length <= 15
+}
+
 function memberLabel(member: GroupMemberResponse) {
   return (member.name || member.phone_number).replace(/\s+/g, ' ').trim()
 }
@@ -276,7 +285,7 @@ function filterGroupMembers(
   if (!props.isGroup) return []
   const query = normalizeSearch(rawQuery.trim())
   return members
-    .filter((member) => Boolean(member.phone_number))
+    .filter((member) => isMentionablePhone(member.phone_number))
     .map((member) => ({ member, score: groupMemberScore(member, query) }))
     .filter((item) => item.score < 99)
     .sort((a, b) => {
@@ -286,7 +295,7 @@ function filterGroupMembers(
     .map((item) => ({
       key: `member:${item.member.phone_number}`,
       kind: 'member' as const,
-      phone_number: item.member.phone_number,
+      phone_number: normalizePhone(item.member.phone_number),
       label: memberLabel(item.member),
       subtitle: `${item.member.phone_number}${item.member.is_admin ? ' · Admin' : ''}`,
       is_admin: item.member.is_admin,
@@ -298,12 +307,15 @@ function contactMentionCandidates(
   blockedPhones: Set<string>,
 ) {
   return contacts
-    .filter((contact) => contact.phone_number && !blockedPhones.has(contact.phone_number))
+    .filter((contact) => {
+      const phone = normalizePhone(contact.phone_number)
+      return isMentionablePhone(phone) && !blockedPhones.has(phone)
+    })
     .map((contact) => ({
       key: `contact:${contact.id}`,
       kind: 'contact' as const,
       contact_id: contact.id,
-      phone_number: contact.phone_number,
+      phone_number: normalizePhone(contact.phone_number),
       label: contactLabel(contact),
       subtitle: `${contact.phone_number} · Contato`,
     }))
