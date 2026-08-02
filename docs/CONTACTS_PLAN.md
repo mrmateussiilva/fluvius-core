@@ -33,6 +33,7 @@ CRM, e cobre:
 - busca por nome e telefone;
 - criação manual de contato com nome e telefone;
 - edição mínima de nome operacional;
+- sincronização de contatos por canal conectado para administradores;
 - validação de telefone normalizado e unicidade por `(tenant_id, phone_number)`;
 - ação para abrir conversa em canal conectado.
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   LoaderCircle,
   MessageCircle,
   Pencil,
   Plus,
+  RefreshCw,
   Save,
   Search,
   UserRoundPlus,
@@ -18,11 +19,15 @@ import {
   startContactConversation,
   updateContact,
 } from '../api/contacts'
-import type { Channel, ContactListItem } from '../api/types'
+import { createSyncRun, getSyncRun, listSyncRuns } from '../api/sync'
+import type { Channel, ContactListItem, SyncRun } from '../api/types'
+import { useAuthStore } from '../stores/authStore'
 
 const PAGE_SIZE = 30
+const SYNC_POLL_INTERVAL = 2_500
 
 const router = useRouter()
+const auth = useAuthStore()
 const contacts = ref<ContactListItem[]>([])
 const channels = ref<Channel[]>([])
 const search = ref('')
@@ -38,6 +43,9 @@ const selectedChannelId = ref('')
 const startingContactId = ref<string | null>(null)
 const editingContactId = ref<string | null>(null)
 const editingName = ref('')
+const syncingContacts = ref(false)
+const activeSyncRunId = ref<string | null>(null)
+let syncPollTimer: number | null = null
 const form = reactive({
   name: '',
   phone_number: '',
@@ -48,6 +56,7 @@ const connectedChannels = computed(() =>
 )
 const hasPreviousPage = computed(() => offset.value > 0)
 const hasNextPage = computed(() => offset.value + PAGE_SIZE < total.value)
+const canSyncContacts = computed(() => auth.user?.role === 'admin')
 
 function applyChannelDefault() {
   if (
@@ -81,6 +90,91 @@ async function refresh() {
 async function loadChannels() {
   channels.value = await listChannels()
   applyChannelDefault()
+}
+
+function clearSyncPoll() {
+  if (syncPollTimer !== null) window.clearTimeout(syncPollTimer)
+  syncPollTimer = null
+}
+
+function syncProgressNotice(run: SyncRun) {
+  if (run.status === 'queued') return 'Sincronização de contatos na fila.'
+  if (run.total_items > 0) {
+    return `Sincronizando contatos: ${run.processed_items} de ${run.total_items}.`
+  }
+  return 'Sincronizando contatos...'
+}
+
+function syncedItemLabel(count: number) {
+  return `${count} item${count === 1 ? '' : 's'} atualizado${count === 1 ? '' : 's'}`
+}
+
+async function pollContactSync() {
+  const runId = activeSyncRunId.value
+  if (!runId) return
+  try {
+    const run = await getSyncRun(runId)
+    if (run.status === 'queued' || run.status === 'running') {
+      notice.value = syncProgressNotice(run)
+      clearSyncPoll()
+      syncPollTimer = window.setTimeout(pollContactSync, SYNC_POLL_INTERVAL)
+      return
+    }
+
+    activeSyncRunId.value = null
+    syncingContacts.value = false
+    clearSyncPoll()
+    if (run.status === 'completed') {
+      notice.value = `Sincronização concluída: ${syncedItemLabel(run.succeeded_items)}.`
+      await refresh()
+      return
+    }
+    if (run.status === 'partial') {
+      notice.value = `Sincronização parcial: ${syncedItemLabel(run.succeeded_items)} e ${run.failed_items} com falha.`
+      await refresh()
+      return
+    }
+    error.value = run.error || 'A sincronização de contatos falhou.'
+  } catch (exception) {
+    activeSyncRunId.value = null
+    syncingContacts.value = false
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : 'Não foi possível acompanhar a sincronização de contatos'
+  }
+}
+
+async function syncContacts() {
+  if (!canSyncContacts.value || !selectedChannelId.value || syncingContacts.value) return
+  syncingContacts.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    const runs = await listSyncRuns(selectedChannelId.value)
+    const activeRun = runs.find(
+      (run) =>
+        (run.sync_type === 'contacts' || run.sync_type === 'all') &&
+        (run.status === 'queued' || run.status === 'running'),
+    )
+    const run =
+      activeRun ||
+      (await createSyncRun({
+        channel_id: selectedChannelId.value,
+        sync_type: 'contacts',
+        recent_days: 7,
+      }))
+    activeSyncRunId.value = run.id
+    notice.value = syncProgressNotice(run)
+    clearSyncPoll()
+    syncPollTimer = window.setTimeout(pollContactSync, SYNC_POLL_INTERVAL)
+  } catch (exception) {
+    syncingContacts.value = false
+    error.value =
+      exception instanceof Error
+        ? exception.message
+        : 'Não foi possível iniciar a sincronização de contatos'
+  }
 }
 
 async function submitSearch() {
@@ -212,12 +306,15 @@ function dateLabel(value: string | null) {
 
 onMounted(async () => {
   try {
+    await auth.restore()
     await Promise.all([loadChannels(), refresh()])
   } catch (exception) {
     error.value =
       exception instanceof Error ? exception.message : 'Não foi possível carregar contatos'
   }
 })
+
+onBeforeUnmount(clearSyncPoll)
 </script>
 
 <template>
@@ -248,6 +345,17 @@ onMounted(async () => {
             </button>
           </form>
           <button
+            v-if="canSyncContacts"
+            type="button"
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#d8dcdf] bg-white px-3 text-sm font-medium text-[#111b21] transition hover:bg-[#f7f8f8] disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="!selectedChannelId || syncingContacts"
+            title="Sincronizar contatos do canal selecionado"
+            @click="syncContacts"
+          >
+            <RefreshCw class="h-4 w-4" :class="syncingContacts ? 'animate-spin' : ''" />
+            {{ syncingContacts ? 'Sincronizando' : 'Sincronizar contatos' }}
+          </button>
+          <button
             type="button"
             class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
             @click="showCreateForm = !showCreateForm"
@@ -267,7 +375,7 @@ onMounted(async () => {
             v-model="selectedChannelId"
             class="h-9 min-w-0 rounded-lg border border-[#d8dcdf] bg-white px-3 text-[13px] font-medium text-[#111b21] outline-none focus:ring-1 focus:ring-fluvius-500/30"
             aria-label="Canal para iniciar conversa"
-            :disabled="!connectedChannels.length"
+            :disabled="!connectedChannels.length || syncingContacts"
           >
             <option value="" disabled>Canal conectado</option>
             <option

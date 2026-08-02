@@ -98,6 +98,11 @@ com conversa em seus canais ou contatos ainda sem conversa; contatos vinculados
 apenas a canais sem acesso não ficam disponíveis por listagem, edição ou abertura
 de conversa.
 
+Administradores podem iniciar a sincronização de contatos diretamente na agenda.
+O botão usa o canal conectado selecionado, reaproveita o fluxo assíncrono de
+`POST /api/v1/admin/sync-runs` com `sync_type=contacts`, acompanha uma execução
+já ativa e atualiza a listagem quando ela termina.
+
 O início de atendimento ativo usa `POST
 /api/v1/contacts/{id}/conversations`, sempre com `channel_id` persistido. A API
 valida tenant, acesso ao canal e `channel.status=connected`, cria ou reutiliza a
