@@ -360,6 +360,118 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(conversation_count, 1)
         self.assertEqual(incoming_count, 2)
 
+    def test_contact_directory_creates_updates_and_starts_conversation(self) -> None:
+        created = self.client.post(
+            "/api/v1/contacts",
+            headers=self.headers_a,
+            json={
+                "name": "  Maria   Operacao  ",
+                "phone_number": "+55 (27) 99944-5566",
+            },
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        contact = created.json()
+        self.assertEqual(contact["display_name"], "Maria Operacao")
+        self.assertEqual(contact["name"], "Maria Operacao")
+        self.assertEqual(contact["phone_number"], "5527999445566")
+        self.assertEqual(contact["conversation_count"], 0)
+
+        repeated = self.client.post(
+            "/api/v1/contacts",
+            headers=self.headers_a,
+            json={
+                "name": "Nome ignorado",
+                "phone_number": "5527999445566",
+            },
+        )
+        self.assertEqual(repeated.status_code, 200, repeated.text)
+        self.assertEqual(repeated.json()["id"], contact["id"])
+        self.assertEqual(repeated.json()["display_name"], "Maria Operacao")
+
+        listed = self.client.get(
+            "/api/v1/contacts?q=99944",
+            headers=self.headers_a,
+        )
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["total"], 1)
+        self.assertEqual(listed.json()["items"][0]["id"], contact["id"])
+
+        updated = self.client.patch(
+            f"/api/v1/contacts/{contact['id']}",
+            headers=self.headers_a,
+            json={"name": "Maria Atualizada"},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["display_name"], "Maria Atualizada")
+
+        started = self.client.post(
+            f"/api/v1/contacts/{contact['id']}/conversations",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(started.status_code, 201, started.text)
+        conversation = started.json()
+        self.assertEqual(conversation["status"], "new")
+        self.assertEqual(conversation["contact_id"], contact["id"])
+        self.assertEqual(conversation["contact_name"], "Maria Atualizada")
+        self.assertEqual(
+            conversation["channel_id"],
+            str(self.tenant_a.channel_id),
+        )
+
+        reused = self.client.post(
+            f"/api/v1/contacts/{contact['id']}/conversations",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(reused.status_code, 200, reused.text)
+        self.assertEqual(reused.json()["id"], conversation["id"])
+
+        with SessionLocal() as db:
+            saved_conversation = db.scalar(
+                select(Conversation).where(
+                    Conversation.id == UUID(conversation["id"]),
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            saved_conversation.status = ConversationStatus.CLOSED
+            saved_conversation.assigned_user_id = self.tenant_a.user_id
+            channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.id == self.tenant_a.channel_id,
+                    WhatsAppChannel.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            channel.status = ChannelStatus.DISCONNECTED
+            db.commit()
+
+        blocked = self.client.post(
+            f"/api/v1/contacts/{contact['id']}/conversations",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+
+        with SessionLocal() as db:
+            channel = db.scalar(
+                select(WhatsAppChannel).where(
+                    WhatsAppChannel.id == self.tenant_a.channel_id,
+                    WhatsAppChannel.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            channel.status = ChannelStatus.CONNECTED
+            db.commit()
+
+        reopened = self.client.post(
+            f"/api/v1/contacts/{contact['id']}/conversations",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+        self.assertEqual(reopened.json()["id"], conversation["id"])
+        self.assertEqual(reopened.json()["status"], "new")
+        self.assertIsNone(reopened.json()["assigned_user_id"])
+
     def test_attachment_upload_is_validated_and_idempotent(self) -> None:
         assigned = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",

@@ -217,6 +217,28 @@ export interface ContactSearchResult {
   profile_picture_url: string | null
 }
 
+export interface ContactListItem {
+  id: string
+  kind: ContactKind
+  display_name: string
+  name: string | null
+  phone_number: string
+  profile_picture_url: string | null
+  is_on_whatsapp: boolean | null
+  profile_synced_at: string | null
+  conversation_count: number
+  last_interaction_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ContactListResponse {
+  items: ContactListItem[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export interface ReferencedContact {
   contact_id: string
   phone_number: string

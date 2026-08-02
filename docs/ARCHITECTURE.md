@@ -87,6 +87,30 @@ O cadastro gerenciado é idempotente por `provisioning_key` dentro do tenant. Re
 
 O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A atualização explícita usa `POST /api/v1/contacts/{id}/refresh`, valida tenant, vínculo entre contato e canal e status conectado antes de chamar `WhatsAppProvider.get_contact_profile`. O Evolution Go é consultado apenas pelo adapter e os resultados disponíveis são armazenados como cache; estatísticas de primeira/última interação e atendimentos são calculadas a partir dos dados do Fluvius.
 
+A agenda operacional usa `GET /api/v1/contacts` para listar contatos diretos
+do tenant com paginação e busca por nome ou telefone. `POST /api/v1/contacts`
+cria contato manual com telefone normalizado e reaproveita de forma idempotente
+um contato direto já existente no mesmo tenant. `PATCH /api/v1/contacts/{id}`
+altera somente o nome operacional. Atendentes restritos a canais veem contatos
+com conversa em seus canais ou contatos ainda sem conversa; contatos vinculados
+apenas a canais sem acesso não ficam disponíveis por listagem, edição ou abertura
+de conversa.
+
+O início de atendimento ativo usa `POST
+/api/v1/contacts/{id}/conversations`, sempre com `channel_id` persistido. A API
+valida tenant, acesso ao canal e `channel.status=connected`, cria ou reutiliza a
+conversa única `(tenant_id, channel_id, contact_id)` e reabre conversas
+`closed` como `new` sem atribuição automática. O envio da primeira mensagem
+continua passando pelo composer normal, portanto ainda exige assumir a conversa
+antes de sair pelo provider.
+
+Para grupos, a resposta de contato expõe `group_members` como o conjunto de
+participantes sincronizados pelo provider. Quando o provider retorna apenas o
+telefone do participante, a API enriquece o nome exibido com um contato direto
+já conhecido do mesmo tenant e mesmo telefone. Isso melhora o texto inserido
+pelo picker de menções sem alterar o dado bruto salvo em `contact.group_members`
+e sem aceitar menção de participantes fora do grupo sincronizado.
+
 ## Sincronização administrativa
 
 A tela **Sincronização**, disponível apenas para administradores, cria execuções em

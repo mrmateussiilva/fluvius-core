@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from './layouts/AppLayout.vue'
 import AdminSyncPage from './pages/AdminSyncPage.vue'
 import ChannelsPage from './pages/ChannelsPage.vue'
+import ContactsPage from './pages/ContactsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import OperationalHealthPage from './pages/OperationalHealthPage.vue'
@@ -26,6 +27,7 @@ export const router = createRouter({
       component: AppLayout,
       children: [
         { path: 'conversations', component: ConversationsPage },
+        { path: 'contacts', component: ContactsPage },
         {
           path: 'team-board',
           component: TeamBoardPage,

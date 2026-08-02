@@ -421,6 +421,41 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             ).status_code,
             404,
         )
+        agent_contacts = self.client.get(
+            "/api/v1/contacts",
+            headers=agent_headers,
+        )
+        self.assertEqual(agent_contacts.status_code, 200, agent_contacts.text)
+        self.assertEqual(
+            {contact["id"] for contact in agent_contacts.json()["items"]},
+            {str(self.tenant_a.contact_id)},
+        )
+        agent_created_contact = self.client.post(
+            "/api/v1/contacts",
+            headers=agent_headers,
+            json={
+                "name": "Contato novo do agente",
+                "phone_number": "5527994444444",
+            },
+        )
+        self.assertEqual(agent_created_contact.status_code, 201)
+        agent_contact_id = agent_created_contact.json()["id"]
+        inaccessible_channel_start = self.client.post(
+            f"/api/v1/contacts/{agent_contact_id}/conversations",
+            headers=agent_headers,
+            json={"channel_id": str(second_channel_id)},
+        )
+        self.assertEqual(inaccessible_channel_start.status_code, 404)
+        accessible_channel_start = self.client.post(
+            f"/api/v1/contacts/{agent_contact_id}/conversations",
+            headers=agent_headers,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(accessible_channel_start.status_code, 201)
+        self.assertEqual(
+            accessible_channel_start.json()["channel_id"],
+            str(self.tenant_a.channel_id),
+        )
 
         invalid_assignment = self.client.post(
             f"/api/v1/conversations/{second_conversation_id}/assign",
@@ -785,6 +820,16 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                 f"/api/v1/contacts/{tenant_b.contact_id}/refresh",
                 headers=headers,
                 json={"channel_id": str(tenant_b.channel_id)},
+            ),
+            self.client.patch(
+                f"/api/v1/contacts/{tenant_b.contact_id}",
+                headers=headers,
+                json={"name": "Tentativa cruzada"},
+            ),
+            self.client.post(
+                f"/api/v1/contacts/{tenant_b.contact_id}/conversations",
+                headers=headers,
+                json={"channel_id": str(self.tenant_a.channel_id)},
             ),
             self.client.get(
                 f"/api/v1/conversations/{tenant_b.conversation_id}",

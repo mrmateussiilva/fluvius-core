@@ -5,6 +5,7 @@ import {
   Building2,
   Check,
   Columns3,
+  ContactRound,
   DatabaseBackup,
   HeartPulse,
   LogOut,
@@ -148,6 +149,14 @@ async function selectTenant(tenantId: string) {
         title="Conversas"
       >
         <MessageCircle class="h-5 w-5" />
+      </RouterLink>
+      <RouterLink
+        class="mb-1.5 rounded-xl p-3 transition hover:bg-white/10 hover:text-white"
+        active-class="bg-white/15 text-white shadow-sm"
+        to="/app/contacts"
+        title="Contatos"
+      >
+        <ContactRound class="h-5 w-5" />
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
