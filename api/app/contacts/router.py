@@ -10,6 +10,11 @@ from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
 from app.common.enums import ChannelStatus, ContactKind, ConversationStatus
 from app.contacts.models import Contact
+from app.contacts.naming import (
+    contact_display_name,
+    normalize_contact_name,
+    usable_contact_name,
+)
 from app.contacts.schemas import (
     ContactCreateRequest,
     ContactListItem,
@@ -39,11 +44,6 @@ def normalize_phone(value: str) -> str:
     return "".join(character for character in value if character.isdigit())
 
 
-def normalize_contact_name(value: str | None) -> str | None:
-    normalized = " ".join((value or "").strip().split())
-    return normalized or None
-
-
 def validate_direct_phone(value: str) -> str:
     phone = normalize_phone(value)
     if not 10 <= len(phone) <= 15:
@@ -52,16 +52,6 @@ def validate_direct_phone(value: str) -> str:
             detail="Informe um telefone com DDI e DDD.",
         )
     return phone
-
-
-def display_name_for(contact: Contact) -> str:
-    return (
-        contact.name
-        or contact.push_name
-        or contact.business_name
-        or contact.verified_name
-        or contact.phone_number
-    )
 
 
 def is_mentionable_phone(value: str) -> bool:
@@ -186,7 +176,7 @@ def contact_list_item(
     return ContactListItem(
         id=contact.id,
         kind=contact.kind,
-        display_name=display_name_for(contact),
+        display_name=contact_display_name(contact),
         name=contact.name,
         phone_number=contact.phone_number,
         profile_picture_url=contact.profile_picture_url,
@@ -244,7 +234,7 @@ def contact_response(
             Conversation.channel_id.in_(allowed_channel_ids)
         )
     first_interaction, last_interaction = db.execute(interaction_query).one()
-    display_name = display_name_for(contact)
+    display_name = contact_display_name(contact)
     members = []
     if isinstance(contact.group_members, list):
         for item in contact.group_members:
@@ -288,15 +278,8 @@ def contact_response(
         names_by_phone = {
             known.phone_number: known_name
             for known in known_contacts
-            for known_name in [
-                (
-                    known.name
-                    or known.push_name
-                    or known.business_name
-                    or known.verified_name
-                )
-            ]
-            if known_name and normalize_phone(known_name) != known.phone_number
+            for known_name in [contact_display_name(known)]
+            if usable_contact_name(known_name, known.phone_number)
         }
         for member in members:
             known_name = names_by_phone.get(member["phone_number"])
@@ -310,6 +293,7 @@ def contact_response(
         kind=contact.kind,
         display_name=display_name,
         name=contact.name,
+        address_book_name=contact.address_book_name,
         push_name=contact.push_name,
         business_name=contact.business_name,
         verified_name=contact.verified_name,
@@ -344,6 +328,7 @@ def list_contacts(
             or_(
                 Contact.phone_number.ilike(pattern),
                 Contact.name.ilike(pattern),
+                Contact.address_book_name.ilike(pattern),
                 Contact.push_name.ilike(pattern),
                 Contact.business_name.ilike(pattern),
                 Contact.verified_name.ilike(pattern),
@@ -356,9 +341,10 @@ def list_contacts(
                 func.lower(
                     func.coalesce(
                         Contact.name,
-                        Contact.push_name,
-                        Contact.business_name,
                         Contact.verified_name,
+                        Contact.business_name,
+                        Contact.address_book_name,
+                        Contact.push_name,
                         Contact.phone_number,
                     )
                 ),
@@ -393,11 +379,11 @@ def create_contact(
     db: Session = Depends(get_db),
 ) -> ContactListItem:
     phone_number = validate_direct_phone(payload.phone_number)
-    name = normalize_contact_name(payload.name)
+    name = usable_contact_name(payload.name, phone_number)
     if name is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Informe o nome do contato.",
+            detail="Informe um nome diferente do telefone do contato.",
         )
     existing = db.scalar(
         select(Contact).where(
@@ -412,6 +398,19 @@ def create_contact(
                 detail="Este telefone já está associado a outro tipo de contato.",
             )
         if can_access_contact(db, context, existing):
+            if usable_contact_name(existing.name, phone_number) is None:
+                existing.name = name
+                db.add(
+                    AuditLog(
+                        tenant_id=context.tenant_id,
+                        user_id=context.user.id,
+                        action="contact.updated",
+                        entity_type="contact",
+                        entity_id=existing.id,
+                        metadata_={"fields": ["name"], "source": "directory"},
+                    )
+                )
+                db.commit()
             response.status_code = status.HTTP_200_OK
             return contact_list_item(
                 db,
@@ -492,6 +491,7 @@ def search_contacts(
         or_(
             Contact.phone_number.ilike(pattern),
             Contact.name.ilike(pattern),
+            Contact.address_book_name.ilike(pattern),
             Contact.push_name.ilike(pattern),
             Contact.business_name.ilike(pattern),
             Contact.verified_name.ilike(pattern),
@@ -515,7 +515,7 @@ def search_contacts(
         ContactSearchResponse(
             id=contact.id,
             kind=contact.kind,
-            display_name=display_name_for(contact),
+            display_name=contact_display_name(contact),
             phone_number=contact.phone_number,
             profile_picture_url=contact.profile_picture_url,
         )
@@ -554,7 +554,15 @@ async def update_contact(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Somente contatos diretos podem ser editados.",
         )
-    contact.name = normalize_contact_name(payload.name)
+    normalized_name = normalize_contact_name(payload.name)
+    if normalized_name is not None and not usable_contact_name(
+        normalized_name, contact.phone_number
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Informe um nome diferente do telefone do contato.",
+        )
+    contact.name = normalized_name
     db.add(
         AuditLog(
             tenant_id=context.tenant_id,

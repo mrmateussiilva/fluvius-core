@@ -158,6 +158,7 @@ class AdminSyncTest(PostgresIntegrationTestCase):
         provider = Mock()
         provider.get_contact_profile = AsyncMock(
             return_value=ContactProfileResult(
+                address_book_name="Contato da Agenda",
                 push_name="Contato Sincronizado",
                 about="Perfil atualizado",
                 is_on_whatsapp=True,
@@ -208,6 +209,7 @@ class AdminSyncTest(PostgresIntegrationTestCase):
             self.assertEqual(persisted.succeeded_items, 1)
             self.assertEqual(persisted.failed_items, 0)
             self.assertEqual(contact.push_name, "Contato Sincronizado")
+            self.assertEqual(contact.address_book_name, "Contato da Agenda")
             self.assertEqual(contact.about, "Perfil atualizado")
             self.assertIsNotNone(contact.profile_synced_at)
             imported_group = db.scalar(

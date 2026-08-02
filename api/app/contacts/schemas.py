@@ -18,6 +18,7 @@ class ContactResponse(BaseModel):
     kind: ContactKind = ContactKind.DIRECT
     display_name: str
     name: str | None
+    address_book_name: str | None
     push_name: str | None
     business_name: str | None
     verified_name: str | None

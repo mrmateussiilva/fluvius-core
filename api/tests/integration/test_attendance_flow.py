@@ -472,6 +472,50 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(reopened.json()["status"], "new")
         self.assertIsNone(reopened.json()["assigned_user_id"])
 
+    def test_phone_from_provider_is_not_persisted_as_contact_name(self) -> None:
+        phone_number = "5527999556677"
+        payload = self.incoming_payload("incoming-numeric-name", "Ola")
+        payload["data"]["Info"].update(
+            {
+                "Sender": f"{phone_number}@s.whatsapp.net",
+                "Chat": f"{phone_number}@s.whatsapp.net",
+                "PushName": phone_number,
+            }
+        )
+
+        response = self.client.post(
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}",
+            json=payload,
+        )
+
+        self.assertEqual(response.status_code, 202, response.text)
+        with SessionLocal() as db:
+            contact = db.scalar(
+                select(Contact).where(
+                    Contact.tenant_id == self.tenant_a.tenant_id,
+                    Contact.phone_number == phone_number,
+                )
+            )
+            self.assertIsNotNone(contact)
+            self.assertIsNone(contact.name)
+            self.assertIsNone(contact.push_name)
+
+        listed = self.client.get(
+            f"/api/v1/contacts?q={phone_number}",
+            headers=self.headers_a,
+        )
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["items"][0]["display_name"], phone_number)
+
+        named = self.client.post(
+            "/api/v1/contacts",
+            headers=self.headers_a,
+            json={"name": "Maria Atendimento", "phone_number": phone_number},
+        )
+        self.assertEqual(named.status_code, 200, named.text)
+        self.assertEqual(named.json()["display_name"], "Maria Atendimento")
+
     def test_attachment_upload_is_validated_and_idempotent(self) -> None:
         assigned = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",

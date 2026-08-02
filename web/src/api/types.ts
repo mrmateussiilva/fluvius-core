@@ -192,6 +192,7 @@ export interface ContactDetail {
   kind: ContactKind
   display_name: string
   name: string | null
+  address_book_name: string | null
   push_name: string | null
   business_name: string | null
   verified_name: string | null

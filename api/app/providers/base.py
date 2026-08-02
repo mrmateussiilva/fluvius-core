@@ -79,6 +79,7 @@ class GroupMemberProfile(BaseModel):
 
 
 class ContactProfileResult(BaseModel):
+    address_book_name: str | None = None
     push_name: str | None = None
     business_name: str | None = None
     verified_name: str | None = None

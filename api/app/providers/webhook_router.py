@@ -17,6 +17,7 @@ from app.common.enums import (
 )
 from app.config import settings
 from app.contacts.models import Contact
+from app.contacts.naming import usable_contact_name
 from app.contacts.service import (
     needs_group_profile_import,
     synchronize_contact_profile,
@@ -263,6 +264,7 @@ async def whatsapp_webhook(
                 Contact.phone_number == thread_number,
             )
         )
+        sender_name = usable_contact_name(incoming.sender_name, thread_number)
         if contact is None:
             group_label = (
                 incoming.chat_name
@@ -273,8 +275,8 @@ async def whatsapp_webhook(
                 kind=ContactKind.GROUP if incoming.is_group else ContactKind.DIRECT,
                 phone_number=thread_number,
                 provider_address=incoming.provider_address if incoming.is_group else None,
-                name=group_label if incoming.is_group else incoming.sender_name,
-                push_name=None if incoming.is_group else incoming.sender_name,
+                name=group_label if incoming.is_group else None,
+                push_name=None if incoming.is_group else sender_name,
             )
             db.add(contact)
             db.flush()
@@ -285,10 +287,8 @@ async def whatsapp_webhook(
                     contact.provider_address = incoming.provider_address
                 if incoming.chat_name and not contact.name:
                     contact.name = incoming.chat_name
-            elif incoming.sender_name:
-                contact.push_name = incoming.sender_name
-                if not contact.name:
-                    contact.name = incoming.sender_name
+            elif sender_name:
+                contact.push_name = sender_name
 
         conversation = db.scalar(
             select(Conversation)

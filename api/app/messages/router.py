@@ -29,6 +29,7 @@ from app.common.schemas import (
     QuotedMessageResponse,
 )
 from app.contacts.models import Contact
+from app.contacts.naming import contact_display_name
 from app.conversations.models import Conversation
 from app.conversations.router import (
     ensure_conversation_assignee,
@@ -185,16 +186,6 @@ def group_member_jids(contact: Contact) -> set[str]:
             if phone_jid:
                 jids.add(phone_jid)
     return jids
-
-
-def contact_display_name(contact: Contact) -> str:
-    return (
-        contact.name
-        or contact.push_name
-        or contact.business_name
-        or contact.verified_name
-        or contact.phone_number
-    )
 
 
 def validate_message_mentions(

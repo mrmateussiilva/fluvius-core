@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.channels.models import WhatsAppChannel
 from app.common.enums import ChannelProvider, ContactKind
 from app.contacts.models import Contact
+from app.contacts.naming import usable_contact_name
 from app.providers.base import ContactProfileResult, GroupDirectoryEntry
 from app.providers.evolution_credentials import claim_evolution_credential
 from app.providers.factory import get_provider
@@ -13,9 +14,15 @@ from app.providers.factory import get_provider
 
 def apply_contact_profile(contact: Contact, profile: ContactProfileResult) -> None:
     for field in (
+        "address_book_name",
         "push_name",
         "business_name",
         "verified_name",
+    ):
+        value = usable_contact_name(getattr(profile, field), contact.phone_number)
+        if value is not None:
+            setattr(contact, field, value)
+    for field in (
         "about",
         "profile_picture_url",
         "is_on_whatsapp",
@@ -23,10 +30,10 @@ def apply_contact_profile(contact: Contact, profile: ContactProfileResult) -> No
         value = getattr(profile, field)
         if value is not None:
             setattr(contact, field, value)
-    if profile.push_name:
-        if contact.kind == ContactKind.GROUP or not contact.name:
-            contact.name = profile.push_name
     if contact.kind == ContactKind.GROUP:
+        group_name = usable_contact_name(profile.push_name, contact.phone_number)
+        if group_name:
+            contact.name = group_name
         if profile.group_member_count is not None:
             contact.group_member_count = profile.group_member_count
         if profile.group_members:

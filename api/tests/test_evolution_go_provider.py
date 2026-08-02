@@ -683,6 +683,8 @@ class EvolutionGoWebhookTest(unittest.TestCase):
                 "data": [
                     {
                         "Jid": "5527999999999@s.whatsapp.net",
+                        "FullName": "Maria da Agenda",
+                        "FirstName": "Maria",
                         "PushName": "Cliente Teste",
                         "BusinessName": "Empresa Teste",
                     }
@@ -690,6 +692,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             },
         )
         self.assertTrue(result.is_on_whatsapp)
+        self.assertEqual(result.address_book_name, "Maria da Agenda")
         self.assertEqual(result.push_name, "Cliente Teste")
         self.assertEqual(result.business_name, "Empresa Teste")
         self.assertEqual(result.verified_name, "Empresa Verificada")

@@ -87,6 +87,8 @@ O cadastro gerenciado é idempotente por `provisioning_key` dentro do tenant. Re
 
 O painel operacional lê o contato persistido em `GET /api/v1/contacts/{id}`. A atualização explícita usa `POST /api/v1/contacts/{id}/refresh`, valida tenant, vínculo entre contato e canal e status conectado antes de chamar `WhatsAppProvider.get_contact_profile`. O Evolution Go é consultado apenas pelo adapter e os resultados disponíveis são armazenados como cache; estatísticas de primeira/última interação e atendimentos são calculadas a partir dos dados do Fluvius.
 
+Para contatos diretos, `name` é reservado ao nome operacional informado pelo atendente. Dados descobertos no provider permanecem separados e o nome exibido é resolvido de forma centralizada na ordem: nome operacional, verificado, comercial, agenda, `PushName` válido e telefone. Webhooks e sincronizações descartam números, JIDs e placeholders usados como nome.
+
 A agenda operacional usa `GET /api/v1/contacts` para listar contatos diretos
 do tenant com paginação e busca por nome ou telefone. `POST /api/v1/contacts`
 cria contato manual com telefone normalizado e reaproveita de forma idempotente

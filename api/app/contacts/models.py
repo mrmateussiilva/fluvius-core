@@ -40,6 +40,7 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     name: Mapped[str | None] = mapped_column(String(160))
+    address_book_name: Mapped[str | None] = mapped_column(String(160))
     push_name: Mapped[str | None] = mapped_column(String(160))
     business_name: Mapped[str | None] = mapped_column(String(160))
     verified_name: Mapped[str | None] = mapped_column(String(160))

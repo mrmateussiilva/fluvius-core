@@ -871,6 +871,13 @@ class EvolutionGoProvider(WhatsAppProvider):
             or info_user.get("verifiedName")
         )
         return ContactProfileResult(
+            address_book_name=cls._text_value(
+                saved_contact,
+                "FullName",
+                "fullName",
+                "FirstName",
+                "firstName",
+            ),
             push_name=cls._text_value(saved_contact, "PushName", "pushName"),
             business_name=cls._text_value(
                 saved_contact, "BusinessName", "businessName"

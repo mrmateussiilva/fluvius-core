@@ -10,6 +10,7 @@ from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
 from app.common.enums import ContactKind, ConversationStatus, MessageDirection
 from app.contacts.models import Contact
+from app.contacts.naming import contact_display_name
 from app.conversations.models import Conversation, ConversationRead
 from app.conversations.schemas import (
     AssignRequest,
@@ -21,7 +22,6 @@ from app.messages.models import Message
 from app.realtime.manager import realtime_manager
 from app.users.channel_access import accessible_channel_ids, ensure_channel_access
 from app.users.models import TenantUser, TenantUserChannel, User
-
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 ASSIGNMENT_REQUIRED = "Assuma o atendimento antes de continuar"
@@ -118,12 +118,7 @@ def as_response(row) -> ConversationResponse:
         assigned_user_id=conversation.assigned_user_id,
         contact_id=contact.id,
         contact_kind=contact.kind,
-        contact_name=(
-            contact.name
-            or contact.push_name
-            or contact.business_name
-            or contact.verified_name
-        ),
+        contact_name=contact_display_name(contact),
         contact_phone=contact.phone_number,
         channel_id=channel.id,
         channel_name=channel.name,
