@@ -119,6 +119,7 @@ def contact_response(
             if not isinstance(item, dict):
                 continue
             phone = str(item.get("phone_number") or "").strip()
+            normalized_phone = normalize_phone(phone)
             provider_jid = mention_jid(
                 str(item.get("provider_jid") or item.get("jid") or "")
             )
@@ -126,14 +127,52 @@ def contact_response(
                 provider_jid = mention_jid(phone)
             if not provider_jid and not is_mentionable_phone(phone):
                 continue
+            member_name = str(item.get("name") or "").strip() or None
             members.append(
                 {
-                    "phone_number": normalize_phone(phone),
+                    "phone_number": normalized_phone,
                     "provider_jid": provider_jid,
-                    "name": item.get("name"),
+                    "name": member_name,
                     "is_admin": bool(item.get("is_admin")),
                 }
             )
+    member_phones_without_names = {
+        member["phone_number"]
+        for member in members
+        if is_mentionable_phone(member["phone_number"])
+        and (
+            not member["name"]
+            or normalize_phone(str(member["name"])) == member["phone_number"]
+        )
+    }
+    if member_phones_without_names:
+        known_contacts = db.scalars(
+            select(Contact).where(
+                Contact.tenant_id == tenant_id,
+                Contact.kind == ContactKind.DIRECT,
+                Contact.phone_number.in_(member_phones_without_names),
+            )
+        )
+        names_by_phone = {
+            known.phone_number: known_name
+            for known in known_contacts
+            for known_name in [
+                (
+                    known.name
+                    or known.push_name
+                    or known.business_name
+                    or known.verified_name
+                )
+            ]
+            if known_name and normalize_phone(known_name) != known.phone_number
+        }
+        for member in members:
+            known_name = names_by_phone.get(member["phone_number"])
+            if known_name and (
+                not member["name"]
+                or normalize_phone(str(member["name"])) == member["phone_number"]
+            ):
+                member["name"] = known_name
     return ContactResponse(
         id=contact.id,
         kind=contact.kind,

@@ -766,6 +766,60 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(provider.calls[0]["mentioned_phones"], ["5527999999999"])
         self.assertEqual(provider.calls[0]["mentioned_jids"], ["964169518424559641@lid"])
 
+    def test_group_member_response_uses_known_contact_name_when_provider_has_only_phone(
+        self,
+    ) -> None:
+        with SessionLocal() as db:
+            known_contact = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                kind=ContactKind.DIRECT,
+                name="Maria Operacao",
+                phone_number="5527999999999",
+            )
+            group = Contact(
+                tenant_id=self.tenant_a.tenant_id,
+                kind=ContactKind.GROUP,
+                name="Grupo Operacional",
+                phone_number="120363018686549942",
+                provider_address="120363018686549942@g.us",
+                group_members=[
+                    {
+                        "phone_number": "5527999999999",
+                        "is_admin": False,
+                    }
+                ],
+            )
+            db.add_all([known_contact, group])
+            db.flush()
+            db.add(
+                Conversation(
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    contact_id=group.id,
+                    status=ConversationStatus.NEW,
+                )
+            )
+            db.commit()
+            group_id = group.id
+
+        response = self.client.get(
+            f"/api/v1/contacts/{group_id}",
+            headers=self.headers_a,
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json()["group_members"],
+            [
+                {
+                    "phone_number": "5527999999999",
+                    "provider_jid": None,
+                    "name": "Maria Operacao",
+                    "is_admin": False,
+                }
+            ],
+        )
+
     def test_group_message_contact_references_are_internal_only(self) -> None:
         with SessionLocal() as db:
             group = Contact(
