@@ -79,7 +79,13 @@ export const useConversationStore = defineStore('conversations', {
     async selectConversation(id: string) {
       this.selectedId = id
       this.operationError = null
-      await this.refreshMessages(id)
+      const conversation = this.selected
+      await Promise.all([
+        this.refreshMessages(id),
+        conversation?.contact_kind === 'group'
+          ? this.loadSelectedContact()
+          : Promise.resolve(),
+      ])
     },
     async refreshMessages(id: string) {
       this.messagesByConversation[id] = await messageApi.listMessages(id)
@@ -376,7 +382,10 @@ export const useConversationStore = defineStore('conversations', {
             : await contactApi.getContact(conversation.contact_id)
           this.contactsById[contact.id] = contact
         }
-        if (!forceRefresh && !contact.profile_synced_at) {
+        const groupNeedsMembers =
+          conversation.contact_kind === 'group' &&
+          (!contact.group_members || contact.group_members.length === 0)
+        if (!forceRefresh && (!contact.profile_synced_at || groupNeedsMembers)) {
           const refreshed = await contactApi.refreshContact(
             conversation.contact_id,
             conversation.channel_id,

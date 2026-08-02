@@ -30,6 +30,7 @@ import QuickReplyPicker from './QuickReplyPicker.vue'
 const props = defineProps<{
   draftKey: string | null
   disabledReason: string | null
+  groupMembersLoading: boolean
   groupMembers: GroupMemberResponse[]
   isGroup: boolean
   replyTo: Message | null
@@ -1174,7 +1175,7 @@ function handleDrop(event: DragEvent) {
           v-if="showMentions"
           :active-index="mentionActiveIndex"
           :candidates="mentionCandidates"
-          :loading="contactSearchLoading"
+          :loading="groupMembersLoading || contactSearchLoading"
           :error="contactSearchError"
           :query="mentionQuery"
           @hover="mentionActiveIndex = $event"

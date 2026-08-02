@@ -702,6 +702,7 @@ function previewMedia(
       <MessageComposer
         :draft-key="draftStorageKey"
         :disabled-reason="composerDisabledReason"
+        :group-members-loading="contactLoading && !contact?.group_members.length"
         :group-members="contact?.group_members || []"
         :is-group="(contact?.kind || conversation.contact_kind || 'direct') === 'group'"
         :reply-to="replyingTo"
