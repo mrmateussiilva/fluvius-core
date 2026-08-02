@@ -79,7 +79,16 @@ services:
 
   delivery-worker:
     build: ./api
-    command: ["rq", "worker", "--url", "redis://redis:6379/0", "fluvius-delivery"]
+    command:
+      [
+        "rq",
+        "worker-pool",
+        "--url",
+        "redis://redis:6379/0",
+        "--num-workers",
+        "${DELIVERY_WORKER_PROCESSES:-2}",
+        "fluvius-delivery",
+      ]
     dns:
       - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
       - ${DOCKER_DNS_SECONDARY:-8.8.8.8}

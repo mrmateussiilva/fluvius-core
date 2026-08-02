@@ -223,6 +223,80 @@ class DeliveryWorkerTest(PostgresIntegrationTestCase):
             str(first_delivery_id),
         )
 
+    def test_completed_delivery_enqueues_the_next_message_immediately(self) -> None:
+        self._assign()
+        first_id, first_delivery_id = self._create_message("Primeira imediata")
+        _, second_delivery_id = self._create_message("Segunda imediata")
+        provider = SequenceProvider(
+            [
+                SendResult(
+                    success=True,
+                    provider_message_id="immediate-chain-1",
+                    status=MessageStatus.SENT,
+                )
+            ]
+        )
+
+        with (
+            patch.object(settings, "environment", "development"),
+            patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
+            patch("app.delivery.service.get_provider", return_value=provider),
+            patch("app.delivery.tasks.claim_evolution_credential"),
+        ):
+            run_delivery(str(first_delivery_id), str(self.tenant_a.tenant_id))
+
+        self.assertEqual(provider.calls, [str(first_id)])
+        enqueue.assert_called_once()
+        self.assertEqual(enqueue.call_args.args[1], str(second_delivery_id))
+        with SessionLocal() as db:
+            second_delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == second_delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(second_delivery.status, "enqueued")
+
+    def test_retry_wait_does_not_release_the_next_message(self) -> None:
+        self._assign()
+        first_id, first_delivery_id = self._create_message("Primeira em retry")
+        _, second_delivery_id = self._create_message("Segunda bloqueada")
+        provider = SequenceProvider(
+            [
+                SendResult(
+                    success=False,
+                    error="Gateway temporariamente indisponível",
+                    retryable=True,
+                )
+            ]
+        )
+
+        with (
+            patch.object(settings, "environment", "development"),
+            patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
+            patch("app.delivery.service.get_provider", return_value=provider),
+            patch("app.delivery.tasks.claim_evolution_credential"),
+        ):
+            run_delivery(str(first_delivery_id), str(self.tenant_a.tenant_id))
+
+        self.assertEqual(provider.calls, [str(first_id)])
+        enqueue.assert_not_called()
+        with SessionLocal() as db:
+            first_delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == first_delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            second_delivery = db.scalar(
+                select(MessageDelivery).where(
+                    MessageDelivery.id == second_delivery_id,
+                    MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(first_delivery.status, "retry_wait")
+            self.assertEqual(second_delivery.status, "queued")
+
     def test_clearly_transient_failure_retries_with_the_same_message_id(self) -> None:
         self._assign()
         message_id, delivery_id = self._create_message("Retry controlado")

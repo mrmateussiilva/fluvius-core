@@ -164,6 +164,13 @@ O dispatcher de entregas elege um líder via Redis; o listener realtime roda em
 cada worker para fan-out local dos WebSockets. Em VPS de 8 GB, o container da
 API fica limitado a 2 GB de RAM.
 
+O serviço `delivery-worker` usa `rq worker-pool` com dois processos por padrão,
+configuráveis por `DELIVERY_WORKER_PROCESSES`. Conversas distintas podem ser
+processadas em paralelo, mas mensagens da mesma conversa continuam ordenadas e
+são encadeadas imediatamente após a confirmação terminal da anterior. O loop de
+dois segundos do dispatcher é mantido para recuperar entregas que não puderam
+ser enfileiradas diretamente.
+
 Não troque esse script por `docker compose up -d --build` em produção. O fluxo
 genérico recria serviços em bloco, pode deixar o Caddy sem upstream por mais
 tempo e volta a acoplar migration ao boot da API.

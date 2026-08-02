@@ -36,7 +36,9 @@ Os módulos em `api/app` são separados pelo domínio de negócio. Não há repo
 11. Apenas uma resposta positiva com ID do provider muda a mensagem para
     `sent`. Falha confirmada ou resposta ambígua muda para `failed`.
 12. O worker persiste o resultado e publica `message.updated` pelo Redis; a API
-    repassa o evento ao WebSocket do tenant.
+    repassa o evento ao WebSocket do tenant. Depois de um resultado terminal,
+    o worker enfileira imediatamente a próxima mensagem pendente da mesma
+    conversa; a varredura periódica permanece como mecanismo de recuperação.
 
 Depois do `sent`, webhooks `Receipt` podem avançar a mensagem para `delivered` e `read`. A atualização é monotônica, limitada a mensagens outgoing do mesmo tenant/canal e emite `message.updated`. Recibos que chegam antes do ID de envio ficam pendentes em `provider_events` para reconciliação após a confirmação do gateway.
 
@@ -227,7 +229,8 @@ sincronizada novamente.
 ## Fila
 
 Redis e duas filas RQ sobem no Compose. `fluvius-delivery` tem um
-`delivery-worker` exclusivo para texto e mídia; `fluvius-maintenance` mantém
+`delivery-worker` exclusivo para texto e mídia, executado por um pool de dois
+processos por padrão (`DELIVERY_WORKER_PROCESSES`); `fluvius-maintenance` mantém
 sincronizações administrativas fora do caminho crítico. Os jobs recebem IDs e
 reconsultam dados com `tenant_id`, em vez de serializar objetos ORM. A outbox no
 PostgreSQL é a fonte da verdade; Redis apenas transporta a execução. Cada job
@@ -238,7 +241,9 @@ recuperar rapidamente entregas que falharam antes do efeito externo e só
 enfileira a mensagem pendente mais antiga de cada conversa; o worker repete a
 mesma validação antes de chamar o provider. Se uma exceção interna escapar do
 processamento, o worker tenta persistir a falha segura e relança a exceção para
-que o próprio RQ registre o job como falho.
+que o próprio RQ registre o job como falho. Processos diferentes podem enviar
+conversas distintas em paralelo, enquanto a verificação de predecessora mantém
+uma única entrega ativa por conversa e preserva sua ordem.
 
 ## Storage
 

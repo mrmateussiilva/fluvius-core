@@ -177,9 +177,11 @@ services:
     command:
       [
         "rq",
-        "worker",
+        "worker-pool",
         "--url",
         "redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0",
+        "--num-workers",
+        "${DELIVERY_WORKER_PROCESSES:-2}",
         "fluvius-delivery",
       ]
     environment: *api-environment

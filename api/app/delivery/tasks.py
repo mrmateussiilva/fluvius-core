@@ -32,7 +32,6 @@ from app.providers.evolution_credentials import (
 )
 from app.realtime.broker import publish_realtime_event
 
-
 RETRY_DELAYS_SECONDS = (5, 30, 120)
 logger = logging.getLogger(__name__)
 SAFE_INTERNAL_ERROR = (
@@ -65,6 +64,8 @@ def run_delivery(delivery_id: str, tenant_id: str) -> None:
                 scoped_tenant_id,
             )
         raise
+    finally:
+        _dispatch_following_delivery(scoped_delivery_id, scoped_tenant_id)
 
 
 async def _run_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
@@ -324,6 +325,19 @@ def _get_delivery(
     if for_update:
         query = query.with_for_update()
     return db.scalar(query)
+
+
+def _dispatch_following_delivery(delivery_id: UUID, tenant_id: UUID) -> None:
+    try:
+        # The dispatcher imports stale-delivery recovery from this module.
+        from app.delivery.dispatcher import dispatch_next_delivery
+
+        dispatch_next_delivery(delivery_id, tenant_id)
+    except Exception:
+        logger.warning(
+            "A próxima entrega da conversa será recuperada pelo dispatcher",
+            exc_info=True,
+        )
 
 
 def _publish_message(

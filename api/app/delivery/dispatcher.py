@@ -20,7 +20,6 @@ from app.messages.models import Message
 from app.realtime.broker import publish_realtime_event
 from app.tenants.models import Tenant
 
-
 logger = logging.getLogger(__name__)
 ENQUEUED_STALE_AFTER = timedelta(minutes=10)
 ENQUEUED_JOB_GRACE = timedelta(seconds=15)
@@ -186,6 +185,51 @@ def dispatch_due_deliveries(tenant_id: UUID, limit: int = 100) -> int:
     return sum(
         dispatch_delivery(delivery_id, tenant_id) for delivery_id in due_ids
     )
+
+
+def dispatch_next_delivery(
+    terminal_delivery_id: UUID,
+    tenant_id: UUID,
+) -> bool:
+    now = datetime.now(UTC)
+    with SessionLocal() as db:
+        conversation_id = db.scalar(
+            select(Message.conversation_id)
+            .join(
+                MessageDelivery,
+                (MessageDelivery.message_id == Message.id)
+                & (MessageDelivery.tenant_id == tenant_id),
+            )
+            .where(
+                MessageDelivery.id == terminal_delivery_id,
+                MessageDelivery.tenant_id == tenant_id,
+                MessageDelivery.status.in_(("completed", "failed")),
+                Message.tenant_id == tenant_id,
+            )
+        )
+        if conversation_id is None:
+            return False
+
+        next_delivery_id = db.scalar(
+            select(MessageDelivery.id)
+            .join(
+                Message,
+                (Message.id == MessageDelivery.message_id)
+                & (Message.tenant_id == tenant_id),
+            )
+            .where(
+                MessageDelivery.tenant_id == tenant_id,
+                MessageDelivery.status.in_(("queued", "retry_wait")),
+                MessageDelivery.next_attempt_at <= now,
+                Message.status == MessageStatus.PENDING,
+                Message.conversation_id == conversation_id,
+            )
+            .order_by(Message.created_at, Message.id)
+            .limit(1)
+        )
+    if next_delivery_id is None:
+        return False
+    return dispatch_delivery(next_delivery_id, tenant_id)
 
 
 DISPATCHER_LOCK_KEY = "fluvius:delivery-dispatcher-lock"
