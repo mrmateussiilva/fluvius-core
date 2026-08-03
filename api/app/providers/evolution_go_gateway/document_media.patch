@@ -1,0 +1,24 @@
+diff --git a/pkg/whatsmeow/service/whatsmeow.go b/pkg/whatsmeow/service/whatsmeow.go
+index b511e2f..8fcb2f6 100644
+--- a/pkg/whatsmeow/service/whatsmeow.go
++++ b/pkg/whatsmeow/service/whatsmeow.go
+@@ -1388,6 +1388,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 		} else if evt.Message.GetDocumentMessage() != nil {
+ 			quotedMessage = evt.Message.GetDocumentMessage().GetContextInfo().GetQuotedMessage()
+ 			stanzaID = evt.Message.GetDocumentMessage().GetContextInfo().GetStanzaID()
++		} else if wrappedDocument := evt.Message.GetDocumentWithCaptionMessage().GetMessage().GetDocumentMessage(); wrappedDocument != nil {
++			quotedMessage = wrappedDocument.GetContextInfo().GetQuotedMessage()
++			stanzaID = wrappedDocument.GetContextInfo().GetStanzaID()
+ 		} else if evt.Message.GetVideoMessage() != nil {
+ 			quotedMessage = evt.Message.GetVideoMessage().GetContextInfo().GetQuotedMessage()
+ 			stanzaID = evt.Message.GetVideoMessage().GetContextInfo().GetStanzaID()
+@@ -1413,6 +1416,9 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
+ 			img := evt.Message.GetImageMessage()
+ 			audio := evt.Message.GetAudioMessage()
+ 			document := evt.Message.GetDocumentMessage()
++			if document == nil {
++				document = evt.Message.GetDocumentWithCaptionMessage().GetMessage().GetDocumentMessage()
++			}
+ 			video := evt.Message.GetVideoMessage()
+ 			sticker := evt.Message.GetStickerMessage()
+ 

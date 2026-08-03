@@ -249,6 +249,22 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(result.media_base64, "aW1hZ2Vt")
         self.assertEqual(result.media_content_type, "image/jpeg")
 
+    def test_parses_wrapped_incoming_document_file(self) -> None:
+        result = asyncio.run(
+            self.provider.handle_webhook(
+                load_fixture("document-with-caption-message.json")
+            )
+        )
+
+        self.assertEqual(result.message_type, MessageType.DOCUMENT)
+        self.assertEqual(result.body, "Contrato assinado")
+        self.assertEqual(
+            result.media_base64,
+            "JVBERi0xLjcKZG9jdW1lbnRvIHJlY2ViaWRv",
+        )
+        self.assertEqual(result.media_content_type, "application/pdf")
+        self.assertEqual(result.media_file_name, "contrato.pdf")
+
     def test_parses_video_audio_and_sticker_types(self) -> None:
         cases = (
             ("videoMessage", "video/mp4", MessageType.VIDEO),

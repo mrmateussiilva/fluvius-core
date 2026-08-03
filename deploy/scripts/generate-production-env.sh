@@ -44,7 +44,7 @@ umask 077
   echo "EVOLUTION_GO_INSTANCE_TOKENS={}"
   echo "EVOLUTION_OPERATOR_EMAIL="
   echo "EVOLUTION_GO_SOURCE_REF=9337afc47e10b86cc896a6f432240e40fee95dd1"
-  echo "EVOLUTION_GO_IMAGE=fluvius/evolution-go:0.7.2-edit-fix.1"
+  echo "EVOLUTION_GO_IMAGE=fluvius/evolution-go:0.7.2-edit-media-fix.2"
 } > "$TARGET_FILE"
 
 chmod 600 "$TARGET_FILE"

@@ -1,0 +1,33 @@
+{
+  "event": "Message",
+  "instanceId": "instance-id",
+  "instanceName": "pessoal",
+  "instanceToken": "instance-secret",
+  "data": {
+    "Info": {
+      "ID": "DOCUMENT-123",
+      "Sender": "172434498003125@lid",
+      "SenderAlt": "5527999999999@s.whatsapp.net",
+      "RecipientAlt": "5527998888888@s.whatsapp.net",
+      "Chat": "172434498003125@lid",
+      "IsFromMe": false,
+      "IsGroup": false,
+      "PushName": "Cliente Teste",
+      "Timestamp": "2026-08-03T10:30:00-03:00",
+      "Type": "media"
+    },
+    "Message": {
+      "base64": "JVBERi0xLjcKZG9jdW1lbnRvIHJlY2ViaWRv",
+      "documentWithCaptionMessage": {
+        "message": {
+          "documentMessage": {
+            "caption": "Contrato assinado",
+            "fileName": "contrato.pdf",
+            "fileLength": "27",
+            "mimetype": "application/pdf"
+          }
+        }
+      }
+    }
+  }
+}

@@ -216,7 +216,7 @@ services:
       dockerfile: api/app/providers/evolution_go_gateway/Dockerfile
       args:
         EVOLUTION_GO_SOURCE_REF: ${EVOLUTION_GO_SOURCE_REF:-9337afc47e10b86cc896a6f432240e40fee95dd1}
-    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-edit-fix.1}
+    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-edit-media-fix.2}
     environment:
       SERVER_PORT: 8080
       CLIENT_NAME: fluvius-core

@@ -1217,6 +1217,13 @@ class EvolutionGoProvider(WhatsAppProvider):
         cls, message: dict[str, Any], data: dict[str, Any] | None = None
     ) -> str | None:
         data = data or {}
+        document_wrapper = cls._dict_value(
+            message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
+        )
+        wrapped_message = cls._dict_value(document_wrapper, "message", "Message")
+        wrapped_document = cls._dict_value(
+            wrapped_message, "documentMessage", "DocumentMessage"
+        )
         value = (
             message.get("conversation")
             or message.get("Conversation")
@@ -1229,6 +1236,8 @@ class EvolutionGoProvider(WhatsAppProvider):
             or cls._dict_value(
                 message, "documentMessage", "DocumentMessage"
             ).get("caption")
+            or wrapped_document.get("caption")
+            or wrapped_document.get("Caption")
             or cls._dict_value(message, "videoMessage", "VideoMessage").get(
                 "caption"
             )
@@ -1329,9 +1338,16 @@ class EvolutionGoProvider(WhatsAppProvider):
             message_type,
             media.get("url")
             or media.get("URL")
+            or message.get("mediaUrl")
+            or message.get("mediaURL")
             or data.get("mediaUrl")
             or data.get("mediaURL"),
-            message.get("base64") or message.get("Base64") or data.get("base64"),
+            media.get("base64")
+            or media.get("Base64")
+            or message.get("base64")
+            or message.get("Base64")
+            or data.get("base64")
+            or data.get("Base64"),
             media.get("mimetype") or media.get("Mimetype") or media.get("mimeType"),
             media.get("fileName")
             or media.get("FileName")

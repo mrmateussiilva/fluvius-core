@@ -166,6 +166,49 @@ class AttachmentTest(unittest.TestCase):
         self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
         self.assertEqual(db.added, [attachment])
 
+    def test_persists_incoming_base64_document(self) -> None:
+        tenant_id = uuid4()
+        message = SimpleNamespace(id=uuid4())
+        content = b"%PDF-1.7\ndocumento recebido"
+        incoming = IncomingMessageResult(
+            provider_message_id="DOCUMENT-123",
+            from_number="5527999999999",
+            to_number="instance",
+            message_type=MessageType.DOCUMENT,
+            media_base64=base64.b64encode(content).decode(),
+            media_content_type="application/pdf",
+            media_file_name="contrato.pdf",
+            timestamp=datetime.now(UTC),
+            raw_payload={},
+        )
+        db = FakeSession()
+        with patch(
+            "app.attachments.service.LocalStorageProvider.save",
+            new=AsyncMock(
+                return_value=StoredFile(
+                    key="tenant/contrato.pdf",
+                    public_url="http://localhost:8000/storage/tenant/contrato.pdf",
+                    size_bytes=len(content),
+                )
+            ),
+        ):
+            attachment, error = asyncio.run(
+                persist_incoming_attachment(
+                    db,
+                    tenant_id=tenant_id,
+                    message=message,
+                    incoming=incoming,
+                )
+            )
+
+        self.assertIsNone(error)
+        self.assertIsNotNone(attachment)
+        self.assertEqual(attachment.file_name, "contrato.pdf")
+        self.assertEqual(attachment.content_type, "application/pdf")
+        self.assertEqual(attachment.size_bytes, len(content))
+        self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
+        self.assertEqual(db.added, [attachment])
+
 
 if __name__ == "__main__":
     unittest.main()
