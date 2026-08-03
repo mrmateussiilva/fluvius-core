@@ -1,16 +1,24 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
+  ArrowLeft,
+  ArrowRight,
   FileText,
   Film,
   Image as ImageIcon,
+  Mic,
   Music,
   Paperclip,
+  Pause,
+  Play,
   Reply,
   Send,
   Smile,
   Sticker,
+  Square,
+  Trash2,
   UploadCloud,
+  UserRound,
   X,
   Zap,
 } from 'lucide-vue-next'
@@ -23,6 +31,7 @@ import type {
   QuickReply,
 } from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
+import ContactSharePicker from './ContactSharePicker.vue'
 import EmojiPicker from './EmojiPicker.vue'
 import GroupMentionPicker from './GroupMentionPicker.vue'
 import QuickReplyPicker from './QuickReplyPicker.vue'
@@ -46,11 +55,15 @@ const emit = defineEmits<{
     done: (accepted: boolean) => void,
   ]
   sendAttachment: [
-    file: File,
+    files: File[],
     caption: string | null,
     mentionedPhones: string[],
     mentionedJids: string[],
     referencedContactIds: string[],
+    done: (acceptedIndexes: number[]) => void,
+  ]
+  sendContact: [
+    contact: ContactSearchResult,
     done: (accepted: boolean) => void,
   ]
   cancelReply: []
@@ -66,6 +79,19 @@ type MentionCandidate = {
   is_admin?: boolean
   contact_id?: string
 }
+
+type AttachmentKind = 'image' | 'video' | 'audio' | 'sticker' | 'document'
+
+type SelectedAttachment = {
+  id: string
+  file: File
+  kind: AttachmentKind
+  previewUrl: string | null
+}
+
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+const MAX_ATTACHMENT_COUNT = 10
+const MAX_RECORDING_SECONDS = 10 * 60
 
 const text = ref('')
 const showReplies = ref(false)
@@ -94,17 +120,27 @@ const contactSearchLoading = ref(false)
 const contactSearchError = ref<string | null>(null)
 let contactSearchRequest = 0
 const showAttachments = ref(false)
+const showContactSharePicker = ref(false)
 const showEmojis = ref(false)
 const attachmentAccept = ref('')
 const attachmentMode = ref<'media' | 'document' | 'audio' | 'sticker'>('media')
 const preparingSticker = ref(false)
+const recordingState = ref<'idle' | 'recording' | 'paused'>('idle')
+const recordingSeconds = ref(0)
 const textarea = ref<HTMLTextAreaElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
-const selectedFile = ref<File | null>(null)
+const selectedAttachments = ref<SelectedAttachment[]>([])
+const selectedSharedContact = ref<ContactSearchResult | null>(null)
 const fileError = ref<string | null>(null)
-const filePreviewUrl = ref<string | null>(null)
 const dragActive = ref(false)
 const isDisabled = computed(() => Boolean(props.disabledReason))
+const isRecording = computed(() => recordingState.value !== 'idle')
+const hasSendContent = computed(
+  () =>
+    Boolean(text.value.trim()) ||
+    selectedAttachments.value.length > 0 ||
+    selectedSharedContact.value !== null,
+)
 const quickReplyQuery = computed(() =>
   quickReplyMode.value === 'slash'
     ? quickReplyTrigger.value?.query || ''
@@ -117,9 +153,7 @@ const mentionQuery = computed(() => mentionTrigger.value?.query || '')
 const mentionCandidates = computed(() =>
   combinedMentionCandidates(mentionQuery.value),
 )
-const selectedFileKind = computed(() => {
-  const file = selectedFile.value
-  if (!file) return 'document'
+function attachmentKind(file: File): AttachmentKind {
   const extension = `.${file.name.toLowerCase().split('.').pop() || ''}`
   if (file.type === 'image/webp' || extension === '.webp') {
     return 'sticker'
@@ -145,18 +179,25 @@ const selectedFileKind = computed(() => {
     return 'audio'
   }
   return 'document'
-})
-const selectedFileKindLabel = computed(
-  () =>
-    ({
-      image: 'Imagem',
-      video: 'Vídeo',
-      audio: 'Áudio',
-      sticker: 'Figurinha',
-      document: 'Documento',
-    })[selectedFileKind.value],
-)
+}
+
+function attachmentKindLabel(kind: AttachmentKind) {
+  return {
+    image: 'Imagem',
+    video: 'Vídeo',
+    audio: 'Áudio',
+    sticker: 'Figurinha',
+    document: 'Documento',
+  }[kind]
+}
 let loadingDraft = false
+let mediaRecorder: MediaRecorder | null = null
+let recordingStream: MediaStream | null = null
+let recordingChunks: Blob[] = []
+let recordingBytes = 0
+let recordingTimer: number | null = null
+let discardRecording = false
+let recordingTooLarge = false
 
 watch(
   () => props.draftKey,
@@ -169,7 +210,9 @@ watch(
     } catch {
       text.value = ''
     }
-    clearFile()
+    cancelRecording()
+    clearAttachments()
+    selectedSharedContact.value = null
     closeQuickReplies()
     closeMentions()
     selectedMentions.value = []
@@ -198,17 +241,6 @@ watch(
   { flush: 'sync' },
 )
 
-watch(selectedFile, (file) => {
-  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
-  filePreviewUrl.value =
-    file &&
-    (file.type.startsWith('image/') ||
-      file.type.startsWith('video/') ||
-      file.type.startsWith('audio/'))
-      ? URL.createObjectURL(file)
-      : null
-})
-
 watch(filteredQuickReplies, (replies) => {
   if (!replies.length) {
     quickReplyActiveIndex.value = 0
@@ -234,7 +266,8 @@ watch([mentionQuery, showMentions], ([query, visible]) => {
 })
 
 onBeforeUnmount(() => {
-  if (filePreviewUrl.value) URL.revokeObjectURL(filePreviewUrl.value)
+  cancelRecording()
+  revokeAttachmentPreviews(selectedAttachments.value)
 })
 
 function resizeTextarea() {
@@ -532,26 +565,52 @@ function referencedContactIdsForText(value: string) {
 
 function submit() {
   const content = text.value.trim()
-  if (isDisabled.value || props.sending || preparingSticker.value) return
-  if (selectedFile.value) {
-    const submittedFile = selectedFile.value
-    const isSticker = selectedFileKind.value === 'sticker'
-    const submittedMentions = isSticker ? [] : mentionedPhonesForText(content)
-    const submittedMentionJids = isSticker ? [] : mentionedJidsForText(content)
-    const submittedContactReferences = isSticker
-      ? []
-      : referencedContactIdsForText(content)
+  if (
+    isDisabled.value ||
+    props.sending ||
+    preparingSticker.value ||
+    isRecording.value
+  ) {
+    return
+  }
+  if (selectedSharedContact.value) {
+    const submittedContact = selectedSharedContact.value
+    emit('sendContact', submittedContact, (accepted) => {
+      if (accepted && selectedSharedContact.value?.id === submittedContact.id) {
+        selectedSharedContact.value = null
+      }
+    })
+    return
+  }
+  if (selectedAttachments.value.length) {
+    const submittedAttachments = [...selectedAttachments.value]
+    const files = submittedAttachments.map((attachment) => attachment.file)
+    const captionIndex = submittedAttachments.findIndex(
+      (attachment) => attachment.kind !== 'sticker',
+    )
+    const hasCaptionTarget = captionIndex >= 0
+    const submittedMentions = hasCaptionTarget ? mentionedPhonesForText(content) : []
+    const submittedMentionJids = hasCaptionTarget ? mentionedJidsForText(content) : []
+    const submittedContactReferences = hasCaptionTarget
+      ? referencedContactIdsForText(content)
+      : []
     emit(
       'sendAttachment',
-      submittedFile,
-      isSticker ? null : content || null,
+      files,
+      hasCaptionTarget ? content || null : null,
       submittedMentions,
       submittedMentionJids,
       submittedContactReferences,
-      (accepted) => {
-        if (!accepted || selectedFile.value !== submittedFile) return
-        clearFile()
-        if (!isSticker && text.value.trim() === content) {
+      (acceptedIndexes) => {
+        if (!acceptedIndexes.length) return
+        const acceptedIds = new Set(
+          acceptedIndexes.map((index) => submittedAttachments[index]?.id),
+        )
+        removeAcceptedAttachments(acceptedIds)
+        if (
+          acceptedIndexes.includes(captionIndex) &&
+          text.value.trim() === content
+        ) {
           text.value = ''
           selectedMentions.value = []
           selectedContactReferences.value = []
@@ -594,21 +653,23 @@ function submit() {
 
 async function selectFile(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0] || null
-  if (!file || attachmentMode.value !== 'sticker') {
-    setFile(file)
+  const files = Array.from(input.files || [])
+  if (!files.length) return
+  if (attachmentMode.value !== 'sticker') {
+    addFiles(files)
     return
   }
-  if (file.size > 25 * 1024 * 1024) {
-    setFile(file)
+  const file = files[0]
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    setSingleFile(file)
     return
   }
   preparingSticker.value = true
   fileError.value = null
   try {
-    setFile(await createNativeSticker(file))
+    setSingleFile(await createNativeSticker(file))
   } catch (error) {
-    selectedFile.value = null
+    clearAttachments()
     fileError.value =
       error instanceof Error
         ? error.message
@@ -622,6 +683,7 @@ function toggleAttachmentMenu() {
   closeQuickReplies()
   closeMentions()
   showEmojis.value = false
+  showContactSharePicker.value = false
   showAttachments.value = !showAttachments.value
 }
 
@@ -635,6 +697,7 @@ function openAttachmentPicker(
   closeMentions()
   showEmojis.value = false
   showAttachments.value = false
+  showContactSharePicker.value = false
   if (fileInput.value) fileInput.value.value = ''
   nextTick(() => fileInput.value?.click())
 }
@@ -685,19 +748,86 @@ async function createNativeSticker(file: File): Promise<File> {
   }
 }
 
-function setFile(file: File | null) {
-  fileError.value = null
-  if (file && file.size > 25 * 1024 * 1024) {
-    fileError.value = 'O arquivo deve ter até 25 MB.'
-    selectedFile.value = null
-    if (fileInput.value) fileInput.value.value = ''
-    return
+function createSelectedAttachment(file: File): SelectedAttachment {
+  const kind = attachmentKind(file)
+  return {
+    id: crypto.randomUUID(),
+    file,
+    kind,
+    previewUrl:
+      kind === 'document' ? null : URL.createObjectURL(file),
   }
-  selectedFile.value = file
 }
 
-function clearFile() {
-  selectedFile.value = null
+function addFiles(files: File[]) {
+  fileError.value = null
+  selectedSharedContact.value = null
+  const available = MAX_ATTACHMENT_COUNT - selectedAttachments.value.length
+  if (available <= 0) {
+    fileError.value = `Envie no máximo ${MAX_ATTACHMENT_COUNT} arquivos por vez.`
+    return
+  }
+  const candidates = files.slice(0, available)
+  const valid = candidates.filter((file) => file.size <= MAX_ATTACHMENT_BYTES)
+  if (valid.length !== candidates.length) {
+    fileError.value = 'Cada arquivo deve ter até 25 MB.'
+  } else if (files.length > available) {
+    fileError.value = `Somente os primeiros ${available} arquivos foram adicionados.`
+  }
+  selectedAttachments.value = [
+    ...selectedAttachments.value,
+    ...valid.map(createSelectedAttachment),
+  ]
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+function setSingleFile(file: File) {
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    clearAttachments()
+    fileError.value = 'O arquivo deve ter até 25 MB.'
+    return
+  }
+  clearAttachments()
+  selectedSharedContact.value = null
+  selectedAttachments.value = [createSelectedAttachment(file)]
+}
+
+function revokeAttachmentPreviews(attachments: SelectedAttachment[]) {
+  for (const attachment of attachments) {
+    if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+  }
+}
+
+function removeAttachment(id: string) {
+  const attachment = selectedAttachments.value.find((item) => item.id === id)
+  if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+  selectedAttachments.value = selectedAttachments.value.filter(
+    (item) => item.id !== id,
+  )
+  fileError.value = null
+}
+
+function removeAcceptedAttachments(acceptedIds: Set<string | undefined>) {
+  const accepted = selectedAttachments.value.filter((attachment) =>
+    acceptedIds.has(attachment.id),
+  )
+  revokeAttachmentPreviews(accepted)
+  selectedAttachments.value = selectedAttachments.value.filter(
+    (attachment) => !acceptedIds.has(attachment.id),
+  )
+}
+
+function moveAttachment(index: number, offset: -1 | 1) {
+  const target = index + offset
+  if (target < 0 || target >= selectedAttachments.value.length) return
+  const reordered = [...selectedAttachments.value]
+  ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+  selectedAttachments.value = reordered
+}
+
+function clearAttachments() {
+  revokeAttachmentPreviews(selectedAttachments.value)
+  selectedAttachments.value = []
   fileError.value = null
   if (fileInput.value) fileInput.value.value = ''
 }
@@ -705,6 +835,152 @@ function clearFile() {
 function fileSize(value: number) {
   if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`
   return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function recordingTime(value: number) {
+  const minutes = Math.floor(value / 60)
+  const seconds = value % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function supportedRecordingMimeType() {
+  if (typeof MediaRecorder === 'undefined') return null
+  return (
+    ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((mimeType) =>
+      MediaRecorder.isTypeSupported(mimeType),
+    ) || ''
+  )
+}
+
+async function startRecording() {
+  if (
+    isDisabled.value ||
+    props.sending ||
+    isRecording.value ||
+    selectedAttachments.value.length ||
+    selectedSharedContact.value
+  ) {
+    return
+  }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+    fileError.value = 'Este navegador não oferece gravação de áudio.'
+    return
+  }
+  fileError.value = null
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const mimeType = supportedRecordingMimeType()
+    const recorder = mimeType
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream)
+    recordingStream = stream
+    mediaRecorder = recorder
+    recordingChunks = []
+    recordingBytes = 0
+    recordingSeconds.value = 0
+    discardRecording = false
+    recordingTooLarge = false
+    recorder.addEventListener('dataavailable', (event) => {
+      if (!event.data.size) return
+      recordingChunks.push(event.data)
+      recordingBytes += event.data.size
+      if (recordingBytes > MAX_ATTACHMENT_BYTES) {
+        recordingTooLarge = true
+        stopRecording()
+      }
+    })
+    recorder.addEventListener('stop', finishRecording, { once: true })
+    recorder.addEventListener(
+      'error',
+      () => {
+        discardRecording = true
+        fileError.value = 'A gravação foi interrompida pelo navegador.'
+        cleanupRecordingResources()
+      },
+      { once: true },
+    )
+    recorder.start(1000)
+    recordingState.value = 'recording'
+    recordingTimer = window.setInterval(() => {
+      if (recordingState.value !== 'recording') return
+      recordingSeconds.value += 1
+      if (recordingSeconds.value >= MAX_RECORDING_SECONDS) stopRecording()
+    }, 1000)
+  } catch (error) {
+    cleanupRecordingResources()
+    fileError.value =
+      error instanceof DOMException && error.name === 'NotAllowedError'
+        ? 'Permita o acesso ao microfone para gravar áudio.'
+        : 'Não foi possível iniciar a gravação de áudio.'
+  }
+}
+
+function pauseRecording() {
+  if (mediaRecorder?.state !== 'recording') return
+  mediaRecorder.pause()
+  recordingState.value = 'paused'
+}
+
+function resumeRecording() {
+  if (mediaRecorder?.state !== 'paused') return
+  mediaRecorder.resume()
+  recordingState.value = 'recording'
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return
+  mediaRecorder.stop()
+}
+
+function cancelRecording() {
+  discardRecording = true
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop()
+  } else {
+    cleanupRecordingResources()
+  }
+}
+
+function finishRecording() {
+  const recorder = mediaRecorder
+  const chunks = recordingChunks
+  const shouldDiscard = discardRecording
+  const tooLarge = recordingTooLarge
+  cleanupRecordingResources()
+  if (shouldDiscard) return
+  if (tooLarge) {
+    fileError.value = 'A gravação excedeu o limite de 25 MB.'
+    return
+  }
+  const contentType = (recorder?.mimeType || chunks[0]?.type || 'audio/webm').split(
+    ';',
+    1,
+  )[0]
+  const blob = new Blob(chunks, { type: contentType })
+  if (!blob.size) {
+    fileError.value = 'A gravação não gerou áudio válido.'
+    return
+  }
+  const extension = contentType === 'audio/mp4' ? 'm4a' : 'weba'
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  setSingleFile(
+    new File([blob], `audio-${timestamp}.${extension}`, {
+      type: contentType,
+      lastModified: Date.now(),
+    }),
+  )
+}
+
+function cleanupRecordingResources() {
+  if (recordingTimer !== null) window.clearInterval(recordingTimer)
+  recordingTimer = null
+  recordingStream?.getTracks().forEach((track) => track.stop())
+  recordingStream = null
+  mediaRecorder = null
+  recordingChunks = []
+  recordingBytes = 0
+  recordingState.value = 'idle'
+  recordingSeconds.value = 0
 }
 
 function useReply(reply: QuickReply) {
@@ -765,6 +1041,7 @@ function toggleReplies() {
   closeMentions()
   showAttachments.value = false
   showEmojis.value = false
+  showContactSharePicker.value = false
   if (showReplies.value && quickReplyMode.value === 'button') {
     closeQuickReplies()
     return
@@ -780,6 +1057,7 @@ function toggleEmojis() {
   closeQuickReplies()
   closeMentions()
   showAttachments.value = false
+  showContactSharePicker.value = false
   showEmojis.value = !showEmojis.value
 }
 
@@ -803,12 +1081,26 @@ function openStickerPicker() {
   )
 }
 
+function openContactSharePicker() {
+  closeQuickReplies()
+  closeMentions()
+  showEmojis.value = false
+  showAttachments.value = false
+  showContactSharePicker.value = true
+}
+
+function selectSharedContact(contact: ContactSearchResult) {
+  clearAttachments()
+  selectedSharedContact.value = contact
+  showContactSharePicker.value = false
+}
+
 function handlePaste(event: ClipboardEvent) {
   if (isDisabled.value || props.sending) return
-  const file = Array.from(event.clipboardData?.files || [])[0]
-  if (!file) return
+  const files = Array.from(event.clipboardData?.files || [])
+  if (!files.length) return
   event.preventDefault()
-  setFile(file)
+  addFiles(files)
 }
 
 function handleTextInput() {
@@ -913,8 +1205,8 @@ function handleDragLeave(event: DragEvent) {
 function handleDrop(event: DragEvent) {
   dragActive.value = false
   if (isDisabled.value || props.sending) return
-  const file = event.dataTransfer?.files?.[0] || null
-  if (file) setFile(file)
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (files.length) addFiles(files)
 }
 </script>
 
@@ -933,7 +1225,7 @@ function handleDrop(event: DragEvent) {
       <div>
         <UploadCloud class="mx-auto h-8 w-8 text-fluvius-700" />
         <p class="mt-2 text-sm font-semibold text-success-strong">Solte para anexar</p>
-        <p class="mt-0.5 text-xs text-success-strong">Imagem, vídeo, áudio ou documento · até 25 MB</p>
+        <p class="mt-0.5 text-xs text-success-strong">Até 10 arquivos · 25 MB por item</p>
       </div>
     </div>
     <p v-if="disabledReason" class="mx-auto mb-2.5 max-w-5xl rounded-lg bg-warning-soft px-3 py-2 text-center text-xs text-warning-strong ring-1 ring-warning/20">
@@ -965,57 +1257,158 @@ function handleDrop(event: DragEvent) {
       </button>
     </div>
     <div
-      v-if="selectedFile"
-      class="mx-auto mb-2 flex max-w-5xl items-center gap-3 overflow-hidden rounded-lg bg-panel p-2 shadow-sm ring-1 ring-black/5"
+      v-if="selectedSharedContact"
+      class="mx-auto mb-2 flex h-[68px] max-w-5xl items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-black/5"
     >
-      <div class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg bg-fluvius-50 text-fluvius-700">
-        <img
-          v-if="(selectedFileKind === 'image' || selectedFileKind === 'sticker') && filePreviewUrl"
-          :src="filePreviewUrl"
-          :alt="selectedFile.name"
-          class="h-full w-full object-cover"
-        />
-        <video
-          v-else-if="selectedFileKind === 'video' && filePreviewUrl"
-          :src="filePreviewUrl"
-          class="h-full w-full object-cover"
-          muted
-        />
-        <Music v-else-if="selectedFileKind === 'audio'" class="h-5 w-5" />
-        <Sticker v-else-if="selectedFileKind === 'sticker'" class="h-5 w-5" />
-        <Film v-else-if="selectedFileKind === 'video'" class="h-5 w-5" />
-        <ImageIcon v-else-if="selectedFileKind === 'image'" class="h-5 w-5" />
-        <FileText v-else class="h-5 w-5" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <p class="truncate text-xs font-semibold text-ink">
-          {{ selectedFile.name || 'Arquivo colado' }}
-        </p>
-        <p class="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">
-          {{ selectedFileKindLabel }} · {{ fileSize(selectedFile.size) }}
-        </p>
-        <p class="mt-1 text-[10px] text-ink-faint">
-          {{
-            selectedFileKind === 'sticker'
-              ? 'A figurinha será enviada sem legenda.'
-              : 'Você pode adicionar uma legenda abaixo.'
-          }}
-        </p>
-      </div>
+      <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-success-soft text-success-strong">
+        <UserRound class="h-5 w-5" />
+      </span>
+      <span class="min-w-0 flex-1">
+        <span class="block truncate text-sm font-semibold text-ink">
+          {{ selectedSharedContact.display_name }}
+        </span>
+        <span class="mt-0.5 block truncate text-xs text-ink-muted">
+          +{{ selectedSharedContact.phone_number }}
+        </span>
+      </span>
       <button
         type="button"
-        class="rounded-full p-2 text-ink-muted transition hover:bg-canvas"
-        title="Remover anexo"
-        @click="clearFile"
+        class="rounded-full p-2 text-ink-muted hover:bg-canvas"
+        title="Remover contato"
+        @click="selectedSharedContact = null"
       >
         <X class="h-4 w-4" />
       </button>
     </div>
+    <div
+      v-if="isRecording"
+      class="mx-auto mb-2 flex h-12 max-w-5xl items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-black/5"
+    >
+      <span class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-danger" />
+      <span class="min-w-14 font-mono text-sm font-semibold text-ink">
+        {{ recordingTime(recordingSeconds) }}
+      </span>
+      <span class="flex-1 text-xs text-ink-muted">
+        {{ recordingState === 'paused' ? 'Gravação pausada' : 'Gravando áudio' }}
+      </span>
+      <button
+        v-if="recordingState === 'recording'"
+        type="button"
+        class="grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-canvas"
+        title="Pausar gravação"
+        @click="pauseRecording"
+      >
+        <Pause class="h-4 w-4" />
+      </button>
+      <button
+        v-else
+        type="button"
+        class="grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-canvas"
+        title="Retomar gravação"
+        @click="resumeRecording"
+      >
+        <Play class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="grid h-8 w-8 place-items-center rounded-full text-danger-strong hover:bg-danger-soft"
+        title="Cancelar gravação"
+        @click="cancelRecording"
+      >
+        <Trash2 class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="grid h-8 w-8 place-items-center rounded-full bg-danger text-white hover:bg-danger-strong"
+        title="Concluir gravação"
+        @click="stopRecording"
+      >
+        <Square class="h-3.5 w-3.5 fill-current" />
+      </button>
+    </div>
+    <div v-if="selectedAttachments.length" class="mx-auto mb-2 max-w-5xl">
+      <div class="mb-1.5 flex items-center justify-between gap-3 px-1">
+        <p class="text-[11px] font-medium text-ink-muted">
+          {{ selectedAttachments.length === 1 ? '1 anexo' : `${selectedAttachments.length} anexos` }}
+          <span v-if="selectedAttachments.length > 1">· legenda no primeiro arquivo compatível</span>
+        </p>
+        <button
+          type="button"
+          class="text-[11px] font-medium text-danger-strong hover:underline"
+          @click="clearAttachments"
+        >
+          Remover todos
+        </button>
+      </div>
+      <div class="soft-scrollbar flex gap-2 overflow-x-auto pb-1">
+        <div
+          v-for="(attachment, index) in selectedAttachments"
+          :key="attachment.id"
+          class="flex h-[76px] w-[260px] shrink-0 items-center gap-2 overflow-hidden rounded-lg bg-panel p-2 shadow-sm ring-1 ring-black/5"
+        >
+          <div class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md bg-fluvius-50 text-fluvius-700">
+            <img
+              v-if="(attachment.kind === 'image' || attachment.kind === 'sticker') && attachment.previewUrl"
+              :src="attachment.previewUrl"
+              :alt="attachment.file.name"
+              class="h-full w-full object-cover"
+            />
+            <video
+              v-else-if="attachment.kind === 'video' && attachment.previewUrl"
+              :src="attachment.previewUrl"
+              class="h-full w-full object-cover"
+              muted
+            />
+            <Music v-else-if="attachment.kind === 'audio'" class="h-5 w-5" />
+            <Sticker v-else-if="attachment.kind === 'sticker'" class="h-5 w-5" />
+            <Film v-else-if="attachment.kind === 'video'" class="h-5 w-5" />
+            <ImageIcon v-else-if="attachment.kind === 'image'" class="h-5 w-5" />
+            <FileText v-else class="h-5 w-5" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-xs font-semibold text-ink">
+              {{ attachment.file.name || 'Arquivo colado' }}
+            </p>
+            <p class="mt-1 text-[10px] uppercase text-ink-muted">
+              {{ attachmentKindLabel(attachment.kind) }} · {{ fileSize(attachment.file.size) }}
+            </p>
+            <div v-if="selectedAttachments.length > 1" class="mt-1 flex gap-0.5">
+              <button
+                type="button"
+                class="rounded p-0.5 text-ink-muted hover:bg-canvas disabled:opacity-30"
+                :disabled="index === 0"
+                title="Mover para a esquerda"
+                @click="moveAttachment(index, -1)"
+              >
+                <ArrowLeft class="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                class="rounded p-0.5 text-ink-muted hover:bg-canvas disabled:opacity-30"
+                :disabled="index === selectedAttachments.length - 1"
+                title="Mover para a direita"
+                @click="moveAttachment(index, 1)"
+              >
+                <ArrowRight class="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="self-start rounded-full p-1 text-ink-muted transition hover:bg-canvas"
+            title="Remover anexo"
+            @click="removeAttachment(attachment.id)"
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
     <AudioMessagePlayer
-      v-if="selectedFile && selectedFileKind === 'audio' && filePreviewUrl"
+      v-if="selectedAttachments.length === 1 && selectedAttachments[0].kind === 'audio' && selectedAttachments[0].previewUrl"
       class="mx-auto mb-2"
-      :src="filePreviewUrl"
-      :file-name="selectedFile.name || 'Áudio selecionado'"
+      :src="selectedAttachments[0].previewUrl || ''"
+      :file-name="selectedAttachments[0].file.name || 'Áudio selecionado'"
     />
     <form class="mx-auto flex max-w-5xl items-end gap-2" @submit.prevent="submit">
       <div class="relative">
@@ -1072,6 +1465,7 @@ function handleDrop(event: DragEvent) {
           class="hidden"
           type="file"
           :accept="attachmentAccept"
+          :multiple="attachmentMode !== 'sticker'"
           @change="selectFile"
         />
         <button
@@ -1116,10 +1510,23 @@ function handleDrop(event: DragEvent) {
           <button
             type="button"
             class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
+            @click="openContactSharePicker"
+          >
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-emerald-600 text-white">
+              <UserRound class="h-5 w-5" />
+            </span>
+            <span>
+              <span class="block font-medium">Contato</span>
+              <span class="block text-[10px] text-ink-faint">Compartilhar cartão do WhatsApp</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
             @click="
               openAttachmentPicker(
                 'document',
-                '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip',
+                '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.json,.xml,.txt,.csv,.zip',
               )
             "
           >
@@ -1128,7 +1535,7 @@ function handleDrop(event: DragEvent) {
             </span>
             <span>
               <span class="block font-medium">Documentos</span>
-              <span class="block text-[10px] text-ink-faint">PDF, Office, texto, CSV e ZIP</span>
+              <span class="block text-[10px] text-ink-faint">PDF, Office, HTML, JSON, XML, texto e ZIP</span>
             </span>
           </button>
           <button
@@ -1150,6 +1557,16 @@ function handleDrop(event: DragEvent) {
             </span>
           </button>
         </div>
+        <div
+          v-if="showContactSharePicker"
+          class="fixed inset-0 z-20"
+          aria-hidden="true"
+          @click="showContactSharePicker = false"
+        />
+        <ContactSharePicker
+          v-if="showContactSharePicker"
+          @select="selectSharedContact"
+        />
       </div>
       <button
         type="button"
@@ -1197,26 +1614,31 @@ function handleDrop(event: DragEvent) {
         />
       </div>
       <button
+        :type="hasSendContent ? 'submit' : 'button'"
         class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white shadow-sm transition hover:bg-fluvius-700 disabled:cursor-not-allowed disabled:bg-disabled disabled:shadow-none"
         :disabled="
           isDisabled ||
           sending ||
           preparingSticker ||
-          (!text.trim() && !selectedFile)
+          isRecording
         "
         :title="
           preparingSticker
             ? 'Preparando figurinha...'
             : sending
               ? 'Enviando...'
-              : 'Enviar'
+              : hasSendContent
+                ? 'Enviar'
+                : 'Gravar áudio'
         "
+        @click="!hasSendContent && startRecording()"
       >
         <span
           v-if="sending || preparingSticker"
           class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
         />
-        <Send v-else class="h-5 w-5" />
+        <Send v-else-if="hasSendContent" class="h-5 w-5" />
+        <Mic v-else class="h-5 w-5" />
       </button>
     </form>
   </div>

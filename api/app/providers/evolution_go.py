@@ -28,6 +28,7 @@ from app.providers.base import (
     MessageStatusUpdateResult,
     QRCodeResult,
     SendResult,
+    SharedContact,
     WhatsAppProvider,
 )
 from app.providers.evolution_circuit import evolution_circuit
@@ -187,6 +188,59 @@ class EvolutionGoProvider(WhatsAppProvider):
                 success=False,
                 status=MessageStatus.FAILED,
                 error="Evolution Go retornou uma confirmação de mídia inválida.",
+            )
+
+    async def send_contact(
+        self,
+        channel: WhatsAppChannel,
+        to: str,
+        contact: SharedContact,
+        *,
+        reply_to_provider_message_id: str | None = None,
+        reply_to_participant: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> SendResult:
+        try:
+            request_payload: dict[str, Any] = {
+                "number": to,
+                "vcard": {
+                    "fullName": contact.display_name,
+                    "phone": contact.phone_number,
+                },
+            }
+            if contact.organization:
+                request_payload["vcard"]["organization"] = contact.organization
+            if idempotency_key:
+                request_payload["id"] = idempotency_key
+            if reply_to_provider_message_id and reply_to_participant:
+                request_payload["quoted"] = {
+                    "messageId": reply_to_provider_message_id,
+                    "participant": self._as_jid(reply_to_participant),
+                }
+            response = await self._request(
+                "POST",
+                "/send/contact",
+                json=request_payload,
+            )
+            response.raise_for_status()
+            message_id = self._message_id(response.json())
+            if not message_id:
+                return SendResult(
+                    success=False,
+                    error="Provider não confirmou o ID da mensagem de contato",
+                )
+            return SendResult(
+                success=True,
+                provider_message_id=message_id,
+                status=MessageStatus.SENT,
+            )
+        except httpx.HTTPError as exc:
+            return self._send_error_result(exc)
+        except (ValueError, KeyError, TypeError):
+            return SendResult(
+                success=False,
+                status=MessageStatus.FAILED,
+                error="Evolution Go retornou uma confirmação de contato inválida.",
             )
 
     async def get_status(self, channel: WhatsAppChannel) -> ChannelStatusResult:
@@ -402,6 +456,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             media_content_type,
             media_file_name,
         ) = self._media(message, data)
+        shared_contacts = self._shared_contacts(message)
         context_info = self._message_context(message)
         reply_to_provider_message_id = (
             context_info.get("stanzaID")
@@ -410,7 +465,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
         if not message_id or not from_number:
             raise ValueError("Webhook Evolution Go sem ID ou remetente")
-        if media_type is None and not text:
+        if media_type is None and not text and not shared_contacts:
             raise IgnoredWebhookEvent(
                 "Mensagem sem conteúdo compatível com o MVP"
             )
@@ -430,7 +485,11 @@ class EvolutionGoProvider(WhatsAppProvider):
             direction=(
                 MessageDirection.OUTGOING if is_from_me else MessageDirection.INCOMING
             ),
-            message_type=media_type or MessageType.TEXT,
+            message_type=(
+                MessageType.CONTACT
+                if shared_contacts
+                else media_type or MessageType.TEXT
+            ),
             body=text,
             media_url=media_url,
             media_base64=media_base64,
@@ -439,6 +498,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             reply_to_provider_message_id=(
                 str(reply_to_provider_message_id) if reply_to_provider_message_id else None
             ),
+            shared_contacts=shared_contacts,
             timestamp=self._timestamp(raw_timestamp),
             raw_payload=payload,
         )
@@ -1280,6 +1340,85 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
 
     @classmethod
+    def _shared_contacts(cls, message: dict[str, Any]) -> list[SharedContact]:
+        payloads: list[dict[str, Any]] = []
+        single = cls._dict_value(message, "contactMessage", "ContactMessage")
+        if single:
+            payloads.append(single)
+        multiple = cls._dict_value(
+            message,
+            "contactsArrayMessage",
+            "ContactsArrayMessage",
+        )
+        values = multiple.get("contacts") or multiple.get("Contacts")
+        if isinstance(values, list):
+            payloads.extend(value for value in values[:20] if isinstance(value, dict))
+
+        contacts: list[SharedContact] = []
+        for payload in payloads:
+            contact = cls._shared_contact(payload)
+            if contact:
+                contacts.append(contact)
+        return contacts
+
+    @classmethod
+    def _shared_contact(cls, payload: dict[str, Any]) -> SharedContact | None:
+        vcard = payload.get("vcard") or payload.get("Vcard") or payload.get("vCard")
+        if not isinstance(vcard, str) or len(vcard) > 64 * 1024:
+            vcard = ""
+        fields = cls._vcard_fields(vcard)
+        raw_phone = (
+            payload.get("phone")
+            or payload.get("Phone")
+            or fields.get("TEL")
+            or ""
+        )
+        phone_number = cls._digits(str(raw_phone))
+        if not 8 <= len(phone_number) <= 15:
+            return None
+        display_name = " ".join(
+            str(
+                payload.get("displayName")
+                or payload.get("DisplayName")
+                or payload.get("fullName")
+                or fields.get("FN")
+                or phone_number
+            ).split()
+        )[:160]
+        organization = " ".join(str(fields.get("ORG") or "").split())[:160] or None
+        return SharedContact(
+            display_name=display_name,
+            phone_number=phone_number,
+            organization=organization,
+        )
+
+    @staticmethod
+    def _vcard_fields(vcard: str) -> dict[str, str]:
+        unfolded: list[str] = []
+        for line in vcard.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+            if line.startswith((" ", "\t")) and unfolded:
+                unfolded[-1] += line[1:]
+            else:
+                unfolded.append(line)
+        fields: dict[str, str] = {}
+        for line in unfolded:
+            if ":" not in line:
+                continue
+            descriptor, value = line.split(":", 1)
+            name = descriptor.split(";", 1)[0].upper()
+            if name not in {"FN", "ORG", "TEL"} or name in fields:
+                continue
+            fields[name] = (
+                value.replace("\\n", " ")
+                .replace("\\N", " ")
+                .replace("\\,", ",")
+                .replace("\\;", ";")
+                .replace("\\\\", "\\")
+                .strip()
+            )
+        return fields
+
+    @classmethod
     def _message_context(cls, message: dict[str, Any]) -> dict[str, Any]:
         message_keys = (
             ("extendedTextMessage", "ExtendedTextMessage"),
@@ -1288,6 +1427,8 @@ class EvolutionGoProvider(WhatsAppProvider):
             ("audioMessage", "AudioMessage"),
             ("videoMessage", "VideoMessage"),
             ("stickerMessage", "StickerMessage"),
+            ("contactMessage", "ContactMessage"),
+            ("contactsArrayMessage", "ContactsArrayMessage"),
         )
         for keys in message_keys:
             content = cls._dict_value(message, *keys)

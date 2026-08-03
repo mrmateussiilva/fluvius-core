@@ -13,8 +13,8 @@ from app.conversations.models import Conversation
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.delivery.tasks import run_delivery
-from app.messages.models import Message, MessageRevision
-from app.providers.base import SendResult
+from app.messages.models import Message, MessageContactShare, MessageRevision
+from app.providers.base import SendResult, SharedContact
 from app.storage.base import StoredFile
 
 from .base import PostgresIntegrationTestCase
@@ -59,6 +59,27 @@ class ConfirmingProvider:
                 "idempotency_key": kwargs.get("idempotency_key"),
                 "mentioned_phones": kwargs.get("mentioned_phones"),
                 "mentioned_jids": kwargs.get("mentioned_jids"),
+            }
+        )
+        return SendResult(
+            success=True,
+            provider_message_id=self.provider_message_id,
+            status=MessageStatus.SENT,
+        )
+
+    async def send_contact(
+        self,
+        channel,
+        to: str,
+        contact: SharedContact,
+        **kwargs,
+    ) -> SendResult:
+        self.calls.append(
+            {
+                "channel_id": channel.id,
+                "to": to,
+                "contact": contact,
+                "idempotency_key": kwargs.get("idempotency_key"),
             }
         )
         return SendResult(
@@ -614,6 +635,56 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             data={"client_message_id": str(uuid4())},
         )
         self.assertEqual(rejected.status_code, 415, rejected.text)
+
+    def test_shared_contact_is_snapshotted_and_sent_idempotently(self) -> None:
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+        client_message_id = str(uuid4())
+        payload = {
+            "contact_id": str(self.tenant_a.contact_id),
+            "client_message_id": client_message_id,
+        }
+        provider = ConfirmingProvider("outgoing-contact-1")
+        with patch("app.delivery.service.get_provider", return_value=provider):
+            created = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/contacts",
+                headers=self.headers_a,
+                json=payload,
+            )
+            repeated = self.client.post(
+                f"/api/v1/conversations/{self.tenant_a.conversation_id}/contacts",
+                headers=self.headers_a,
+                json=payload,
+            )
+            with SessionLocal() as db:
+                delivery = db.scalar(
+                    select(MessageDelivery).where(
+                        MessageDelivery.tenant_id == self.tenant_a.tenant_id,
+                        MessageDelivery.message_id == UUID(client_message_id),
+                    )
+                )
+                delivery_id = delivery.id
+            run_delivery(str(delivery_id), str(self.tenant_a.tenant_id))
+
+        self.assertEqual(created.status_code, 202, created.text)
+        self.assertEqual(repeated.status_code, 202, repeated.text)
+        self.assertEqual(created.json()["message_type"], "contact")
+        self.assertEqual(len(created.json()["shared_contacts"]), 1)
+        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls[0]["idempotency_key"], client_message_id)
+        with SessionLocal() as db:
+            share = db.scalar(
+                select(MessageContactShare).where(
+                    MessageContactShare.tenant_id == self.tenant_a.tenant_id,
+                    MessageContactShare.message_id == UUID(client_message_id),
+                )
+            )
+        self.assertIsNotNone(share)
+        self.assertEqual(share.source_contact_id, self.tenant_a.contact_id)
 
     def test_sticker_is_native_without_caption_and_idempotent(self) -> None:
         assigned = self.client.post(

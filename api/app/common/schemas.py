@@ -31,6 +31,14 @@ class ReferencedContactResponse(BaseModel):
     display_name: str
 
 
+class SharedContactResponse(ORMModel):
+    id: UUID
+    source_contact_id: UUID | None = None
+    display_name: str
+    phone_number: str
+    organization: str | None = None
+
+
 class MessageResponse(ORMModel):
     id: UUID
     conversation_id: UUID
@@ -44,6 +52,7 @@ class MessageResponse(ORMModel):
     mentioned_phones: list[str] = Field(default_factory=list)
     mentioned_jids: list[str] = Field(default_factory=list)
     referenced_contacts: list[ReferencedContactResponse] = Field(default_factory=list)
+    shared_contacts: list[SharedContactResponse] = Field(default_factory=list)
     reply_to_message_id: UUID | None
     reply_to_provider_message_id: str | None
     reply_to: QuotedMessageResponse | None = None

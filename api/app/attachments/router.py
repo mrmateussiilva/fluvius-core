@@ -13,7 +13,6 @@ from app.messages.models import Message
 from app.storage.local import LocalStorageProvider
 from app.users.channel_access import ensure_channel_access
 
-
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
 
@@ -56,11 +55,12 @@ def get_attachment_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Arquivo do anexo não encontrado",
         )
+    previewable = attachment.content_type.startswith(("image/", "audio/", "video/"))
     return FileResponse(
         file_path,
         media_type=attachment.content_type,
         filename=attachment.file_name,
-        content_disposition_type="inline",
+        content_disposition_type="inline" if previewable else "attachment",
         headers={
             "Cache-Control": "private, max-age=300",
             "X-Content-Type-Options": "nosniff",

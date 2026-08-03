@@ -17,6 +17,12 @@ class SendResult(BaseModel):
     retryable: bool = False
 
 
+class SharedContact(BaseModel):
+    display_name: str
+    phone_number: str
+    organization: str | None = None
+
+
 class ChannelStatusResult(BaseModel):
     status: ChannelStatus
     raw_status: str | None = None
@@ -49,6 +55,7 @@ class IncomingMessageResult(BaseModel):
     media_content_type: str | None = None
     media_file_name: str | None = None
     reply_to_provider_message_id: str | None = None
+    shared_contacts: list[SharedContact] = Field(default_factory=list)
     timestamp: datetime
     raw_payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -173,6 +180,18 @@ class WhatsAppProvider(ABC):
         idempotency_key: str | None = None,
     ) -> SendResult:
         raise NotImplementedError
+
+    async def send_contact(
+        self,
+        channel: WhatsAppChannel,
+        to: str,
+        contact: SharedContact,
+        *,
+        reply_to_provider_message_id: str | None = None,
+        reply_to_participant: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> SendResult:
+        raise NotImplementedError("Envio de contato não implementado para este provider")
 
     @abstractmethod
     async def get_status(self, channel: WhatsAppChannel) -> ChannelStatusResult:

@@ -1,7 +1,7 @@
 export type ChannelStatus = 'disconnected' | 'connecting' | 'connected' | 'requires_qr' | 'failed'
 export type ConversationStatus = 'new' | 'open' | 'closed'
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
-export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker'
+export type MessageType = 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'contact'
 export type UserRole = 'admin' | 'agent'
 export type SyncType = 'contacts' | 'messages' | 'all'
 export type SyncStatus = 'queued' | 'running' | 'completed' | 'partial' | 'failed'
@@ -246,6 +246,14 @@ export interface ReferencedContact {
   display_name: string
 }
 
+export interface SharedContact {
+  id: string
+  source_contact_id: string | null
+  display_name: string
+  phone_number: string
+  organization: string | null
+}
+
 export interface Message {
   id: string
   conversation_id: string
@@ -256,6 +264,7 @@ export interface Message {
   mentioned_phones: string[]
   mentioned_jids: string[]
   referenced_contacts: ReferencedContact[]
+  shared_contacts: SharedContact[]
   reply_to_message_id: string | null
   reply_to_provider_message_id: string | null
   reply_to: {

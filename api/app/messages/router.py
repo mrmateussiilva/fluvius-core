@@ -27,6 +27,7 @@ from app.common.schemas import (
     MessageAttachmentResponse,
     MessageResponse,
     QuotedMessageResponse,
+    SharedContactResponse,
 )
 from app.contacts.models import Contact
 from app.contacts.naming import contact_display_name
@@ -39,8 +40,8 @@ from app.database import get_db
 from app.delivery.dispatcher import create_delivery, dispatch_delivery
 from app.delivery.models import MessageDelivery
 from app.delivery.service import normalized_sender_name
-from app.messages.models import Message
-from app.messages.schemas import MessageCreate
+from app.messages.models import Message, MessageContactShare
+from app.messages.schemas import ContactMessageCreate, MessageCreate
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
@@ -324,6 +325,7 @@ def message_response(
     message: Message,
     reply_to: Message | None = None,
     attachments: list[MessageAttachment] | None = None,
+    shared_contacts: list[MessageContactShare] | None = None,
 ) -> MessageResponse:
     if reply_to is None and message.reply_to_message_id:
         reply_to = db.scalar(
@@ -354,6 +356,17 @@ def message_response(
                 )
             )
     )
+    if shared_contacts is None:
+        shared_contacts = list(
+            db.scalars(
+                select(MessageContactShare)
+                .where(
+                    MessageContactShare.tenant_id == tenant_id,
+                    MessageContactShare.message_id == message.id,
+                )
+                .order_by(MessageContactShare.position)
+            )
+        )
     return MessageResponse.model_validate(message).model_copy(
         update={
             "referenced_contacts": message.referenced_contacts or [],
@@ -361,6 +374,10 @@ def message_response(
             "attachments": [
                 attachment_response(attachment)
                 for attachment in attachments
+            ],
+            "shared_contacts": [
+                SharedContactResponse.model_validate(shared_contact)
+                for shared_contact in shared_contacts
             ],
         }
     )
@@ -385,6 +402,7 @@ def message_list_response(
         else {}
     )
     attachments_by_message: dict[UUID, list[MessageAttachment]] = {}
+    shared_contacts_by_message: dict[UUID, list[MessageContactShare]] = {}
     if messages:
         for attachment in db.scalars(
             select(MessageAttachment).where(
@@ -393,6 +411,17 @@ def message_list_response(
             )
         ):
             attachments_by_message.setdefault(attachment.message_id, []).append(attachment)
+        for shared_contact in db.scalars(
+            select(MessageContactShare)
+            .where(
+                MessageContactShare.tenant_id == tenant_id,
+                MessageContactShare.message_id.in_([message.id for message in messages]),
+            )
+            .order_by(MessageContactShare.message_id, MessageContactShare.position)
+        ):
+            shared_contacts_by_message.setdefault(
+                shared_contact.message_id, []
+            ).append(shared_contact)
     return [
         message_response(
             db,
@@ -400,6 +429,7 @@ def message_list_response(
             message,
             replies.get(message.reply_to_message_id),
             attachments_by_message.get(message.id, []),
+            shared_contacts_by_message.get(message.id, []),
         )
         for message in messages
     ]
@@ -572,6 +602,191 @@ async def send_message(
         context.tenant_id,
     )
     return message_response(db, context.tenant_id, message, reply_to)
+
+
+@router.post(
+    "/conversations/{conversation_id}/contacts",
+    response_model=MessageResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def send_contact_message(
+    conversation_id: UUID,
+    payload: ContactMessageCreate,
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    conversation, _, _ = conversation_delivery_context(db, context, conversation_id)
+    source_contact = None
+    if payload.contact_id:
+        if payload.display_name or payload.phone_number:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Informe contact_id ou os dados manuais do contato, não ambos.",
+            )
+        source_contact = db.scalar(
+            select(Contact).where(
+                Contact.id == payload.contact_id,
+                Contact.tenant_id == context.tenant_id,
+                Contact.kind == ContactKind.DIRECT,
+            )
+        )
+        if source_contact is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contato não encontrado.",
+            )
+        allowed_channel_ids = accessible_channel_ids(db, context)
+        if allowed_channel_ids is not None:
+            has_access = db.scalar(
+                select(Conversation.id).where(
+                    Conversation.tenant_id == context.tenant_id,
+                    Conversation.contact_id == source_contact.id,
+                    Conversation.channel_id.in_(allowed_channel_ids),
+                )
+            )
+            if has_access is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Contato não encontrado.",
+                )
+        display_name = contact_display_name(source_contact)
+        phone_number = source_contact.phone_number
+    else:
+        display_name = " ".join((payload.display_name or "").split())
+        phone_number = "".join(
+            character
+            for character in (payload.phone_number or "")
+            if character.isdigit()
+        )
+        if not display_name or not 10 <= len(phone_number) <= 15:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Informe nome e telefone válido para compartilhar o contato.",
+            )
+    organization = " ".join((payload.organization or "").split()) or None
+    existing = db.scalar(
+        select(Message).where(
+            Message.id == payload.client_message_id,
+            Message.tenant_id == context.tenant_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    if existing is not None:
+        existing_share = db.scalar(
+            select(MessageContactShare).where(
+                MessageContactShare.tenant_id == context.tenant_id,
+                MessageContactShare.message_id == existing.id,
+                MessageContactShare.position == 0,
+            )
+        )
+        same_contact = bool(
+            existing_share
+            and (
+                (
+                    source_contact is not None
+                    and existing_share.source_contact_id == source_contact.id
+                    and existing_share.organization == organization
+                )
+                or (
+                    source_contact is None
+                    and existing_share.source_contact_id is None
+                    and existing_share.display_name == display_name
+                    and existing_share.phone_number == phone_number
+                    and existing_share.organization == organization
+                )
+            )
+        )
+        if (
+            existing.direction == MessageDirection.OUTGOING
+            and existing.message_type == MessageType.CONTACT
+            and existing.sender_user_id == context.user.id
+            and existing.reply_to_message_id == payload.reply_to_message_id
+            and same_contact
+        ):
+            if existing.status == MessageStatus.PENDING:
+                delivery = ensure_delivery(db, existing)
+                db.commit()
+                await asyncio.to_thread(
+                    dispatch_delivery,
+                    delivery.id,
+                    context.tenant_id,
+                )
+            return message_response(
+                db,
+                context.tenant_id,
+                existing,
+                shared_contacts=[existing_share],
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Identificador de mensagem já utilizado",
+        )
+    reply_to = None
+    if payload.reply_to_message_id:
+        reply_to = get_tenant_message(
+            db,
+            context.tenant_id,
+            conversation_id,
+            payload.reply_to_message_id,
+        )
+        if not reply_to.provider_message_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
+            )
+    created_at = datetime.now(UTC)
+    message = Message(
+        id=payload.client_message_id,
+        tenant_id=context.tenant_id,
+        conversation_id=conversation_id,
+        sender_user_id=context.user.id,
+        sender_name=normalized_sender_name(context.user.name),
+        reply_to_message_id=reply_to.id if reply_to else None,
+        reply_to_provider_message_id=reply_to.provider_message_id if reply_to else None,
+        direction=MessageDirection.OUTGOING,
+        message_type=MessageType.CONTACT,
+        status=MessageStatus.PENDING,
+        body=None,
+        attempt_count=0,
+    )
+    db.add(message)
+    conversation.last_message_at = created_at
+    db.flush()
+    shared_contact = MessageContactShare(
+        tenant_id=context.tenant_id,
+        message_id=message.id,
+        source_contact_id=source_contact.id if source_contact else None,
+        position=0,
+        display_name=display_name,
+        phone_number=phone_number,
+        organization=organization,
+    )
+    db.add(shared_contact)
+    delivery = create_delivery(
+        tenant_id=context.tenant_id,
+        message_id=message.id,
+        now=created_at,
+    )
+    db.add(delivery)
+    db.commit()
+    db.refresh(message)
+    response = message_response(
+        db,
+        context.tenant_id,
+        message,
+        reply_to,
+        shared_contacts=[shared_contact],
+    )
+    await realtime_manager.broadcast(
+        context.tenant_id,
+        "message.created",
+        {
+            **response.model_dump(mode="json"),
+            "channel_id": str(conversation.channel_id),
+        },
+    )
+    await asyncio.to_thread(dispatch_delivery, delivery.id, context.tenant_id)
+    return response
 
 
 @router.post(

@@ -129,6 +129,7 @@ function messagePreview(conversation: Conversation) {
     audio: 'Áudio',
     video: 'Vídeo',
     sticker: 'Figurinha',
+    contact: 'Contato',
   }
   const content =
     conversation.last_message_body ||

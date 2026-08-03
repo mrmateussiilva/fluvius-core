@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import * as contactApi from '../api/contacts'
 import * as conversationApi from '../api/conversations'
 import * as messageApi from '../api/messages'
-import type { ContactDetail, Conversation, Message } from '../api/types'
+import type { ContactDetail, ContactSearchResult, Conversation, Message } from '../api/types'
 import { useAuthStore } from './authStore'
 
 const messageStatusRank: Record<Message['status'], number> = {
@@ -11,6 +11,33 @@ const messageStatusRank: Record<Message['status'], number> = {
   delivered: 2,
   read: 3,
   failed: 4,
+}
+
+function messageTypeForFile(file: File): Message['message_type'] {
+  const normalizedType = file.type.toLowerCase()
+  const extension = `.${file.name.toLowerCase().split('.').pop() || ''}`
+  if (normalizedType === 'image/webp' || extension === '.webp') return 'sticker'
+  if (
+    normalizedType.startsWith('image/') ||
+    ['.gif', '.jpeg', '.jpg', '.png'].includes(extension)
+  ) {
+    return 'image'
+  }
+  if (
+    normalizedType.startsWith('audio/') ||
+    ['.aac', '.flac', '.m4a', '.mp3', '.oga', '.ogg', '.wav', '.weba'].includes(
+      extension,
+    )
+  ) {
+    return 'audio'
+  }
+  if (
+    normalizedType.startsWith('video/') ||
+    ['.m4v', '.mov', '.mp4', '.webm'].includes(extension)
+  ) {
+    return 'video'
+  }
+  return 'document'
 }
 
 export const useConversationStore = defineStore('conversations', {
@@ -160,6 +187,7 @@ export const useConversationStore = defineStore('conversations', {
         mentioned_phones: mentionedPhones,
         mentioned_jids: mentionedJids,
         referenced_contacts: [],
+        shared_contacts: [],
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -228,13 +256,142 @@ export const useConversationStore = defineStore('conversations', {
         )
       }
     },
-    async sendAttachment(
-      file: File,
+    async sendAttachments(
+      files: File[],
       caption: string | null = null,
       replyToMessageId: string | null = null,
       mentionedPhones: string[] = [],
       mentionedJids: string[] = [],
       referencedContactIds: string[] = [],
+    ): Promise<number[]> {
+      if (
+        !this.selectedId ||
+        this.sendingConversationIds.includes(this.selectedId) ||
+        !files.length
+      ) {
+        return []
+      }
+      const conversationId = this.selectedId
+      const senderName =
+        useAuthStore().user?.name?.trim().replace(/\s+/g, ' ') || null
+      const reply = (this.messagesByConversation[conversationId] || []).find(
+        (message) => message.id === replyToMessageId,
+      )
+      const captionIndex = files.findIndex(
+        (file) => messageTypeForFile(file) !== 'sticker',
+      )
+      const acceptedIndexes: number[] = []
+      this.sendingConversationIds.push(conversationId)
+      this.sendErrorsByConversation[conversationId] = null
+      try {
+        for (const [index, file] of files.entries()) {
+          const clientMessageId = crypto.randomUUID()
+          const createdAt = new Date().toISOString()
+          const previewUrl = URL.createObjectURL(file)
+          const messageType = messageTypeForFile(file)
+          const isCaptionTarget = index === captionIndex
+          const isReplyTarget = index === 0
+          const optimisticMessage: Message = {
+            id: clientMessageId,
+            conversation_id: conversationId,
+            direction: 'outgoing',
+            message_type: messageType,
+            status: 'pending',
+            body: isCaptionTarget ? caption : null,
+            mentioned_phones: isCaptionTarget ? mentionedPhones : [],
+            mentioned_jids: isCaptionTarget ? mentionedJids : [],
+            referenced_contacts: [],
+            shared_contacts: [],
+            reply_to_message_id: isReplyTarget ? replyToMessageId : null,
+            reply_to_provider_message_id:
+              isReplyTarget ? reply?.provider_message_id || null : null,
+            reply_to:
+              isReplyTarget && reply
+                ? {
+                    id: reply.id,
+                    direction: reply.direction,
+                    message_type: reply.message_type,
+                    body: reply.body,
+                    sender_name: reply.sender_name,
+                    participant_name: reply.participant_name,
+                  }
+                : null,
+            attachments: [
+              {
+                id: crypto.randomUUID(),
+                file_name: file.name || 'anexo',
+                content_type: file.type || 'application/octet-stream',
+                size_bytes: file.size,
+                public_url: previewUrl,
+              },
+            ],
+            sender_name: senderName,
+            participant_phone: null,
+            participant_name: null,
+            provider_message_id: null,
+            error: null,
+            attempt_count: 1,
+            last_attempt_at: createdAt,
+            sent_at: null,
+            delivered_at: null,
+            read_at: null,
+            edited_at: null,
+            edit_content_unavailable: false,
+            created_at: createdAt,
+          }
+          this.upsertMessage(conversationId, optimisticMessage)
+          try {
+            const message = await messageApi.sendAttachment(
+              conversationId,
+              file,
+              clientMessageId,
+              isCaptionTarget ? caption : null,
+              isReplyTarget ? replyToMessageId : null,
+              isCaptionTarget ? mentionedPhones : [],
+              isCaptionTarget ? mentionedJids : [],
+              isCaptionTarget ? referencedContactIds : [],
+            )
+            this.upsertMessage(conversationId, message)
+            this.updateConversationPreview(conversationId, message)
+            acceptedIndexes.push(index)
+          } catch (error) {
+            try {
+              await this.refreshMessages(conversationId)
+            } catch {
+              // Preserve the original request error below.
+            }
+            const persisted = (
+              this.messagesByConversation[conversationId] || []
+            ).some(
+              (message) =>
+                message.id === clientMessageId &&
+                message.attachments.every(
+                  (attachment) => attachment.public_url !== previewUrl,
+                ),
+            )
+            if (persisted) {
+              acceptedIndexes.push(index)
+            } else {
+              this.removeMessage(conversationId, clientMessageId)
+              this.sendErrorsByConversation[conversationId] =
+                error instanceof Error
+                  ? error.message
+                  : `Não foi possível enviar ${file.name || 'o anexo'}`
+            }
+          } finally {
+            URL.revokeObjectURL(previewUrl)
+          }
+        }
+        return acceptedIndexes
+      } finally {
+        this.sendingConversationIds = this.sendingConversationIds.filter(
+          (id) => id !== conversationId,
+        )
+      }
+    },
+    async sendContact(
+      contact: ContactSearchResult,
+      replyToMessageId: string | null = null,
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -247,31 +404,28 @@ export const useConversationStore = defineStore('conversations', {
       const createdAt = new Date().toISOString()
       const senderName =
         useAuthStore().user?.name?.trim().replace(/\s+/g, ' ') || null
-      const previewUrl = URL.createObjectURL(file)
       const reply = (this.messagesByConversation[conversationId] || []).find(
         (message) => message.id === replyToMessageId,
       )
-      const normalizedType = file.type.toLowerCase()
-      const messageType: Message['message_type'] =
-        normalizedType === 'image/webp' || file.name.toLowerCase().endsWith('.webp')
-          ? 'sticker'
-          : normalizedType.startsWith('image/')
-            ? 'image'
-            : normalizedType.startsWith('audio/')
-              ? 'audio'
-              : normalizedType.startsWith('video/')
-                ? 'video'
-                : 'document'
       const optimisticMessage: Message = {
         id: clientMessageId,
         conversation_id: conversationId,
         direction: 'outgoing',
-        message_type: messageType,
+        message_type: 'contact',
         status: 'pending',
-        body: caption,
-        mentioned_phones: mentionedPhones,
-        mentioned_jids: mentionedJids,
+        body: null,
+        mentioned_phones: [],
+        mentioned_jids: [],
         referenced_contacts: [],
+        shared_contacts: [
+          {
+            id: crypto.randomUUID(),
+            source_contact_id: contact.id,
+            display_name: contact.display_name,
+            phone_number: contact.phone_number,
+            organization: null,
+          },
+        ],
         reply_to_message_id: replyToMessageId,
         reply_to_provider_message_id: reply?.provider_message_id || null,
         reply_to: reply
@@ -284,15 +438,7 @@ export const useConversationStore = defineStore('conversations', {
               participant_name: reply.participant_name,
             }
           : null,
-        attachments: [
-          {
-            id: crypto.randomUUID(),
-            file_name: file.name || 'anexo',
-            content_type: file.type || 'application/octet-stream',
-            size_bytes: file.size,
-            public_url: previewUrl,
-          },
-        ],
+        attachments: [],
         sender_name: senderName,
         participant_phone: null,
         participant_name: null,
@@ -311,15 +457,11 @@ export const useConversationStore = defineStore('conversations', {
       this.sendErrorsByConversation[conversationId] = null
       this.upsertMessage(conversationId, optimisticMessage)
       try {
-        const message = await messageApi.sendAttachment(
+        const message = await messageApi.sendContact(
           conversationId,
-          file,
+          contact.id,
           clientMessageId,
-          caption,
           replyToMessageId,
-          mentionedPhones,
-          mentionedJids,
-          referencedContactIds,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)
@@ -332,20 +474,15 @@ export const useConversationStore = defineStore('conversations', {
         }
         const persisted = (
           this.messagesByConversation[conversationId] || []
-        ).some(
-          (message) =>
-            message.id === clientMessageId &&
-            message.attachments.every(
-              (attachment) => attachment.public_url !== previewUrl,
-            ),
-        )
+        ).some((message) => message.id === clientMessageId)
         if (persisted) return true
         this.removeMessage(conversationId, clientMessageId)
         this.sendErrorsByConversation[conversationId] =
-          error instanceof Error ? error.message : 'Não foi possível enviar o anexo'
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível compartilhar o contato'
         return false
       } finally {
-        URL.revokeObjectURL(previewUrl)
         this.sendingConversationIds = this.sendingConversationIds.filter(
           (id) => id !== conversationId,
         )

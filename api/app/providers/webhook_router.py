@@ -24,7 +24,7 @@ from app.contacts.service import (
 )
 from app.conversations.models import Conversation
 from app.database import get_db
-from app.messages.models import Message, MessageRevision
+from app.messages.models import Message, MessageContactShare, MessageRevision
 from app.providers.base import (
     IgnoredWebhookEvent,
     IncomingMessageEditResult,
@@ -368,6 +368,17 @@ async def whatsapp_webhook(
         )
         db.add(message)
         db.flush()
+        for position, shared_contact in enumerate(incoming.shared_contacts):
+            db.add(
+                MessageContactShare(
+                    tenant_id=channel.tenant_id,
+                    message_id=message.id,
+                    position=position,
+                    display_name=shared_contact.display_name,
+                    phone_number=shared_contact.phone_number,
+                    organization=shared_contact.organization,
+                )
+            )
         _, media_error = await persist_incoming_attachment(
             db,
             tenant_id=channel.tenant_id,

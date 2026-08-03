@@ -1,11 +1,14 @@
 import asyncio
 import base64
 import binascii
+import json
 import mimetypes
 from dataclasses import dataclass
 from hashlib import sha256
+from html.parser import HTMLParser
 from pathlib import Path
 from uuid import UUID
+from xml.etree import ElementTree
 
 from sqlalchemy.orm import Session
 
@@ -16,25 +19,55 @@ from app.messages.models import Message
 from app.providers.base import IncomingMessageResult
 from app.storage.local import LocalStorageProvider
 
-
 MAX_MEDIA_BYTES = 25 * 1024 * 1024
 
 DOCUMENT_CONTENT_TYPES = {
     ".csv": "text/csv",
     ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".htm": "text/html",
+    ".html": "text/html",
+    ".json": "application/json",
     ".pdf": "application/pdf",
     ".ppt": "application/vnd.ms-powerpoint",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".txt": "text/plain",
     ".xls": "application/vnd.ms-excel",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xml": "application/xml",
     ".zip": "application/zip",
 }
+
+TEXT_DOCUMENT_EXTENSIONS = {".csv", ".txt"}
+STRUCTURED_TEXT_DOCUMENT_EXTENSIONS = {".htm", ".html", ".json", ".xml"}
+ZIP_CONTAINER_DOCUMENT_EXTENSIONS = {".docx", ".pptx", ".xlsx", ".zip"}
 
 
 class UnsupportedAttachmentError(ValueError):
     pass
+
+
+class _HTMLStructureDetector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.has_structure = False
+
+    def handle_decl(self, decl: str) -> None:
+        self.has_structure = True
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        self.has_structure = True
+
+    def handle_startendtag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        self.has_structure = True
 
 
 @dataclass(frozen=True)
@@ -79,7 +112,8 @@ def validate_outgoing_attachment(
     )
     if detected is None:
         raise UnsupportedAttachmentError(
-            "Formato não suportado. Envie imagem, áudio, vídeo, PDF, Office, texto ou ZIP."
+            "Formato não suportado. Envie imagem, áudio, vídeo, PDF, Office, "
+            "HTML, JSON, XML, texto ou ZIP."
         )
 
     detected_type = message_type_for_upload(detected, file_name)
@@ -157,7 +191,10 @@ def _detect_content_type(
         if extension == ".weba" or declared_content_type.startswith("audio/"):
             return "audio/webm"
         return "video/webm"
-    if content.startswith(b"PK\x03\x04") and extension in DOCUMENT_CONTENT_TYPES:
+    if (
+        content.startswith(b"PK\x03\x04")
+        and extension in ZIP_CONTAINER_DOCUMENT_EXTENSIONS
+    ):
         return DOCUMENT_CONTENT_TYPES[extension]
     if content.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1") and extension in {
         ".doc",
@@ -165,13 +202,42 @@ def _detect_content_type(
         ".xls",
     }:
         return DOCUMENT_CONTENT_TYPES[extension]
-    if extension in {".csv", ".txt"} and b"\x00" not in content:
-        try:
-            content.decode("utf-8")
-        except UnicodeDecodeError:
-            return None
+    if extension in TEXT_DOCUMENT_EXTENSIONS and _decode_text_document(content) is not None:
         return DOCUMENT_CONTENT_TYPES[extension]
+    if extension in STRUCTURED_TEXT_DOCUMENT_EXTENSIONS:
+        decoded = _decode_text_document(content)
+        if decoded is not None and _is_valid_structured_document(extension, decoded):
+            return DOCUMENT_CONTENT_TYPES[extension]
     return None
+
+
+def _decode_text_document(content: bytes) -> str | None:
+    if not content or b"\x00" in content:
+        return None
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return None
+
+
+def _is_valid_structured_document(extension: str, content: str) -> bool:
+    try:
+        if extension == ".json":
+            json.loads(content)
+            return True
+        if extension == ".xml":
+            if "<!doctype" in content.lower():
+                return False
+            ElementTree.fromstring(content)
+            return True
+        if extension in {".htm", ".html"}:
+            parser = _HTMLStructureDetector()
+            parser.feed(content)
+            parser.close()
+            return parser.has_structure
+    except (ElementTree.ParseError, json.JSONDecodeError, UnicodeError, ValueError):
+        return False
+    return False
 
 
 async def persist_incoming_attachment(

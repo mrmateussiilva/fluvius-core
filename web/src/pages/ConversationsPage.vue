@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { listChannels } from '../api/channels'
-import type { Channel, TenantUser } from '../api/types'
+import type { Channel, ContactSearchResult, TenantUser } from '../api/types'
 import { listUsers } from '../api/users'
 import ConversationChat from '../components/ConversationChat.vue'
 import ConversationList from '../components/ConversationList.vue'
@@ -56,17 +56,17 @@ async function sendMessage(
 }
 
 async function sendAttachment(
-  file: File,
+  files: File[],
   caption: string | null,
   replyToMessageId: string | null,
   mentionedPhones: string[],
   mentionedJids: string[],
   referencedContactIds: string[],
-  done: (accepted: boolean) => void,
+  done: (acceptedIndexes: number[]) => void,
 ) {
   done(
-    await store.sendAttachment(
-      file,
+    await store.sendAttachments(
+      files,
       caption,
       replyToMessageId,
       mentionedPhones,
@@ -74,6 +74,14 @@ async function sendAttachment(
       referencedContactIds,
     ),
   )
+}
+
+async function sendContact(
+  contact: ContactSearchResult,
+  replyToMessageId: string | null,
+  done: (accepted: boolean) => void,
+) {
+  done(await store.sendContact(contact, replyToMessageId))
 }
 
 async function refreshVisibleConversation() {
@@ -174,6 +182,7 @@ onBeforeUnmount(() => {
       @close="store.closeSelected"
       @send="sendMessage"
       @send-attachment="sendAttachment"
+      @send-contact="sendContact"
       @retry="store.retryMessage"
       @read="store.markConversationRead"
       @back="backToConversationList"

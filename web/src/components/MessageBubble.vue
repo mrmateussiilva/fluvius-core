@@ -11,8 +11,10 @@ import {
   Expand,
   FileText,
   Info,
+  Phone,
   Reply,
   RotateCcw,
+  UserRound,
 } from 'lucide-vue-next'
 import type { Message, MessageAttachment, MessageType } from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
@@ -171,6 +173,36 @@ function showDetails() {
       >
         <ChevronDown class="h-4 w-4" />
       </button>
+
+      <div v-if="message.shared_contacts.length" class="space-y-1.5">
+        <div
+          v-for="contact in message.shared_contacts"
+          :key="contact.id"
+          class="flex min-w-56 items-center gap-3 rounded-lg bg-ink/[0.045] p-3 sm:min-w-64"
+        >
+          <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-success-soft text-success-strong">
+            <UserRound class="h-5 w-5" />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-semibold">
+              {{ contact.display_name }}
+            </span>
+            <span v-if="contact.organization" class="mt-0.5 block truncate text-[10px] text-ink-muted">
+              {{ contact.organization }}
+            </span>
+            <span class="mt-0.5 block truncate text-xs text-ink-muted">
+              +{{ contact.phone_number }}
+            </span>
+          </span>
+          <a
+            :href="`tel:+${contact.phone_number}`"
+            class="grid h-9 w-9 shrink-0 place-items-center rounded-full text-success-strong hover:bg-success-soft"
+            title="Ligar para contato"
+          >
+            <Phone class="h-4 w-4" />
+          </a>
+        </div>
+      </div>
 
       <div
         v-if="menuOpen"
@@ -354,7 +386,7 @@ function showDetails() {
         {{ message.body }}
       </p>
       <p
-        v-else-if="!message.attachments.length"
+        v-else-if="!message.attachments.length && !message.shared_contacts.length"
         class="px-0.5 pr-5 text-[13px] italic text-ink-muted"
       >
         Conteúdo indisponível

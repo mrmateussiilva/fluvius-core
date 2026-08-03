@@ -38,6 +38,7 @@ class MessageType(StrEnum):
     AUDIO = "audio"
     VIDEO = "video"
     STICKER = "sticker"
+    CONTACT = "contact"
 
 
 class MessageStatus(StrEnum):

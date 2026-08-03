@@ -19,6 +19,7 @@ import {
 } from 'lucide-vue-next'
 import type {
   ContactDetail,
+  ContactSearchResult,
   Conversation,
   Message,
   MessageAttachment,
@@ -59,12 +60,17 @@ const emit = defineEmits<{
     done: (accepted: boolean) => void,
   ]
   sendAttachment: [
-    file: File,
+    files: File[],
     caption: string | null,
     replyToMessageId: string | null,
     mentionedPhones: string[],
     mentionedJids: string[],
     referencedContactIds: string[],
+    done: (acceptedIndexes: number[]) => void,
+  ]
+  sendContact: [
+    contact: ContactSearchResult,
+    replyToMessageId: string | null,
     done: (accepted: boolean) => void,
   ]
   retry: [messageId: string]
@@ -461,35 +467,54 @@ function sendMessage(
 }
 
 function sendAttachment(
-  file: File,
+  files: File[],
   caption: string | null,
   mentionedPhones: string[],
   mentionedJids: string[],
   referencedContactIds: string[],
-  done: (accepted: boolean) => void,
+  done: (acceptedIndexes: number[]) => void,
 ) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
   replyingTo.value = null
   emit(
     'sendAttachment',
-    file,
+    files,
     caption,
     reply?.id || null,
     mentionedPhones,
     mentionedJids,
     referencedContactIds,
-    (accepted) => {
+    (acceptedIndexes) => {
       if (
-        !accepted &&
+        !acceptedIndexes.includes(0) &&
         props.conversation?.id === conversationId &&
         !replyingTo.value
       ) {
         replyingTo.value = reply
       }
-      done(accepted)
+      done(acceptedIndexes)
     },
   )
+}
+
+function sendContact(
+  contact: ContactSearchResult,
+  done: (accepted: boolean) => void,
+) {
+  const conversationId = props.conversation?.id
+  const reply = replyingTo.value
+  replyingTo.value = null
+  emit('sendContact', contact, reply?.id || null, (accepted) => {
+    if (
+      !accepted &&
+      props.conversation?.id === conversationId &&
+      !replyingTo.value
+    ) {
+      replyingTo.value = reply
+    }
+    done(accepted)
+  })
 }
 
 function jumpToMessage(messageId: string) {
@@ -711,6 +736,7 @@ function previewMedia(
         @cancel-reply="replyingTo = null"
         @send="sendMessage"
         @send-attachment="sendAttachment"
+        @send-contact="sendContact"
       />
     </section>
     <ContactDetailsPanel

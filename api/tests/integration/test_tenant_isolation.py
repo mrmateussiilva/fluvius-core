@@ -35,6 +35,25 @@ from .base import TEST_PASSWORD, PostgresIntegrationTestCase
 
 
 class TenantIsolationTest(PostgresIntegrationTestCase):
+    def test_cannot_share_a_contact_from_another_tenant(self) -> None:
+        assigned = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
+            headers=self.headers_a,
+            json={},
+        )
+        self.assertEqual(assigned.status_code, 200, assigned.text)
+
+        response = self.client.post(
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/contacts",
+            headers=self.headers_a,
+            json={
+                "contact_id": str(self.tenant_b.contact_id),
+                "client_message_id": str(uuid4()),
+            },
+        )
+
+        self.assertEqual(response.status_code, 404, response.text)
+
     def test_cookie_session_and_private_attachment_access(self) -> None:
         self.client.cookies.clear()
         login = self.client.post(
@@ -96,6 +115,10 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         self.assertEqual(downloaded.status_code, 200, downloaded.text)
         self.assertEqual(downloaded.content, content)
         self.assertEqual(downloaded.headers["cache-control"], "private, max-age=300")
+        self.assertTrue(
+            downloaded.headers["content-disposition"].startswith("attachment;")
+        )
+        self.assertEqual(downloaded.headers["x-content-type-options"], "nosniff")
 
         self.client.cookies.clear()
         tenant_b_login = self.client.post(

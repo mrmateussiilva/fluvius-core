@@ -16,7 +16,7 @@ from app.common.enums import (
     MessageType,
 )
 from app.config import settings
-from app.providers.base import IgnoredWebhookEvent, IncomingMessageEditResult
+from app.providers.base import IgnoredWebhookEvent, IncomingMessageEditResult, SharedContact
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.status_updates import can_advance_message_status
 
@@ -117,6 +117,27 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(result.sender_name, "Cliente Teste")
         self.assertEqual(result.message_type, MessageType.TEXT)
         self.assertEqual(result.body, "Olá pelo WhatsApp")
+
+    def test_parses_single_shared_contact(self) -> None:
+        payload = message_payload()
+        payload["data"]["Info"]["Type"] = "ContactMessage"
+        payload["data"]["Message"] = {
+            "contactMessage": {
+                "displayName": "Maria Cliente",
+                "vcard": (
+                    "BEGIN:VCARD\nVERSION:3.0\nFN:Maria Cliente\n"
+                    "ORG:Empresa Exemplo\nTEL;TYPE=CELL:+55 27 99999-9999\nEND:VCARD"
+                ),
+            }
+        }
+
+        result = asyncio.run(self.provider.handle_webhook(payload))
+
+        self.assertEqual(result.message_type, MessageType.CONTACT)
+        self.assertEqual(len(result.shared_contacts), 1)
+        self.assertEqual(result.shared_contacts[0].display_name, "Maria Cliente")
+        self.assertEqual(result.shared_contacts[0].phone_number, "5527999999999")
+        self.assertEqual(result.shared_contacts[0].organization, "Empresa Exemplo")
 
     def test_parses_messages_sent_from_the_connected_phone(self) -> None:
         result = asyncio.run(self.provider.handle_webhook(message_payload(from_me=True)))
@@ -387,6 +408,46 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertEqual(
             request.await_args.kwargs["json"]["sticker"],
             "http://api:8000/storage/figurinha.webp",
+        )
+
+    def test_sends_native_contact_with_stable_id(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/contact"),
+            json={"data": {"Info": {"ID": "CONTACT-123"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(
+                self.provider.send_contact(
+                    None,
+                    "5527998888888",
+                    SharedContact(
+                        display_name="Maria Cliente",
+                        phone_number="5527999999999",
+                        organization="Empresa Exemplo",
+                    ),
+                    idempotency_key="LOCAL-CONTACT-ID",
+                )
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.provider_message_id, "CONTACT-123")
+        self.assertEqual(request.await_args.args[:2], ("POST", "/send/contact"))
+        self.assertEqual(
+            request.await_args.kwargs["json"],
+            {
+                "number": "5527998888888",
+                "vcard": {
+                    "fullName": "Maria Cliente",
+                    "phone": "5527999999999",
+                    "organization": "Empresa Exemplo",
+                },
+                "id": "LOCAL-CONTACT-ID",
+            },
         )
 
     def test_ignores_api_send_confirmation_event(self) -> None:

@@ -8,6 +8,7 @@ Métodos obrigatórios:
 
 - `send_text(channel, to, text, reply_to_*, idempotency_key) -> SendResult`
 - `send_media(channel, to, file_url, caption=None) -> SendResult`
+- `send_contact(channel, to, contact) -> SendResult`
 - `get_status(channel) -> ChannelStatusResult`
 - `get_qr_code(channel) -> QRCodeResult`
 - `handle_webhook(payload) -> IncomingMessageResult`
@@ -78,6 +79,14 @@ Respostas a botões legados podem gerar os eventos `ButtonClick` e `Message` par
 O envio de texto retorna `{"message": "success", "data": {...}}`; a confirmação positiva é o identificador em `data.Info.ID`. Sem esse campo, o Fluvius mantém a regra conservadora e marca o envio como `failed`. Na 0.7.2, respostas usam `quoted.messageId` e `quoted.participant`; o delivery worker também envia o UUID local em `id`, mantendo a mesma chave em todas as tentativas.
 
 Mídia usa `/send/media` com `type` igual a `image`, `audio`, `video` ou `document`. Figurinhas são normalizadas como WebP 512×512 pelo composer, persistidas com `message_type=sticker`, enviadas sem legenda por `/send/sticker` no campo `sticker` e renderizadas sem o balão de mídia comum. WebP recebido do WhatsApp segue o mesmo tipo nativo e pode ser animado. A URL armazenada para o navegador é convertida para a URL interna da API antes da chamada ao gateway. Respostas citadas também são encaminhadas nos dois endpoints. O UUID criado pelo navegador acompanha o multipart como `client_message_id`, nasce como ID local `pending` e é reutilizado como chave idempotente no provider; o SHA-256 do conteúdo impede que o mesmo UUID seja aceito para outro arquivo.
+
+Cartões de contato usam `/send/contact` na versão fixada do Evolution Go, com
+`fullName`, `phone`, organização opcional e o UUID da mensagem como `id`. Cada
+cartão outgoing é uma mensagem independente porque o provider não confirma
+envio múltiplo em uma única chamada. Webhooks `ContactMessage` e
+`ContactsArrayMessage` são normalizados para snapshots em
+`message_contact_shares`; recebê-los nunca cadastra automaticamente um contato
+na agenda do tenant.
 
 Com `WEBHOOK_FILES=true`, mensagens de mídia chegam com o arquivo em `data.Message.base64` e metadados no objeto `imageMessage`, `audioMessage`, `videoMessage`, `documentMessage` ou `stickerMessage`. O adapter normaliza esses dados, a API valida a assinatura do arquivo, salva o conteúdo e seu SHA-256 em `MessageAttachment` e remove o base64 da cópia guardada em `provider_events`.
 

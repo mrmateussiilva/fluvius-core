@@ -7,8 +7,8 @@ from app.attachments.models import MessageAttachment
 from app.channels.models import WhatsAppChannel
 from app.common.enums import ContactKind, MessageDirection, MessageStatus, MessageType
 from app.contacts.models import Contact
-from app.messages.models import Message
-from app.providers.base import SendResult
+from app.messages.models import Message, MessageContactShare
+from app.providers.base import SendResult, SharedContact
 from app.providers.factory import get_provider
 from app.providers.status_updates import reconcile_pending_status_events
 from app.storage.local import LocalStorageProvider
@@ -122,6 +122,35 @@ async def call_provider(
             reply_to_participant=participant,
             mentioned_phones=message.mentioned_phones,
             mentioned_jids=message.mentioned_jids,
+            idempotency_key=str(message.id),
+        )
+
+    if message.message_type == MessageType.CONTACT:
+        shared_contact = db.scalar(
+            select(MessageContactShare)
+            .where(
+                MessageContactShare.tenant_id == message.tenant_id,
+                MessageContactShare.message_id == message.id,
+            )
+            .order_by(MessageContactShare.position)
+        )
+        if shared_contact is None:
+            return SendResult(
+                success=False,
+                error="Contato compartilhado não foi encontrado.",
+            )
+        return await provider.send_contact(
+            channel,
+            target,
+            SharedContact(
+                display_name=shared_contact.display_name,
+                phone_number=shared_contact.phone_number,
+                organization=shared_contact.organization,
+            ),
+            reply_to_provider_message_id=(
+                reply_to.provider_message_id if reply_to else None
+            ),
+            reply_to_participant=participant,
             idempotency_key=str(message.id),
         )
 

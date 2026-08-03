@@ -33,7 +33,7 @@
   persistente, ordem por conversa e retry conservador.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.
-- Anexos de imagem, documento, áudio, vídeo e figurinha nativa, com limite local de 25 MB, validação do conteúdo e envio idempotente. PNG e JPG escolhidos como figurinha são convertidos para WebP 512×512 antes do envio.
+- Anexos de imagem, documento, áudio, vídeo e figurinha nativa, com limite local de 25 MB, validação do conteúdo e envio idempotente. O compositor aceita até dez arquivos por lote e preserva o resultado individual de cada envio. Documentos incluem PDF, Office, HTML, JSON, XML, texto, CSV e ZIP; formatos renderizáveis como HTML são entregues apenas para download. PNG e JPG escolhidos como figurinha são convertidos para WebP 512×512 antes do envio.
 - Seletor de emojis Unicode por categoria e botão dedicado para escolher figurinha no composer.
 - Player de áudio com progresso e velocidades `1x`, `1,5x` e `2x`.
 - Respostas rápidas.

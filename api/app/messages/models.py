@@ -104,3 +104,36 @@ class MessageRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     body: Mapped[str | None] = mapped_column(Text)
     content_available: Mapped[bool] = mapped_column(Boolean, nullable=False)
     edited_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MessageContactShare(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "message_contact_shares"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id",
+            "position",
+            name="uq_message_contact_shares_position",
+        ),
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source_contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("contacts.id", ondelete="SET NULL"),
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    display_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    phone_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    organization: Mapped[str | None] = mapped_column(String(160))

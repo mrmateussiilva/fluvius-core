@@ -50,6 +50,21 @@ export const sendAttachment = (
   })
 }
 
+export const sendContact = (
+  conversationId: string,
+  contactId: string,
+  clientMessageId: string,
+  replyToMessageId: string | null = null,
+) =>
+  http<Message>(`/api/v1/conversations/${conversationId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify({
+      contact_id: contactId,
+      client_message_id: clientMessageId,
+      reply_to_message_id: replyToMessageId,
+    }),
+  })
+
 export const retryMessage = (conversationId: string, messageId: string) =>
   http<Message>(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, {
     method: 'POST',

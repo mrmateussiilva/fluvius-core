@@ -59,6 +59,8 @@ atual de atendimento.
 
 ## Fase 3: compartilhar contato em conversa
 
+Estado: primeira versão implementada.
+
 Modelar o envio de contato como um novo tipo de mensagem, não como texto solto:
 
 - adicionar `contact` ao enum `message_type`;
@@ -69,12 +71,16 @@ Modelar o envio de contato como um novo tipo de mensagem, não como texto solto:
 - renderizar bolha específica no frontend com nome, telefone e ação de abrir ou
   salvar contato no Fluvius.
 
-No provider, a primeira implementação deve confirmar o contrato real da
-Evolution Go para vCard/contact message. Se a rota nativa não estiver confirmada
-na versão fixada, usar fallback temporário como texto formatado somente com
-autorização explícita, porque isso não é equivalente ao cartão do WhatsApp.
+O contrato da versão fixada do Evolution Go foi confirmado e usa
+`POST /send/contact`. A UI seleciona contatos diretos existentes; a API também
+aceita nome e telefone manuais para clientes controlados. O snapshot fica em
+`message_contact_shares`, nasce `pending` e segue a mesma outbox idempotente das
+demais mensagens. A versão atual envia um cartão por chamada do provider.
 
 ## Fase 4: recebimento de cartões de contato
+
+Estado: parsing e persistência implementados; criação confirmada na agenda ainda
+é um próximo passo de UI.
 
 Quando o webhook trouxer mensagem de contato/vCard:
 

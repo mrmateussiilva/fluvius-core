@@ -1,8 +1,8 @@
 import asyncio
 import base64
-from hashlib import sha256
 import unittest
 from datetime import UTC, datetime
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -75,6 +75,36 @@ class AttachmentTest(unittest.TestCase):
                     content,
                 )
                 self.assertEqual(validated.message_type, expected)
+
+    def test_validates_structured_text_documents(self) -> None:
+        cases = (
+            ("pagina.html", "text/html", b"<!doctype html><html><body>OK</body></html>"),
+            ("pagina.htm", "text/html", b"<html><body>OK</body></html>"),
+            ("dados.json", "application/json", b'{"status":"ok"}'),
+            ("dados.xml", "application/xml", b"<?xml version='1.0'?><status>ok</status>"),
+        )
+        for file_name, content_type, content in cases:
+            with self.subTest(file_name=file_name):
+                validated = validate_outgoing_attachment(
+                    content_type,
+                    file_name,
+                    content,
+                )
+                self.assertEqual(validated.message_type, MessageType.DOCUMENT)
+                self.assertEqual(validated.content_type, content_type)
+
+    def test_rejects_invalid_or_unsafe_structured_documents(self) -> None:
+        cases = (
+            ("pagina.html", "text/html", b"plain text without html structure"),
+            ("dados.json", "application/json", b"{invalid}"),
+            ("dados.json", "application/json", b"PK\x03\x04disguised zip"),
+            ("dados.xml", "application/xml", b"<!DOCTYPE data><data>unsafe</data>"),
+            ("dados.xml", "application/xml", b"<data>broken"),
+        )
+        for file_name, content_type, content in cases:
+            with self.subTest(file_name=file_name):
+                with self.assertRaises(UnsupportedAttachmentError):
+                    validate_outgoing_attachment(content_type, file_name, content)
 
     def test_rejects_a_file_disguised_with_another_extension(self) -> None:
         with self.assertRaisesRegex(
