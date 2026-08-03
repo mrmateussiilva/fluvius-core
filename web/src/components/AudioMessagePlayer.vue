@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="flex w-64 max-w-full items-center gap-2 rounded-lg bg-black/[0.045] px-2 py-2 sm:w-72"
+    class="flex w-64 max-w-full items-center gap-2 rounded-lg bg-ink/[0.045] px-2 py-2 sm:w-72"
     :aria-label="`Áudio ${fileName}`"
   >
     <audio
@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
     />
     <button
       type="button"
-      class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white transition hover:bg-fluvius-700 disabled:bg-[#aebac1]"
+      class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white transition hover:bg-fluvius-700 disabled:bg-disabled"
       :disabled="failed"
       :title="playing ? 'Pausar áudio' : 'Reproduzir áudio'"
       @click="togglePlayback"
@@ -148,12 +148,12 @@ onBeforeUnmount(() => {
         aria-label="Posição do áudio"
         @input="seek"
       />
-      <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-[#667781]">
+      <div class="mt-1 flex items-center justify-between gap-2 text-[10px] text-ink-muted">
         <span v-if="failed">Áudio indisponível</span>
         <span v-else>{{ formatTime(currentTime) }} / {{ formatTime(duration) }}</span>
         <button
           type="button"
-          class="rounded-full bg-black/[0.07] px-2 py-0.5 font-semibold text-[#3b4a54] transition hover:bg-black/[0.12]"
+          class="rounded-full bg-ink/[0.07] px-2 py-0.5 font-semibold text-ink transition hover:bg-ink/[0.12]"
           title="Alterar velocidade"
           @click="cycleSpeed"
         >

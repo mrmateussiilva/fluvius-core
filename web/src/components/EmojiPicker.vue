@@ -125,12 +125,12 @@ const categoryIcons = {
 
 <template>
   <div
-    class="absolute bottom-14 left-0 z-30 flex h-72 w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-xl bg-white text-[#3b4a54] shadow-2xl ring-1 ring-black/5"
+    class="absolute bottom-14 left-0 z-30 flex h-72 w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg bg-panel text-ink shadow-2xl ring-1 ring-black/5"
     role="dialog"
     aria-label="Selecionar emoji"
     @click.stop
   >
-    <div class="grid grid-cols-7 border-b border-[#e9edef] px-2 pt-1.5">
+    <div class="grid grid-cols-7 border-b border-line px-2 pt-1.5">
       <button
         v-if="recentEmojis.length"
         type="button"
@@ -138,7 +138,7 @@ const categoryIcons = {
         :class="
           activeCategory === 'recent'
             ? 'border-fluvius-600 text-fluvius-700'
-            : 'border-transparent text-[#8696a0] hover:text-[#54656f]'
+            : 'border-transparent text-ink-faint hover:text-ink-secondary'
         "
         title="Recentes"
         @click="activeCategory = 'recent'"
@@ -153,7 +153,7 @@ const categoryIcons = {
         :class="
           activeCategory === category.id
             ? 'border-fluvius-600 text-fluvius-700'
-            : 'border-transparent text-[#8696a0] hover:text-[#54656f]'
+            : 'border-transparent text-ink-faint hover:text-ink-secondary'
         "
         :title="category.label"
         @click="activeCategory = category.id"
@@ -161,7 +161,7 @@ const categoryIcons = {
         <component :is="categoryIcons[category.id as keyof typeof categoryIcons]" class="h-4 w-4" />
       </button>
     </div>
-    <p class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[#8696a0]">
+    <p class="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
       {{ visibleCategory.label }}
     </p>
     <div class="soft-scrollbar grid flex-1 grid-cols-8 content-start gap-0.5 overflow-y-auto px-2 pb-2">
@@ -169,7 +169,7 @@ const categoryIcons = {
         v-for="emoji in visibleCategory.emojis"
         :key="emoji"
         type="button"
-        class="grid aspect-square place-items-center rounded-md text-[22px] transition hover:bg-[#f0f2f5]"
+        class="grid aspect-square place-items-center rounded-md text-[22px] transition hover:bg-panel-muted"
         :title="emoji"
         @click="selectEmoji(emoji)"
       >

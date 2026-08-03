@@ -513,11 +513,11 @@ function previewMedia(
 
 <template>
   <div v-if="conversation" class="relative flex min-w-0 flex-1">
-    <section class="flex min-w-0 flex-1 flex-col bg-[#efeae2]">
-      <header class="z-10 flex min-h-[64px] items-center justify-between border-b border-[#d8dcdf] bg-[#f0f2f5] px-4 py-2 shadow-sm shadow-slate-900/[0.03]">
+    <section class="flex min-w-0 flex-1 flex-col bg-chat">
+      <header class="z-10 flex min-h-[64px] items-center justify-between border-b border-line bg-panel-muted px-4 py-2 shadow-sm shadow-black/[0.04]">
         <div class="flex min-w-0 items-center">
           <button
-            class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-[#54656f] transition hover:bg-black/5 md:hidden"
+            class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 md:hidden"
             title="Voltar para conversas"
             @click="emit('back')"
           >
@@ -537,16 +537,16 @@ function previewMedia(
               <span v-else>{{ contactInitials }}</span>
             </div>
             <div class="min-w-0">
-              <h2 class="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-[#111b21]">
+              <h2 class="flex min-w-0 items-center gap-2 text-[15px] font-semibold text-ink">
                 <span class="truncate">{{ conversation.contact_name || conversation.contact_phone }}</span>
                 <span
                   v-if="(conversation.contact_kind || 'direct') === 'group'"
-                  class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700"
+                  class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
                 >
                   Grupo
                 </span>
               </h2>
-              <p class="truncate text-[11px] text-[#667781] sm:text-xs">
+              <p class="truncate text-[11px] text-ink-muted sm:text-xs">
                 <span class="hidden sm:inline">
                   {{
                     (conversation.contact_kind || 'direct') === 'group'
@@ -563,7 +563,7 @@ function previewMedia(
           <ChannelStatusBadge class="hidden xl:inline-flex" :status="conversation.channel_status" />
           <button
             v-if="canClaim"
-            class="flex h-9 items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-2.5 text-xs font-medium text-[#3b4a54] shadow-sm transition hover:bg-[#f7f8f8] sm:px-3"
+            class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-canvas sm:px-3"
             :disabled="operationLoading"
             :title="
               conversation.status === 'closed'
@@ -592,7 +592,7 @@ function previewMedia(
           </button>
           <span
             v-if="conversation.status === 'open' && !canOperate && !canClaim"
-            class="flex h-9 items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 text-xs font-medium text-amber-800 ring-1 ring-amber-100 sm:px-3"
+            class="flex h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 text-xs font-medium text-warning-strong ring-1 ring-warning/20 sm:px-3"
             title="Atendimento atribuído a outro agente"
           >
             <LockKeyhole class="h-3.5 w-3.5" />
@@ -602,15 +602,15 @@ function previewMedia(
       </header>
       <div
         v-if="isAdmin && eligibleAssignableUsers.length"
-        class="z-10 flex min-h-12 items-center gap-2 border-b border-[#d8dcdf] bg-white px-3 py-2 shadow-sm shadow-slate-900/[0.02] sm:px-4"
+        class="z-10 flex min-h-12 items-center gap-2 border-b border-line bg-panel px-3 py-2 shadow-sm shadow-black/[0.03] sm:px-4"
       >
         <ShieldCheck class="h-4 w-4 shrink-0 text-fluvius-700" />
-        <span class="hidden shrink-0 text-xs font-medium text-[#54656f] lg:inline">
+        <span class="hidden shrink-0 text-xs font-medium text-ink-secondary lg:inline">
           Responsável
         </span>
         <select
           v-model="assignmentTargetId"
-          class="h-8 min-w-0 flex-1 rounded-lg border border-[#d1d7db] bg-white px-2 text-xs text-[#111b21] outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15 sm:max-w-64"
+          class="h-8 min-w-0 flex-1 rounded-lg border border-line bg-panel px-2 text-xs text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15 sm:max-w-64"
           :disabled="operationLoading"
           aria-label="Responsável pelo atendimento"
         >
@@ -632,7 +632,7 @@ function previewMedia(
       </div>
       <p
         v-if="operationError"
-        class="border-b border-rose-100 bg-rose-50 px-4 py-2 text-center text-xs text-rose-700"
+        class="border-b border-danger/20 bg-danger-soft px-4 py-2 text-center text-xs text-danger-strong"
       >
         {{ operationError }}
       </p>
@@ -651,7 +651,7 @@ function previewMedia(
               <div
                 class="sticky top-2 z-10 flex justify-center py-2.5"
               >
-                <span class="rounded-lg bg-white/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-[#54656f] shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm">
+                <span class="rounded-lg bg-panel/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-secondary shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm">
                   {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
@@ -664,7 +664,7 @@ function previewMedia(
                   class="rounded-lg transition-colors duration-500"
                   :class="[
                     messageSpacing(index),
-                    highlightedMessageId === message.id ? 'bg-amber-200/50 ring-4 ring-amber-200/40' : '',
+                    highlightedMessageId === message.id ? 'bg-warning/20 ring-4 ring-warning/20' : '',
                   ]"
                 >
                   <MessageBubble
@@ -680,11 +680,11 @@ function previewMedia(
                 </div>
               </template>
             </section>
-            <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-[#667781]">
-              <div class="grid h-14 w-14 place-items-center rounded-full bg-white/70 shadow-sm">
+            <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-ink-muted">
+              <div class="grid h-14 w-14 place-items-center rounded-full bg-panel/70 shadow-sm">
                 <MessageCircle class="h-6 w-6 text-fluvius-700" />
               </div>
-              <p class="mt-3 text-sm font-medium text-[#3b4a54]">Comece este atendimento</p>
+              <p class="mt-3 text-sm font-medium text-ink">Comece este atendimento</p>
               <p class="mt-1 max-w-xs text-xs">Envie uma mensagem para iniciar a conversa com este contato.</p>
             </div>
           </div>
@@ -729,14 +729,14 @@ function previewMedia(
       @close="mediaPreview = null"
     />
   </div>
-  <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-[#f7f8f8] px-6 text-center">
+  <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-canvas px-6 text-center">
     <div>
-      <div class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-[#e9edef] text-[#667781]">
+      <div class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-canvas text-ink-muted">
         <MessageCircle class="h-9 w-9" />
       </div>
-      <h2 class="mt-5 text-xl font-light text-[#3b4a54]">Fluvius Atendimento</h2>
-      <p class="mt-2 text-sm text-[#667781]">Selecione uma conversa para começar a atender.</p>
-      <p class="mt-1 text-xs text-[#8696a0]">Suas mensagens ficam organizadas em um só lugar.</p>
+      <h2 class="mt-5 text-xl font-light text-ink">Fluvius Atendimento</h2>
+      <p class="mt-2 text-sm text-ink-muted">Selecione uma conversa para começar a atender.</p>
+      <p class="mt-1 text-xs text-ink-faint">Suas mensagens ficam organizadas em um só lugar.</p>
     </div>
   </section>
 </template>

@@ -11,28 +11,28 @@ const appearance = computed(() => {
   > = {
     disconnected: {
       label: 'Desconectado',
-      className: 'border-slate-200 bg-slate-50 text-slate-600',
-      dotClass: 'text-slate-400',
+      className: 'border-line bg-canvas text-ink-secondary',
+      dotClass: 'text-ink-faint',
     },
     connecting: {
       label: 'Conectando',
-      className: 'border-amber-200 bg-amber-50 text-amber-700',
-      dotClass: 'animate-pulse text-amber-500',
+      className: 'border-warning/30 bg-warning-soft text-warning-strong',
+      dotClass: 'animate-pulse text-warning',
     },
     connected: {
       label: 'WhatsApp conectado',
-      className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-      dotClass: 'text-emerald-500',
+      className: 'border-success/30 bg-success-soft text-success-strong',
+      dotClass: 'text-success',
     },
     requires_qr: {
       label: 'Aguardando QR',
-      className: 'border-sky-200 bg-sky-50 text-sky-700',
-      dotClass: 'animate-pulse text-sky-500',
+      className: 'border-info/30 bg-info-soft text-info-strong',
+      dotClass: 'animate-pulse text-info',
     },
     failed: {
       label: 'Falha na conexão',
-      className: 'border-rose-200 bg-rose-50 text-rose-700',
-      dotClass: 'text-rose-500',
+      className: 'border-danger/30 bg-danger-soft text-danger-strong',
+      dotClass: 'text-danger',
     },
   }
   return appearances[props.status]
@@ -47,7 +47,7 @@ const appearance = computed(() => {
     <span class="relative flex h-2 w-2">
       <span
         v-if="status === 'connected'"
-        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-30"
+        class="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-30"
       />
       <Circle class="relative h-2 w-2" :class="appearance.dotClass" fill="currentColor" />
     </span>

@@ -318,26 +318,26 @@ onBeforeUnmount(clearSyncPoll)
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-[#f7f8f8]">
-    <header class="shrink-0 border-b border-[#d8dcdf] bg-white px-5 py-4">
+  <div class="flex h-full min-h-0 flex-col bg-canvas">
+    <header class="shrink-0 border-b border-line bg-panel px-5 py-4">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-fluvius-700">Atendimento</p>
-          <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-[#111b21]">Contatos</h1>
+          <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-ink">Contatos</h1>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <form class="flex h-10 min-w-0 items-center gap-2 rounded-lg border border-[#d8dcdf] bg-[#f7f8f8] px-3 text-[#54656f] focus-within:bg-white focus-within:ring-1 focus-within:ring-fluvius-500/30 sm:w-80" @submit.prevent="submitSearch">
+          <form class="flex h-10 min-w-0 items-center gap-2 rounded-lg border border-line bg-canvas px-3 text-ink-secondary focus-within:bg-panel focus-within:ring-1 focus-within:ring-fluvius-500/30 sm:w-80" @submit.prevent="submitSearch">
             <Search class="h-4 w-4 shrink-0" />
             <input
               v-model="search"
               type="search"
               placeholder="Buscar nome ou telefone"
-              class="min-w-0 flex-1 bg-transparent text-[13px] text-[#111b21] outline-none placeholder:text-[#667781]"
+              class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
             />
             <button
               v-if="search || appliedSearch"
               type="button"
-              class="rounded-md p-1 hover:bg-slate-200"
+              class="rounded-md p-1 hover:bg-line"
               title="Limpar busca"
               @click="clearSearch"
             >
@@ -347,7 +347,7 @@ onBeforeUnmount(clearSyncPoll)
           <button
             v-if="canSyncContacts"
             type="button"
-            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#d8dcdf] bg-white px-3 text-sm font-medium text-[#111b21] transition hover:bg-[#f7f8f8] disabled:cursor-not-allowed disabled:opacity-50"
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-line bg-panel px-3 text-sm font-medium text-ink transition hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="!selectedChannelId || syncingContacts"
             title="Sincronizar contatos do canal selecionado"
             @click="syncContacts"
@@ -357,7 +357,7 @@ onBeforeUnmount(clearSyncPoll)
           </button>
           <button
             type="button"
-            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-neutral-action px-3 text-sm font-medium text-white transition hover:bg-neutral-action"
             @click="showCreateForm = !showCreateForm"
           >
             <Plus class="h-4 w-4" />
@@ -367,13 +367,13 @@ onBeforeUnmount(clearSyncPoll)
       </div>
     </header>
 
-    <section class="shrink-0 border-b border-[#d8dcdf] bg-white px-5 py-3">
+    <section class="shrink-0 border-b border-line bg-panel px-5 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <label class="flex min-w-0 items-center gap-2 text-sm text-[#54656f]">
+        <label class="flex min-w-0 items-center gap-2 text-sm text-ink-secondary">
           <MessageCircle class="h-4 w-4 shrink-0 text-fluvius-700" />
           <select
             v-model="selectedChannelId"
-            class="h-9 min-w-0 rounded-lg border border-[#d8dcdf] bg-white px-3 text-[13px] font-medium text-[#111b21] outline-none focus:ring-1 focus:ring-fluvius-500/30"
+            class="h-9 min-w-0 rounded-lg border border-line bg-panel px-3 text-[13px] font-medium text-ink outline-none focus:ring-1 focus:ring-fluvius-500/30"
             aria-label="Canal para iniciar conversa"
             :disabled="!connectedChannels.length || syncingContacts"
           >
@@ -389,13 +389,13 @@ onBeforeUnmount(clearSyncPoll)
         </label>
         <p
           v-if="error"
-          class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+          class="rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
         >
           {{ error }}
         </p>
         <p
           v-else-if="notice"
-          class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          class="rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-sm text-success-strong"
         >
           {{ notice }}
         </p>
@@ -404,7 +404,7 @@ onBeforeUnmount(clearSyncPoll)
 
     <form
       v-if="showCreateForm"
-      class="grid shrink-0 gap-3 border-b border-[#d8dcdf] bg-white px-5 py-4 md:grid-cols-[minmax(0,1fr)_220px_auto]"
+      class="grid shrink-0 gap-3 border-b border-line bg-panel px-5 py-4 md:grid-cols-[minmax(0,1fr)_220px_auto]"
       @submit.prevent="submitContact"
     >
       <input
@@ -412,14 +412,14 @@ onBeforeUnmount(clearSyncPoll)
         required
         maxlength="160"
         placeholder="Nome"
-        class="h-10 rounded-lg border border-[#d8dcdf] px-3 text-sm outline-none focus:ring-1 focus:ring-fluvius-500/30"
+        class="h-10 rounded-lg border border-line bg-panel px-3 text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-1 focus:ring-fluvius-500/30"
       />
       <input
         v-model="form.phone_number"
         required
         maxlength="32"
         placeholder="+55 27 99999-9999"
-        class="h-10 rounded-lg border border-[#d8dcdf] px-3 text-sm outline-none focus:ring-1 focus:ring-fluvius-500/30"
+        class="h-10 rounded-lg border border-line bg-panel px-3 text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-1 focus:ring-fluvius-500/30"
       />
       <button
         type="submit"
@@ -433,24 +433,24 @@ onBeforeUnmount(clearSyncPoll)
     </form>
 
     <div class="soft-scrollbar min-h-0 flex-1 overflow-auto">
-      <table class="min-w-full border-separate border-spacing-0 bg-white text-left text-sm">
-        <thead class="sticky top-0 z-10 bg-[#f7f8f8] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#667781]">
+      <table class="min-w-full border-separate border-spacing-0 bg-panel text-left text-sm">
+        <thead class="sticky top-0 z-10 bg-canvas text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
           <tr>
-            <th class="border-b border-[#d8dcdf] px-5 py-3">Nome</th>
-            <th class="border-b border-[#d8dcdf] px-5 py-3">Telefone</th>
-            <th class="border-b border-[#d8dcdf] px-5 py-3">Conversas</th>
-            <th class="border-b border-[#d8dcdf] px-5 py-3">Última interação</th>
-            <th class="border-b border-[#d8dcdf] px-5 py-3 text-right">Ações</th>
+            <th class="border-b border-line px-5 py-3">Nome</th>
+            <th class="border-b border-line px-5 py-3">Telefone</th>
+            <th class="border-b border-line px-5 py-3">Conversas</th>
+            <th class="border-b border-line px-5 py-3">Última interação</th>
+            <th class="border-b border-line px-5 py-3 text-right">Ações</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="5" class="px-5 py-10 text-center text-[#667781]">
+            <td colspan="5" class="px-5 py-10 text-center text-ink-muted">
               <LoaderCircle class="mx-auto h-5 w-5 animate-spin" />
             </td>
           </tr>
           <tr v-else-if="!contacts.length">
-            <td colspan="5" class="px-5 py-10 text-center text-sm text-[#667781]">
+            <td colspan="5" class="px-5 py-10 text-center text-sm text-ink-muted">
               Nenhum contato encontrado
             </td>
           </tr>
@@ -458,14 +458,14 @@ onBeforeUnmount(clearSyncPoll)
             v-for="contact in contacts"
             v-else
             :key="contact.id"
-            class="border-b border-[#edf0f1] hover:bg-[#f7f8f8]"
+            class="border-b border-line hover:bg-canvas"
           >
-            <td class="border-b border-[#edf0f1] px-5 py-3">
+            <td class="border-b border-line px-5 py-3">
               <div v-if="editingContactId === contact.id" class="flex min-w-0 items-center gap-2">
                 <input
                   v-model="editingName"
                   maxlength="160"
-                  class="h-9 min-w-0 flex-1 rounded-lg border border-[#d8dcdf] px-3 text-sm outline-none focus:ring-1 focus:ring-fluvius-500/30"
+                  class="h-9 min-w-0 flex-1 rounded-lg border border-line bg-panel px-3 text-sm text-ink outline-none focus:ring-1 focus:ring-fluvius-500/30"
                   @keyup.enter="saveEditing(contact)"
                   @keyup.escape="stopEditing"
                 />
@@ -479,29 +479,29 @@ onBeforeUnmount(clearSyncPoll)
                 </button>
               </div>
               <div v-else class="flex min-w-0 items-center gap-3">
-                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700">
+                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-success-soft text-sm font-semibold text-success-strong">
                   {{ contact.display_name.slice(0, 1).toUpperCase() }}
                 </div>
                 <div class="min-w-0">
-                  <p class="truncate font-medium text-[#111b21]">{{ contact.display_name }}</p>
-                  <p class="truncate text-xs text-[#667781]">Direto</p>
+                  <p class="truncate font-medium text-ink">{{ contact.display_name }}</p>
+                  <p class="truncate text-xs text-ink-muted">Direto</p>
                 </div>
               </div>
             </td>
-            <td class="border-b border-[#edf0f1] px-5 py-3 font-medium text-[#111b21]">
+            <td class="border-b border-line px-5 py-3 font-medium text-ink">
               {{ phoneLabel(contact.phone_number) }}
             </td>
-            <td class="border-b border-[#edf0f1] px-5 py-3 text-[#54656f]">
+            <td class="border-b border-line px-5 py-3 text-ink-secondary">
               {{ contact.conversation_count }}
             </td>
-            <td class="border-b border-[#edf0f1] px-5 py-3 text-[#54656f]">
+            <td class="border-b border-line px-5 py-3 text-ink-secondary">
               {{ dateLabel(contact.last_interaction_at) }}
             </td>
-            <td class="border-b border-[#edf0f1] px-5 py-3">
+            <td class="border-b border-line px-5 py-3">
               <div class="flex justify-end gap-2">
                 <button
                   type="button"
-                  class="grid h-9 w-9 place-items-center rounded-lg border border-[#d8dcdf] text-[#54656f] transition hover:bg-white hover:text-[#111b21]"
+                  class="grid h-9 w-9 place-items-center rounded-lg border border-line text-ink-secondary transition hover:bg-panel hover:text-ink"
                   title="Editar nome"
                   @click="editingContactId === contact.id ? stopEditing() : startEditing(contact)"
                 >
@@ -510,7 +510,7 @@ onBeforeUnmount(clearSyncPoll)
                 </button>
                 <button
                   type="button"
-                  class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-neutral-action px-3 text-xs font-medium text-white transition hover:bg-neutral-action disabled:cursor-not-allowed disabled:opacity-50"
                   :disabled="!selectedChannelId || startingContactId === contact.id"
                   @click="openConversation(contact)"
                 >
@@ -525,12 +525,12 @@ onBeforeUnmount(clearSyncPoll)
       </table>
     </div>
 
-    <footer class="flex shrink-0 items-center justify-between border-t border-[#d8dcdf] bg-white px-5 py-3 text-sm text-[#54656f]">
+    <footer class="flex shrink-0 items-center justify-between border-t border-line bg-panel px-5 py-3 text-sm text-ink-secondary">
       <span>{{ total }} contato{{ total === 1 ? '' : 's' }}</span>
       <div class="flex gap-2">
         <button
           type="button"
-          class="rounded-lg border border-[#d8dcdf] px-3 py-1.5 font-medium text-[#111b21] disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg border border-line px-3 py-1.5 font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!hasPreviousPage || loading"
           @click="changePage(-1)"
         >
@@ -538,7 +538,7 @@ onBeforeUnmount(clearSyncPoll)
         </button>
         <button
           type="button"
-          class="rounded-lg border border-[#d8dcdf] px-3 py-1.5 font-medium text-[#111b21] disabled:cursor-not-allowed disabled:opacity-50"
+          class="rounded-lg border border-line px-3 py-1.5 font-medium text-ink disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!hasNextPage || loading"
           @click="changePage(1)"
         >

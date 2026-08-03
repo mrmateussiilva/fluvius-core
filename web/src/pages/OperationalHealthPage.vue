@@ -33,17 +33,17 @@ const statusPresentation = computed(() => {
     healthy: {
       label: 'Operação saudável',
       detail: 'Filas, workers e canais estão dentro dos limites esperados.',
-      classes: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      classes: 'border-success/30 bg-success-soft text-success-strong',
     },
     attention: {
       label: 'Operação exige atenção',
       detail: 'Há itens que devem ser revisados pelo administrador.',
-      classes: 'border-amber-200 bg-amber-50 text-amber-900',
+      classes: 'border-warning/30 bg-warning-soft text-warning-strong',
     },
     critical: {
       label: 'Operação crítica',
       detail: 'Existe risco de mensagens não serem enviadas normalmente.',
-      classes: 'border-rose-200 bg-rose-50 text-rose-800',
+      classes: 'border-danger/30 bg-danger-soft text-danger-strong',
     },
   }
   return presentations[operations.health?.status || 'attention']
@@ -73,18 +73,18 @@ function channelStatusLabel(status: ChannelStatus) {
 
 function channelStatusClass(status: ChannelStatus) {
   if (status === 'connected') {
-    return 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+    return 'bg-success-soft text-success-strong ring-success/20'
   }
   if (status === 'connecting' || status === 'requires_qr') {
-    return 'bg-amber-50 text-amber-700 ring-amber-100'
+    return 'bg-warning-soft text-warning-strong ring-warning/20'
   }
-  return 'bg-rose-50 text-rose-700 ring-rose-100'
+  return 'bg-danger-soft text-danger-strong ring-danger/20'
 }
 
 function reconcileStatusClass(active: boolean) {
   return active
-    ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
-    : 'bg-rose-50 text-rose-700 ring-rose-100'
+    ? 'bg-success-soft text-success-strong ring-success/20'
+    : 'bg-danger-soft text-danger-strong ring-danger/20'
 }
 
 onMounted(async () => {
@@ -98,7 +98,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-slate-50">
+  <div class="h-full overflow-y-auto bg-canvas">
     <div class="mx-auto max-w-6xl p-5 sm:p-8">
       <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -108,16 +108,16 @@ onMounted(async () => {
               Administração da empresa
             </span>
           </div>
-          <h1 class="mt-1 text-2xl font-semibold text-slate-900">
+          <h1 class="mt-1 text-2xl font-semibold text-ink">
             Saúde operacional
           </h1>
-          <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+          <p class="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">
             Monitore filas, workers, entregas e canais da sua empresa sem
             expor informações de outros tenants.
           </p>
         </div>
         <button
-          class="flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+          class="flex h-10 items-center justify-center gap-2 rounded-lg border border-line bg-panel px-4 text-sm font-semibold text-ink-secondary shadow-sm transition hover:bg-canvas disabled:opacity-50"
           :disabled="operations.loading"
           @click="operations.refresh"
         >
@@ -131,7 +131,7 @@ onMounted(async () => {
 
       <div
         v-if="operations.error"
-        class="mt-6 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+        class="mt-6 flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft p-4 text-sm text-danger-strong"
       >
         <XCircle class="h-5 w-5 shrink-0" />
         {{ operations.error }}
@@ -139,9 +139,9 @@ onMounted(async () => {
 
       <div
         v-if="operations.loading && !operations.health"
-        class="mt-6 grid min-h-64 place-items-center rounded-2xl border border-slate-200 bg-white"
+        class="mt-6 grid min-h-64 place-items-center rounded-lg border border-line bg-panel"
       >
-        <div class="flex items-center gap-2 text-sm text-slate-500">
+        <div class="flex items-center gap-2 text-sm text-ink-muted">
           <LoaderCircle class="h-5 w-5 animate-spin text-fluvius-700" />
           Verificando a operação...
         </div>
@@ -149,7 +149,7 @@ onMounted(async () => {
 
       <template v-if="operations.health">
         <section
-          class="mt-6 flex items-start gap-3 rounded-2xl border p-5"
+          class="mt-6 flex items-start gap-3 rounded-lg border p-5"
           :class="statusPresentation.classes"
         >
           <CheckCircle2
@@ -170,84 +170,84 @@ onMounted(async () => {
 
         <section
           v-if="operations.health.issues.length"
-          class="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          class="mt-5 overflow-hidden rounded-lg border border-line bg-panel shadow-sm"
         >
-          <header class="border-b border-slate-100 px-5 py-4">
-            <h2 class="font-semibold text-slate-900">Ações necessárias</h2>
+          <header class="border-b border-line px-5 py-4">
+            <h2 class="font-semibold text-ink">Ações necessárias</h2>
           </header>
-          <ul class="divide-y divide-slate-100">
+          <ul class="divide-y divide-line">
             <li
               v-for="issue in operations.health.issues"
               :key="issue"
-              class="flex items-start gap-3 px-5 py-3 text-sm text-slate-700"
+              class="flex items-start gap-3 px-5 py-3 text-sm text-ink-secondary"
             >
-              <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
               {{ issue }}
             </li>
           </ul>
         </section>
 
         <section class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
             <ServerCog class="h-5 w-5 text-fluvius-700" />
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Worker de entregas
             </p>
             <p
               class="mt-1 font-semibold"
               :class="
                 operations.health.delivery_worker_online
-                  ? 'text-emerald-700'
-                  : 'text-rose-700'
+                  ? 'text-success-strong'
+                  : 'text-danger-strong'
               "
             >
               {{ operations.health.delivery_worker_online ? 'Online' : 'Offline' }}
             </p>
           </article>
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <Wrench class="h-5 w-5 text-sky-700" />
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <Wrench class="h-5 w-5 text-info-strong" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Worker de manutenção
             </p>
             <p
               class="mt-1 font-semibold"
               :class="
                 operations.health.maintenance_worker_online
-                  ? 'text-emerald-700'
-                  : 'text-amber-700'
+                  ? 'text-success-strong'
+                  : 'text-warning-strong'
               "
             >
               {{ operations.health.maintenance_worker_online ? 'Online' : 'Offline' }}
             </p>
           </article>
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <Clock3 class="h-5 w-5 text-amber-600" />
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <Clock3 class="h-5 w-5 text-warning" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Entregas pendentes
             </p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
+            <p class="mt-1 text-2xl font-semibold text-ink">
               {{ operations.health.pending_deliveries }}
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-ink-muted">
               {{ operations.health.delayed_deliveries }} atrasadas
             </p>
           </article>
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <MessageSquareWarning class="h-5 w-5 text-rose-600" />
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <MessageSquareWarning class="h-5 w-5 text-danger" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Falhas em 24 horas
             </p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
+            <p class="mt-1 text-2xl font-semibold text-ink">
               {{ operations.health.failed_deliveries_24h }}
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-ink-muted">
               Mais antiga pendente:
               {{ formatDate(operations.health.oldest_pending_at) }}
             </p>
           </article>
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
             <div class="flex items-start justify-between gap-3">
-              <RadioTower class="h-5 w-5 text-violet-700" />
+              <RadioTower class="h-5 w-5 text-info" />
               <span
                 class="rounded-full px-2 py-1 text-[10px] font-semibold ring-1"
                 :class="reconcileStatusClass(operations.health.webhook_reconcile.active)"
@@ -259,17 +259,17 @@ onMounted(async () => {
                 }}
               </span>
             </div>
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Webhooks pendentes
             </p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
+            <p class="mt-1 text-2xl font-semibold text-ink">
               {{ operations.health.pending_provider_events }}
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-ink-muted">
               {{ operations.health.failed_provider_events }} com erro · mais antigo:
               {{ formatDate(operations.health.oldest_pending_event_at) }}
             </p>
-            <p class="mt-2 text-xs text-slate-500">
+            <p class="mt-2 text-xs text-ink-muted">
               Último lote:
               {{ operations.health.webhook_reconcile.last_resolved_events }}
               resolvido(s) de
@@ -278,14 +278,14 @@ onMounted(async () => {
             </p>
             <p
               v-if="operations.lastReconcile"
-              class="mt-1 text-xs text-emerald-700"
+              class="mt-1 text-xs text-success-strong"
             >
               Agora:
               {{ operations.lastReconcile.resolved_events }} resolvido(s);
               {{ operations.lastReconcile.remaining_pending_events }} pendente(s)
             </p>
             <button
-              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="
                 operations.reconciling ||
                 operations.health.pending_provider_events === 0
@@ -300,40 +300,40 @@ onMounted(async () => {
               Reconciliar agora
             </button>
           </article>
-          <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <AlertTriangle class="h-5 w-5 text-amber-600" />
-            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <AlertTriangle class="h-5 w-5 text-warning" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Canais sem webhook
             </p>
-            <p class="mt-1 text-2xl font-semibold text-slate-900">
+            <p class="mt-1 text-2xl font-semibold text-ink">
               {{ operations.health.stale_connected_channels }}
             </p>
-            <p class="mt-1 text-xs text-slate-500">
+            <p class="mt-1 text-xs text-ink-muted">
               Conectados há 30+ min sem nenhum evento
             </p>
           </article>
         </section>
 
-        <section class="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <header class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <section class="mt-5 overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
+          <header class="flex items-center justify-between border-b border-line px-5 py-4">
             <div>
-              <h2 class="font-semibold text-slate-900">Canais do WhatsApp</h2>
-              <p class="mt-0.5 text-xs text-slate-500">
+              <h2 class="font-semibold text-ink">Canais do WhatsApp</h2>
+              <p class="mt-0.5 text-xs text-ink-muted">
                 {{ operations.health.connected_channels }} de
                 {{ operations.health.total_channels }} conectados
               </p>
             </div>
             <RadioTower class="h-5 w-5 text-fluvius-700" />
           </header>
-          <div v-if="operations.health.channels.length" class="divide-y divide-slate-100">
+          <div v-if="operations.health.channels.length" class="divide-y divide-line">
             <article
               v-for="channel in operations.health.channels"
               :key="channel.id"
               class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p class="font-medium text-slate-900">{{ channel.name }}</p>
-                <p class="mt-0.5 text-xs text-slate-500">
+                <p class="font-medium text-ink">{{ channel.name }}</p>
+                <p class="mt-0.5 text-xs text-ink-muted">
                   {{ channel.phone_number || 'Número ainda não informado' }}
                 </p>
               </div>
@@ -344,7 +344,7 @@ onMounted(async () => {
                 >
                   {{ channelStatusLabel(channel.status) }}
                 </span>
-                <p class="mt-1.5 text-xs text-slate-400">
+                <p class="mt-1.5 text-xs text-ink-faint">
                   Último evento: {{ formatDate(channel.last_event_at) }}
                 </p>
                 <p
@@ -352,8 +352,8 @@ onMounted(async () => {
                   class="mt-1 text-xs"
                   :class="
                     channel.failed_events || channel.webhook_stale
-                      ? 'text-rose-600'
-                      : 'text-amber-600'
+                      ? 'text-danger'
+                      : 'text-warning'
                   "
                 >
                   <span v-if="channel.pending_events">
@@ -367,7 +367,7 @@ onMounted(async () => {
               </div>
             </article>
           </div>
-          <div v-else class="px-5 py-10 text-center text-sm text-slate-400">
+          <div v-else class="px-5 py-10 text-center text-sm text-ink-faint">
             Nenhum canal cadastrado nesta empresa.
           </div>
         </section>

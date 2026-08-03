@@ -268,27 +268,27 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-slate-50">
+  <div class="h-full overflow-y-auto bg-canvas">
     <div class="mx-auto max-w-7xl p-5 sm:p-8">
       <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <div class="flex items-center gap-2 text-amber-700">
+          <div class="flex items-center gap-2 text-warning-strong">
             <ShieldCheck class="h-5 w-5" />
             <span class="text-xs font-semibold uppercase tracking-[0.14em]">
               Administração Fluvius
             </span>
           </div>
-          <h1 class="mt-1 text-2xl font-semibold text-slate-900">
+          <h1 class="mt-1 text-2xl font-semibold text-ink">
             Empresas da plataforma
           </h1>
-          <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+          <p class="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">
             Crie empresas, acompanhe seus acessos e canais, suspenda operações e
             entre para suporte com registro de auditoria.
           </p>
         </div>
         <div class="flex gap-2">
           <button
-            class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            class="inline-flex items-center gap-2 rounded-lg border border-line bg-panel px-4 py-2.5 text-sm font-medium text-ink-secondary hover:bg-canvas"
             :disabled="loading"
             @click="loadTenants"
           >
@@ -296,7 +296,7 @@ onMounted(async () => {
             Atualizar
           </button>
           <button
-            class="inline-flex items-center gap-2 rounded-xl bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800"
+            class="inline-flex items-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800"
             @click="createOpen = true"
           >
             <Plus class="h-4 w-4" />
@@ -306,7 +306,7 @@ onMounted(async () => {
       </header>
 
       <div
-        class="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        class="mt-4 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning-strong"
       >
         Você está operando em
         <strong>{{ auth.user?.tenant_name }}</strong>. Entrar em outra empresa
@@ -315,38 +315,38 @@ onMounted(async () => {
 
       <div
         v-if="notice"
-        class="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+        class="mt-4 flex items-center gap-2 rounded-lg border border-success/30 bg-success-soft px-4 py-3 text-sm text-success-strong"
       >
         <CheckCircle2 class="h-4 w-4" />
         {{ notice }}
       </div>
       <div
         v-if="error"
-        class="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+        class="mt-4 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger-strong"
       >
         <XCircle class="h-4 w-4" />
         {{ error }}
       </div>
 
       <section class="mt-6 grid gap-3 sm:grid-cols-3">
-        <div class="rounded-2xl border border-slate-200 bg-white p-5">
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div class="rounded-lg border border-line bg-panel p-5">
+          <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Empresas
           </p>
-          <p class="mt-2 text-3xl font-semibold text-slate-900">
+          <p class="mt-2 text-3xl font-semibold text-ink">
             {{ tenants.length }}
           </p>
         </div>
-        <div class="rounded-2xl border border-slate-200 bg-white p-5">
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div class="rounded-lg border border-line bg-panel p-5">
+          <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Ativas
           </p>
-          <p class="mt-2 text-3xl font-semibold text-emerald-700">
+          <p class="mt-2 text-3xl font-semibold text-success-strong">
             {{ activeTenants }}
           </p>
         </div>
-        <div class="rounded-2xl border border-slate-200 bg-white p-5">
-          <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        <div class="rounded-lg border border-line bg-panel p-5">
+          <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Canais conectados
           </p>
           <p class="mt-2 text-3xl font-semibold text-fluvius-700">
@@ -357,59 +357,59 @@ onMounted(async () => {
 
       <div
         v-if="loading"
-        class="mt-6 grid min-h-64 place-items-center rounded-2xl border border-slate-200 bg-white"
+        class="mt-6 grid min-h-64 place-items-center rounded-lg border border-line bg-panel"
       >
-        <div class="flex items-center gap-2 text-sm text-slate-500">
+        <div class="flex items-center gap-2 text-sm text-ink-muted">
           <LoaderCircle class="h-5 w-5 animate-spin text-fluvius-700" />
           Carregando empresas...
         </div>
       </div>
 
       <div v-else class="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.8fr)]">
-        <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-          <div class="border-b border-slate-100 px-5 py-4">
-            <h2 class="font-semibold text-slate-900">Empresas cadastradas</h2>
+        <section class="overflow-hidden rounded-lg border border-line bg-panel">
+          <div class="border-b border-line px-5 py-4">
+            <h2 class="font-semibold text-ink">Empresas cadastradas</h2>
           </div>
           <div
             v-if="!tenants.length"
-            class="grid min-h-48 place-items-center p-8 text-center text-sm text-slate-500"
+            class="grid min-h-48 place-items-center p-8 text-center text-sm text-ink-muted"
           >
             Nenhuma empresa cadastrada.
           </div>
-          <div v-else class="divide-y divide-slate-100">
+          <div v-else class="divide-y divide-line">
             <article
               v-for="tenant in tenants"
               :key="tenant.id"
-              class="grid cursor-pointer gap-4 px-5 py-4 hover:bg-slate-50 lg:grid-cols-[minmax(0,1fr)_auto]"
-              :class="{ 'bg-emerald-50/40': selected?.id === tenant.id }"
+              class="grid cursor-pointer gap-4 px-5 py-4 hover:bg-canvas lg:grid-cols-[minmax(0,1fr)_auto]"
+              :class="{ 'bg-success-soft/40': selected?.id === tenant.id }"
               @click="selectTenant(tenant.id)"
             >
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="truncate font-semibold text-slate-900">
+                  <h3 class="truncate font-semibold text-ink">
                     {{ tenant.name }}
                   </h3>
                   <span
                     class="rounded-full px-2 py-0.5 text-xs font-medium"
                     :class="
                       tenant.is_active
-                        ? 'bg-emerald-50 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
+                        ? 'bg-success-soft text-success-strong'
+                        : 'bg-panel-muted text-ink-muted'
                     "
                   >
                     {{ tenant.is_active ? 'Ativa' : 'Suspensa' }}
                   </span>
                   <span
                     v-if="tenant.id === auth.user?.tenant_id"
-                    class="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700"
+                    class="rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info-strong"
                   >
                     Empresa atual
                   </span>
                 </div>
-                <p class="mt-1 text-xs text-slate-400">
+                <p class="mt-1 text-xs text-ink-faint">
                   {{ tenant.slug }} · criada em {{ formatDate(tenant.created_at) }}
                 </p>
-                <div class="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
+                <div class="mt-3 flex flex-wrap gap-4 text-xs text-ink-muted">
                   <span class="inline-flex items-center gap-1">
                     <UsersRound class="h-3.5 w-3.5" />
                     {{ tenant.active_user_count }}/{{ tenant.user_count }} usuários
@@ -422,7 +422,7 @@ onMounted(async () => {
               </div>
               <div class="flex items-center gap-2" @click.stop>
                 <button
-                  class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  class="rounded-lg border border-line px-3 py-2 text-xs font-medium text-ink-secondary hover:bg-canvas disabled:opacity-50"
                   :disabled="
                     actionTenantId === tenant.id ||
                     (!tenant.is_active && tenant.id === auth.user?.tenant_id)
@@ -448,41 +448,41 @@ onMounted(async () => {
           </div>
         </section>
 
-        <aside class="rounded-2xl border border-slate-200 bg-white">
-          <div class="border-b border-slate-100 px-5 py-4">
-            <h2 class="font-semibold text-slate-900">Detalhes da empresa</h2>
+        <aside class="rounded-lg border border-line bg-panel">
+          <div class="border-b border-line px-5 py-4">
+            <h2 class="font-semibold text-ink">Detalhes da empresa</h2>
           </div>
           <div v-if="detailLoading" class="grid min-h-64 place-items-center">
             <LoaderCircle class="h-6 w-6 animate-spin text-fluvius-700" />
           </div>
           <div
             v-else-if="!selected"
-            class="grid min-h-64 place-items-center p-8 text-center text-sm text-slate-500"
+            class="grid min-h-64 place-items-center p-8 text-center text-sm text-ink-muted"
           >
             Selecione uma empresa para ver usuários e canais.
           </div>
           <div v-else class="p-5">
             <div class="flex items-start gap-3">
-              <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fluvius-50 text-fluvius-700">
+              <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-fluvius-50 text-fluvius-700">
                 <Building2 class="h-5 w-5" />
               </div>
               <div class="min-w-0">
-                <p class="truncate font-semibold text-slate-900">{{ selected.name }}</p>
-                <p class="text-xs text-slate-400">{{ selected.slug }}</p>
+                <p class="truncate font-semibold text-ink">{{ selected.name }}</p>
+                <p class="text-xs text-ink-faint">{{ selected.slug }}</p>
               </div>
             </div>
 
-            <div class="mt-5 rounded-xl border border-fluvius-100 bg-fluvius-50 p-3">
+            <div class="mt-5 rounded-lg border border-fluvius-100 bg-fluvius-50 p-3">
               <p class="text-xs font-semibold uppercase tracking-wider text-fluvius-700">
                 Link exclusivo de acesso
               </p>
-              <p class="mt-1 break-all text-xs text-slate-600">
+              <p class="mt-1 break-all text-xs text-ink-secondary">
                 {{ tenantLoginUrl(selected.slug) }}
               </p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1.5 rounded-lg border border-fluvius-200 bg-white px-3 py-2 text-xs font-medium text-fluvius-800 hover:bg-fluvius-100"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-fluvius-200 bg-panel px-3 py-2 text-xs font-medium text-fluvius-800 hover:bg-fluvius-100"
                   @click="
                     copyText(
                       tenantLoginUrl(selected.slug),
@@ -505,56 +505,56 @@ onMounted(async () => {
               </div>
             </div>
 
-            <h3 class="mt-6 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 class="mt-6 text-xs font-semibold uppercase tracking-wider text-ink-faint">
               Usuários
             </h3>
             <div v-if="selected.users.length" class="mt-2 space-y-2">
               <div
                 v-for="member in selected.users"
                 :key="member.id"
-                class="flex items-center gap-3 rounded-xl border border-slate-100 p-3"
+                class="flex items-center gap-3 rounded-lg border border-line p-3"
               >
-                <UserRound class="h-4 w-4 shrink-0 text-slate-400" />
+                <UserRound class="h-4 w-4 shrink-0 text-ink-faint" />
                 <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm font-medium text-slate-800">
+                  <p class="truncate text-sm font-medium text-ink">
                     {{ member.name }}
                   </p>
-                  <p class="truncate text-xs text-slate-400">{{ member.email }}</p>
+                  <p class="truncate text-xs text-ink-faint">{{ member.email }}</p>
                 </div>
                 <div class="text-right text-xs">
-                  <p class="font-medium text-slate-600">
+                  <p class="font-medium text-ink-secondary">
                     {{ member.role === 'admin' ? 'Admin' : 'Atendente' }}
                   </p>
-                  <p :class="member.is_active ? 'text-emerald-600' : 'text-slate-400'">
+                  <p :class="member.is_active ? 'text-success' : 'text-ink-faint'">
                     {{ member.is_active ? 'Ativo' : 'Inativo' }}
                   </p>
                 </div>
               </div>
             </div>
-            <p v-else class="mt-2 text-sm text-slate-400">Nenhum usuário.</p>
+            <p v-else class="mt-2 text-sm text-ink-faint">Nenhum usuário.</p>
 
-            <h3 class="mt-6 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <h3 class="mt-6 text-xs font-semibold uppercase tracking-wider text-ink-faint">
               Canais
             </h3>
             <div v-if="selected.channels.length" class="mt-2 space-y-2">
               <div
                 v-for="channel in selected.channels"
                 :key="channel.id"
-                class="flex items-center gap-3 rounded-xl border border-slate-100 p-3"
+                class="flex items-center gap-3 rounded-lg border border-line p-3"
               >
-                <Smartphone class="h-4 w-4 shrink-0 text-slate-400" />
+                <Smartphone class="h-4 w-4 shrink-0 text-ink-faint" />
                 <div class="min-w-0 flex-1">
-                  <p class="truncate text-sm font-medium text-slate-800">
+                  <p class="truncate text-sm font-medium text-ink">
                     {{ channel.name }}
                   </p>
-                  <p class="truncate text-xs text-slate-400">
+                  <p class="truncate text-xs text-ink-faint">
                     {{ channel.phone_number || 'Número ainda não identificado' }}
                   </p>
                 </div>
                 <ChannelStatusBadge :status="channel.status" />
               </div>
             </div>
-            <p v-else class="mt-2 text-sm text-slate-400">Nenhum canal.</p>
+            <p v-else class="mt-2 text-sm text-ink-faint">Nenhum canal.</p>
           </div>
         </aside>
       </div>
@@ -562,23 +562,23 @@ onMounted(async () => {
 
     <div
       v-if="createOpen"
-      class="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4"
+      class="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
       @click.self="createOpen = false"
     >
       <form
-        class="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+        class="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-lg bg-panel p-6 shadow-2xl"
         @submit.prevent="submitTenant"
       >
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h2 class="text-xl font-semibold text-slate-900">Nova empresa</h2>
-            <p class="mt-1 text-sm text-slate-500">
+            <h2 class="text-xl font-semibold text-ink">Nova empresa</h2>
+            <p class="mt-1 text-sm text-ink-muted">
               A empresa e seu primeiro administrador serão criados juntos.
             </p>
           </div>
           <button
             type="button"
-            class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            class="rounded-lg p-2 text-ink-faint hover:bg-panel-muted"
             @click="createOpen = false"
           >
             <X class="h-5 w-5" />
@@ -586,18 +586,18 @@ onMounted(async () => {
         </div>
 
         <div class="mt-5 grid gap-4 sm:grid-cols-2">
-          <label class="text-sm font-medium text-slate-700">
+          <label class="text-sm font-medium text-ink-secondary">
             Nome da empresa
             <input
               v-model="form.name"
               required
               minlength="2"
               maxlength="160"
-              class="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-fluvius-600"
+              class="mt-1.5 w-full rounded-lg border border-line-strong px-3 py-2.5 outline-none focus:border-fluvius-600"
               placeholder="Empresa Exemplo"
             />
           </label>
-          <label class="text-sm font-medium text-slate-700">
+          <label class="text-sm font-medium text-ink-secondary">
             Identificador
             <input
               v-model="form.slug"
@@ -605,33 +605,33 @@ onMounted(async () => {
               minlength="2"
               maxlength="100"
               pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-              class="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-fluvius-600"
+              class="mt-1.5 w-full rounded-lg border border-line-strong px-3 py-2.5 outline-none focus:border-fluvius-600"
               placeholder="empresa-exemplo"
               @blur="normalizeSlug"
             />
           </label>
-          <label class="text-sm font-medium text-slate-700">
+          <label class="text-sm font-medium text-ink-secondary">
             Administrador inicial
             <input
               v-model="form.admin_name"
               required
               minlength="2"
               maxlength="160"
-              class="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-fluvius-600"
+              class="mt-1.5 w-full rounded-lg border border-line-strong px-3 py-2.5 outline-none focus:border-fluvius-600"
               placeholder="Nome do administrador"
             />
           </label>
-          <label class="text-sm font-medium text-slate-700">
+          <label class="text-sm font-medium text-ink-secondary">
             E-mail
             <input
               v-model="form.admin_email"
               type="email"
               required
-              class="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-fluvius-600"
+              class="mt-1.5 w-full rounded-lg border border-line-strong px-3 py-2.5 outline-none focus:border-fluvius-600"
               placeholder="admin@empresa.com.br"
             />
           </label>
-          <label class="text-sm font-medium text-slate-700 sm:col-span-2">
+          <label class="text-sm font-medium text-ink-secondary sm:col-span-2">
             Senha inicial
             <input
               v-model="form.admin_password"
@@ -640,7 +640,7 @@ onMounted(async () => {
               minlength="12"
               maxlength="128"
               autocomplete="new-password"
-              class="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-fluvius-600"
+              class="mt-1.5 w-full rounded-lg border border-line-strong px-3 py-2.5 outline-none focus:border-fluvius-600"
               placeholder="No mínimo 12 caracteres"
             />
           </label>
@@ -649,13 +649,13 @@ onMounted(async () => {
         <div class="mt-6 flex justify-end gap-2">
           <button
             type="button"
-            class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            class="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-secondary hover:bg-canvas"
             @click="createOpen = false"
           >
             Cancelar
           </button>
           <button
-            class="inline-flex items-center gap-2 rounded-xl bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800 disabled:opacity-50"
+            class="inline-flex items-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800 disabled:opacity-50"
             :disabled="creating"
           >
             <LoaderCircle v-if="creating" class="h-4 w-4 animate-spin" />
@@ -668,29 +668,29 @@ onMounted(async () => {
 
     <div
       v-if="initialAccess"
-      class="fixed inset-0 z-[60] grid place-items-center bg-slate-950/55 p-4"
+      class="fixed inset-0 z-[60] grid place-items-center bg-black/55 p-4"
       @click.self="closeInitialAccess"
     >
-      <section class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+      <section class="w-full max-w-lg rounded-lg bg-panel p-6 shadow-2xl">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <div class="flex items-center gap-2 text-emerald-700">
+            <div class="flex items-center gap-2 text-success-strong">
               <CheckCircle2 class="h-5 w-5" />
               <span class="text-xs font-semibold uppercase tracking-wider">
                 Empresa criada
               </span>
             </div>
-            <h2 class="mt-1 text-xl font-semibold text-slate-900">
+            <h2 class="mt-1 text-xl font-semibold text-ink">
               Envie este acesso ao cliente
             </h2>
-            <p class="mt-1 text-sm leading-6 text-slate-500">
+            <p class="mt-1 text-sm leading-6 text-ink-muted">
               A senha é exibida somente agora. Depois de fechar, ela não poderá
               ser consultada nesta tela.
             </p>
           </div>
           <button
             type="button"
-            class="rounded-lg p-2 text-slate-400 hover:bg-slate-100"
+            class="rounded-lg p-2 text-ink-faint hover:bg-panel-muted"
             aria-label="Fechar"
             @click="closeInitialAccess"
           >
@@ -699,30 +699,30 @@ onMounted(async () => {
         </div>
 
         <dl class="mt-5 space-y-3">
-          <div class="rounded-xl border border-slate-200 p-3">
-            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <div class="rounded-lg border border-line p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-faint">
               <ExternalLink class="h-3.5 w-3.5" />
               Link da empresa
             </dt>
-            <dd class="mt-1 break-all text-sm font-medium text-slate-800">
+            <dd class="mt-1 break-all text-sm font-medium text-ink">
               {{ initialAccess.loginUrl }}
             </dd>
           </div>
-          <div class="rounded-xl border border-slate-200 p-3">
-            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <div class="rounded-lg border border-line p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-ink-faint">
               <Mail class="h-3.5 w-3.5" />
               E-mail
             </dt>
-            <dd class="mt-1 break-all text-sm font-medium text-slate-800">
+            <dd class="mt-1 break-all text-sm font-medium text-ink">
               {{ initialAccess.email }}
             </dd>
           </div>
-          <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
+          <div class="rounded-lg border border-warning/30 bg-warning-soft p-3">
+            <dt class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-warning-strong">
               <KeyRound class="h-3.5 w-3.5" />
               Senha inicial
             </dt>
-            <dd class="mt-1 break-all font-mono text-sm font-semibold text-amber-950">
+            <dd class="mt-1 break-all font-mono text-sm font-semibold text-warning-strong">
               {{ initialAccess.password }}
             </dd>
           </div>
@@ -731,14 +731,14 @@ onMounted(async () => {
         <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
-            class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            class="rounded-lg border border-line px-4 py-2.5 text-sm font-medium text-ink-secondary hover:bg-canvas"
             @click="closeInitialAccess"
           >
             Fechar
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center gap-2 rounded-xl bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800"
+            class="inline-flex items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-fluvius-800"
             @click="copyInitialAccess"
           >
             <CheckCircle2 v-if="accessCopied" class="h-4 w-4" />

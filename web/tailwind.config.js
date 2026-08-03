@@ -1,9 +1,38 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{vue,js,ts,jsx,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        canvas: 'rgb(var(--color-canvas) / <alpha-value>)',
+        panel: 'rgb(var(--color-panel) / <alpha-value>)',
+        'panel-muted': 'rgb(var(--color-panel-muted) / <alpha-value>)',
+        'panel-raised': 'rgb(var(--color-panel-raised) / <alpha-value>)',
+        ink: 'rgb(var(--color-ink) / <alpha-value>)',
+        'ink-secondary': 'rgb(var(--color-ink-secondary) / <alpha-value>)',
+        'ink-muted': 'rgb(var(--color-ink-muted) / <alpha-value>)',
+        'ink-faint': 'rgb(var(--color-ink-faint) / <alpha-value>)',
+        line: 'rgb(var(--color-line) / <alpha-value>)',
+        'line-strong': 'rgb(var(--color-line-strong) / <alpha-value>)',
+        'neutral-action': 'rgb(var(--color-neutral-action) / <alpha-value>)',
+        disabled: 'rgb(var(--color-disabled) / <alpha-value>)',
+        nav: 'rgb(var(--color-nav) / <alpha-value>)',
+        chat: 'rgb(var(--color-chat) / <alpha-value>)',
+        'message-in': 'rgb(var(--color-message-in) / <alpha-value>)',
+        'message-out': 'rgb(var(--color-message-out) / <alpha-value>)',
+        'success-soft': 'rgb(var(--color-success-soft) / <alpha-value>)',
+        success: 'rgb(var(--color-success) / <alpha-value>)',
+        'success-strong': 'rgb(var(--color-success-strong) / <alpha-value>)',
+        'warning-soft': 'rgb(var(--color-warning-soft) / <alpha-value>)',
+        warning: 'rgb(var(--color-warning) / <alpha-value>)',
+        'warning-strong': 'rgb(var(--color-warning-strong) / <alpha-value>)',
+        'danger-soft': 'rgb(var(--color-danger-soft) / <alpha-value>)',
+        danger: 'rgb(var(--color-danger) / <alpha-value>)',
+        'danger-strong': 'rgb(var(--color-danger-strong) / <alpha-value>)',
+        'info-soft': 'rgb(var(--color-info-soft) / <alpha-value>)',
+        info: 'rgb(var(--color-info) / <alpha-value>)',
+        'info-strong': 'rgb(var(--color-info-strong) / <alpha-value>)',
         fluvius: {
           50: '#effaf6',
           100: '#d9f4e9',

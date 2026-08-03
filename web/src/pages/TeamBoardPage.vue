@@ -353,8 +353,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col bg-[#eef1f3]">
-    <header class="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+  <div class="flex h-full min-h-0 flex-col bg-panel-muted">
+    <header class="shrink-0 border-b border-line bg-panel px-4 py-4 sm:px-6">
       <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <div class="flex items-center gap-2 text-fluvius-700">
@@ -363,19 +363,19 @@ onBeforeUnmount(() => {
               Operação em tempo real
             </span>
           </div>
-          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+          <h1 class="mt-1 text-2xl font-semibold tracking-tight text-ink">
             Quadro da equipe
           </h1>
-          <p class="mt-1 text-sm text-slate-500">
+          <p class="mt-1 text-sm text-ink-muted">
             Veja quem está atendendo cada conversa e como a fila está distribuída.
           </p>
         </div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label class="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-500 sm:w-64">
+          <label class="flex h-10 min-w-0 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-ink-muted sm:w-64">
             <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
             <select
               :value="boardChannelId || ''"
-              class="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none"
+              class="min-w-0 flex-1 bg-transparent text-sm font-medium text-ink outline-none"
               aria-label="Canal do quadro"
               @change="changeBoardChannel"
             >
@@ -390,25 +390,25 @@ onBeforeUnmount(() => {
             </select>
           </label>
           <div class="flex items-center gap-2 text-xs">
-            <span class="rounded-full bg-amber-50 px-2.5 py-1.5 font-medium text-amber-700 ring-1 ring-amber-100">
+            <span class="rounded-full bg-warning-soft px-2.5 py-1.5 font-medium text-warning-strong ring-1 ring-warning/20">
               {{ waitingCount }} aguardando
             </span>
-            <span class="rounded-full bg-emerald-50 px-2.5 py-1.5 font-medium text-emerald-700 ring-1 ring-emerald-100">
+            <span class="rounded-full bg-success-soft px-2.5 py-1.5 font-medium text-success-strong ring-1 ring-success/20">
               {{ activeCount }} em atendimento
             </span>
           </div>
-          <label class="flex h-10 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-slate-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-fluvius-500/15 sm:w-72">
+          <label class="flex h-10 min-w-0 items-center gap-2 rounded-lg border border-line bg-canvas px-3 text-ink-muted focus-within:bg-panel focus-within:ring-2 focus-within:ring-fluvius-500/15 sm:w-72">
             <Search class="h-4 w-4 shrink-0" />
             <input
               v-model="search"
               type="search"
               placeholder="Buscar contato ou mensagem"
-              class="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              class="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint"
             />
             <button
               v-if="search"
               type="button"
-              class="rounded-full p-0.5 hover:bg-slate-200"
+              class="rounded-full p-0.5 hover:bg-line"
               title="Limpar busca"
               @click="search = ''"
             >
@@ -417,7 +417,7 @@ onBeforeUnmount(() => {
           </label>
           <button
             type="button"
-            class="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+            class="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-line bg-panel text-ink-secondary transition hover:bg-canvas disabled:opacity-50"
             :disabled="refreshing"
             title="Atualizar quadro"
             @click="loadBoard()"
@@ -430,11 +430,11 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div
-        class="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs"
+        class="mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
         :class="
           isAdmin
             ? 'bg-fluvius-50 text-fluvius-800'
-            : 'bg-slate-100 text-slate-600'
+            : 'bg-panel-muted text-ink-secondary'
         "
       >
         <ShieldCheck v-if="isAdmin" class="h-4 w-4 shrink-0" />
@@ -450,14 +450,14 @@ onBeforeUnmount(() => {
 
     <div
       v-if="error || operationError"
-      class="shrink-0 border-b border-rose-100 bg-rose-50 px-4 py-2 text-center text-xs text-rose-700"
+      class="shrink-0 border-b border-danger/30 bg-danger-soft px-4 py-2 text-center text-xs text-danger-strong"
     >
       {{ operationError || error }}
     </div>
 
     <div
       v-if="loading"
-      class="grid min-h-0 flex-1 place-items-center text-sm text-slate-500"
+      class="grid min-h-0 flex-1 place-items-center text-sm text-ink-muted"
     >
       <div class="flex items-center gap-2">
         <LoaderCircle class="h-5 w-5 animate-spin text-fluvius-700" />
@@ -473,24 +473,24 @@ onBeforeUnmount(() => {
         <section
           v-for="column in columns"
           :key="column.id"
-          class="flex max-h-full w-[290px] shrink-0 flex-col rounded-2xl border bg-slate-100/80 shadow-sm transition sm:w-[310px]"
+          class="flex max-h-full w-[290px] shrink-0 flex-col rounded-lg border bg-panel-muted/80 shadow-sm transition sm:w-[310px]"
           :class="
             dragOverColumnId === column.id
               ? 'border-fluvius-400 bg-fluvius-50 ring-2 ring-fluvius-400/20'
-              : 'border-slate-200'
+              : 'border-line'
           "
           @dragenter.prevent="dragOver(column.id)"
           @dragover.prevent="dragOver(column.id)"
           @dragleave.self="dragOverColumnId = null"
           @drop="dropOnColumn($event, column.id)"
         >
-          <header class="flex items-center gap-3 border-b border-slate-200/80 px-3.5 py-3">
+          <header class="flex items-center gap-3 border-b border-line/80 px-3.5 py-3">
             <div
-              class="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-xs font-semibold"
+              class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-semibold"
               :class="
                 column.id === WAITING_COLUMN_ID
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-white text-fluvius-700 ring-1 ring-slate-200'
+                  ? 'bg-warning-soft text-warning-strong'
+                  : 'bg-panel text-fluvius-700 ring-1 ring-line'
               "
             >
               <Inbox
@@ -500,10 +500,10 @@ onBeforeUnmount(() => {
               <span v-else>{{ initials(column.name) }}</span>
             </div>
             <div class="min-w-0 flex-1">
-              <h2 class="truncate text-sm font-semibold text-slate-900">
+              <h2 class="truncate text-sm font-semibold text-ink">
                 {{ column.name }}
               </h2>
-              <p class="text-[10px] uppercase tracking-wide text-slate-500">
+              <p class="text-[10px] uppercase tracking-wide text-ink-muted">
                 {{
                   column.id === WAITING_COLUMN_ID
                     ? 'Sem responsável'
@@ -521,7 +521,7 @@ onBeforeUnmount(() => {
               >
                 {{ unreadForColumn(column.id) > 99 ? '99+' : unreadForColumn(column.id) }}
               </span>
-              <span class="min-w-6 rounded-full bg-white px-1.5 text-center text-[10px] font-semibold leading-6 text-slate-600 ring-1 ring-slate-200">
+              <span class="min-w-6 rounded-full bg-panel px-1.5 text-center text-[10px] font-semibold leading-6 text-ink-secondary ring-1 ring-line">
                 {{ cardsForColumn(column.id).length }}
               </span>
             </div>
@@ -531,7 +531,7 @@ onBeforeUnmount(() => {
             <article
               v-for="conversation in cardsForColumn(column.id)"
               :key="conversation.id"
-              class="group rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-px hover:border-slate-300 hover:shadow-md"
+              class="group rounded-lg border border-line bg-panel p-3 shadow-sm transition hover:-translate-y-px hover:border-line-strong hover:shadow-md"
               :class="[
                 isAdmin ? 'cursor-grab active:cursor-grabbing' : '',
                 draggedConversationId === conversation.id ? 'opacity-45' : '',
@@ -544,7 +544,7 @@ onBeforeUnmount(() => {
               <div class="flex items-start gap-2.5">
                 <GripVertical
                   v-if="isAdmin"
-                  class="mt-0.5 h-4 w-4 shrink-0 text-slate-300 transition group-hover:text-slate-500"
+                  class="mt-0.5 h-4 w-4 shrink-0 text-ink-faint transition group-hover:text-ink-muted"
                 />
                 <button
                   type="button"
@@ -553,33 +553,33 @@ onBeforeUnmount(() => {
                 >
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
-                      <h3 class="truncate text-sm font-semibold text-slate-900">
+                      <h3 class="truncate text-sm font-semibold text-ink">
                         {{ contactName(conversation) }}
                       </h3>
-                      <p class="mt-0.5 truncate text-[11px] text-slate-500">
+                      <p class="mt-0.5 truncate text-[11px] text-ink-muted">
                         {{ conversation.contact_phone }}
                       </p>
                       <p
                         v-if="!boardChannelId"
-                        class="mt-1 inline-flex max-w-full truncate rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700"
+                        class="mt-1 inline-flex max-w-full truncate rounded-full bg-info-soft px-2 py-0.5 text-[9px] font-semibold text-info-strong"
                       >
                         {{ conversation.channel_name }}
                       </p>
                     </div>
                     <time
-                      class="shrink-0 text-[10px] text-slate-400"
+                      class="shrink-0 text-[10px] text-ink-faint"
                       :datetime="conversation.last_message_at || undefined"
                     >
                       {{ timeLabel(conversation.last_message_at) }}
                     </time>
                   </div>
-                  <p class="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-slate-600">
+                  <p class="mt-2 line-clamp-2 min-h-8 text-xs leading-4 text-ink-secondary">
                     {{ messagePreview(conversation) }}
                   </p>
                 </button>
               </div>
 
-              <div class="mt-3 flex items-center gap-2 border-t border-slate-100 pt-2.5">
+              <div class="mt-3 flex items-center gap-2 border-t border-line pt-2.5">
                 <span
                   v-if="conversation.unread_count"
                   class="rounded-full bg-fluvius-50 px-2 py-1 text-[10px] font-semibold text-fluvius-700"
@@ -588,7 +588,7 @@ onBeforeUnmount(() => {
                 </span>
                 <span
                   v-if="conversation.channel_status !== 'connected'"
-                  class="flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700"
+                  class="flex items-center gap-1 rounded-full bg-danger-soft px-2 py-1 text-[10px] font-medium text-danger-strong"
                 >
                   <WifiOff class="h-3 w-3" />
                   Canal offline
@@ -596,7 +596,7 @@ onBeforeUnmount(() => {
                 <button
                   v-if="!conversation.unread_count && conversation.channel_status === 'connected'"
                   type="button"
-                  class="flex items-center gap-1 text-[10px] font-medium text-slate-500 transition hover:text-fluvius-700"
+                  class="flex items-center gap-1 text-[10px] font-medium text-ink-muted transition hover:text-fluvius-700"
                   @click="openConversation(conversation.id)"
                 >
                   <MessageCircle class="h-3 w-3" />
@@ -616,7 +616,7 @@ onBeforeUnmount(() => {
               >
                 <span class="sr-only">Mover atendimento</span>
                 <select
-                  class="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] text-slate-700 outline-none transition hover:bg-white focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
+                  class="h-8 w-full rounded-lg border border-line bg-canvas px-2 text-[11px] text-ink-secondary outline-none transition hover:bg-panel focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
                   :value="assignmentValue(conversation)"
                   :disabled="isMoving(conversation.id)"
                   @change="selectAssignment($event, conversation)"
@@ -635,11 +635,11 @@ onBeforeUnmount(() => {
 
             <div
               v-if="!cardsForColumn(column.id).length"
-              class="grid min-h-28 place-items-center rounded-xl border border-dashed border-slate-300 bg-white/40 px-4 text-center"
+              class="grid min-h-28 place-items-center rounded-lg border border-dashed border-line-strong bg-panel/40 px-4 text-center"
             >
               <div>
-                <Inbox class="mx-auto h-5 w-5 text-slate-300" />
-                <p class="mt-2 text-xs text-slate-400">
+                <Inbox class="mx-auto h-5 w-5 text-ink-faint" />
+                <p class="mt-2 text-xs text-ink-faint">
                   {{
                     search
                       ? 'Nenhuma conversa encontrada'

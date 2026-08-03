@@ -29,7 +29,7 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div
-      class="fixed inset-0 z-[80] flex flex-col bg-[#0b141a]/95 text-white backdrop-blur-sm"
+      class="fixed inset-0 z-[80] flex flex-col bg-black/95 text-white backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Visualização de mídia"

@@ -103,11 +103,11 @@ function initials(conversation: Conversation) {
 }
 
 const avatarPalette = [
-  'bg-emerald-100 text-emerald-700',
-  'bg-sky-100 text-sky-700',
-  'bg-violet-100 text-violet-700',
-  'bg-amber-100 text-amber-700',
-  'bg-rose-100 text-rose-700',
+  'bg-success-soft text-success-strong dark:bg-emerald-500/15 dark:text-emerald-300',
+  'bg-info-soft text-info-strong dark:bg-sky-500/15 dark:text-sky-300',
+  'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+  'bg-warning-soft text-warning-strong dark:bg-amber-500/15 dark:text-amber-300',
+  'bg-danger-soft text-danger-strong dark:bg-rose-500/15 dark:text-rose-300',
 ]
 
 function avatarClass(conversation: Conversation) {
@@ -152,22 +152,22 @@ function timeLabel(value: string | null) {
 </script>
 
 <template>
-  <aside class="flex h-full w-full shrink-0 flex-col border-r border-[#d8dcdf] bg-white md:w-[372px]">
-    <div class="border-b border-[#e6e9eb] bg-[#f7f8f8] px-4 pb-3 pt-4">
+  <aside class="flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[372px]">
+    <div class="border-b border-line bg-canvas px-4 pb-3 pt-4">
       <div class="flex items-center justify-between">
         <div>
           <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-fluvius-700">Atendimento</p>
-          <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-[#111b21]">Conversas</h1>
+          <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-ink">Conversas</h1>
         </div>
         <div class="grid h-9 w-9 place-items-center rounded-full bg-fluvius-50 text-fluvius-700" title="Central de conversas">
           <MessageSquareText class="h-[18px] w-[18px]" />
         </div>
       </div>
-      <label class="mt-3 flex items-center gap-2 rounded-lg border border-[#d8dcdf] bg-white px-3 py-2 text-[#54656f]">
+      <label class="mt-3 flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-ink-secondary">
         <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
         <select
           :value="activeChannelId || ''"
-          class="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-[#111b21] outline-none"
+          class="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-ink outline-none"
           aria-label="Canal de atendimento"
           @change="
             emit(
@@ -186,18 +186,18 @@ function timeLabel(value: string | null) {
           </option>
         </select>
       </label>
-      <label class="mt-3 flex h-10 items-center gap-2.5 rounded-lg bg-[#e9edef] px-3 text-[#667781] transition focus-within:bg-white focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
+      <label class="mt-3 flex h-10 items-center gap-2.5 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
         <Search class="h-4 w-4 shrink-0" />
         <input
           v-model="search"
           type="search"
           placeholder="Buscar por nome, número ou mensagem"
-          class="min-w-0 flex-1 bg-transparent text-[13px] text-[#111b21] outline-none placeholder:text-[#667781]"
+          class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
         />
         <button
           v-if="search"
           type="button"
-          class="rounded-full p-0.5 hover:bg-slate-200"
+          class="rounded-full p-0.5 hover:bg-line"
           title="Limpar busca"
           @click="search = ''"
         >
@@ -209,13 +209,13 @@ function timeLabel(value: string | null) {
           v-for="tab in tabs"
           :key="tab.value"
           class="flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition"
-          :class="activeStatus === tab.value ? 'border-fluvius-100 bg-fluvius-50 text-fluvius-700' : 'border-transparent text-[#54656f] hover:bg-[#e9edef]'"
+          :class="activeStatus === tab.value ? 'border-fluvius-100 bg-fluvius-50 text-fluvius-700' : 'border-transparent text-ink-secondary hover:bg-canvas'"
           @click="activeStatus = tab.value"
         >
           {{ tab.label }}
           <span
             class="min-w-4 rounded-full px-1 text-center text-[9px] leading-4"
-            :class="activeStatus === tab.value ? 'bg-fluvius-600 text-white' : 'bg-[#dfe3e5] text-[#54656f]'"
+            :class="activeStatus === tab.value ? 'bg-fluvius-600 text-white' : 'bg-panel-muted text-ink-secondary'"
           >
             {{ tabCounts[tab.value] }}
           </span>
@@ -228,8 +228,8 @@ function timeLabel(value: string | null) {
           class="rounded-md px-2 py-1 text-[10px] font-medium transition"
           :class="
             kindFilter === tab.value
-              ? 'bg-slate-800 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              ? 'bg-neutral-action text-white'
+              : 'bg-panel-muted text-ink-secondary hover:bg-line'
           "
           @click="kindFilter = tab.value"
         >
@@ -241,8 +241,8 @@ function timeLabel(value: string | null) {
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="group flex w-full gap-3 px-3 py-2.5 text-left transition hover:bg-[#f5f6f6]"
-        :class="selectedId === conversation.id ? 'bg-[#e9edef] hover:bg-[#e9edef]' : ''"
+        class="group flex w-full gap-3 px-3 py-2.5 text-left transition hover:bg-canvas"
+        :class="selectedId === conversation.id ? 'bg-canvas hover:bg-canvas' : ''"
         @click="emit('select', conversation.id)"
       >
         <div
@@ -252,20 +252,20 @@ function timeLabel(value: string | null) {
           <Users v-if="isGroup(conversation)" class="h-5 w-5" />
           <template v-else>{{ initials(conversation) }}</template>
         </div>
-        <div class="min-w-0 flex-1 border-b border-[#edf0f1] pb-2.5 pt-0.5 group-last:border-transparent">
+        <div class="min-w-0 flex-1 border-b border-line pb-2.5 pt-0.5 group-last:border-transparent">
           <div class="flex items-center gap-2">
-            <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-[#111b21]">
+            <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
               {{ displayName(conversation) }}
             </span>
             <span
               v-if="isGroup(conversation)"
-              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700"
+              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
             >
               Grupo
             </span>
             <time
               class="shrink-0 text-[11px]"
-              :class="conversation.unread_count ? 'font-medium text-fluvius-600' : 'text-[#667781]'"
+              :class="conversation.unread_count ? 'font-medium text-fluvius-600' : 'text-ink-muted'"
               :datetime="conversation.last_message_at || undefined"
             >
               {{ timeLabel(conversation.last_message_at) }}
@@ -274,12 +274,12 @@ function timeLabel(value: string | null) {
           <div class="mt-0.5 flex items-center gap-2">
             <span
               v-if="!activeChannelId"
-              class="max-w-24 shrink-0 truncate rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-semibold text-sky-700"
+              class="max-w-24 shrink-0 truncate rounded-full bg-info-soft px-2 py-0.5 text-[9px] font-semibold text-info-strong"
               :title="conversation.channel_name"
             >
               {{ conversation.channel_name }}
             </span>
-            <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-[#667781]">
+            <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted">
               {{ messagePreview(conversation) }}
             </span>
             <span
@@ -288,7 +288,7 @@ function timeLabel(value: string | null) {
                 conversation.status === 'open' &&
                 conversation.assigned_user_id
               "
-              class="max-w-28 shrink-0 truncate rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-medium text-slate-600"
+              class="max-w-28 shrink-0 truncate rounded-full bg-panel-muted px-2 py-0.5 text-[9px] font-medium text-ink-secondary"
               :title="`Responsável: ${assigneeName(conversation)}`"
             >
               {{ assigneeName(conversation) }}
@@ -302,11 +302,11 @@ function timeLabel(value: string | null) {
           </div>
         </div>
       </button>
-      <div v-if="!visible.length" class="px-8 py-14 text-center text-[#667781]">
-        <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[#f0f2f5]">
+      <div v-if="!visible.length" class="px-8 py-14 text-center text-ink-muted">
+        <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-panel-muted">
           <MessageSquareText class="h-5 w-5" />
         </div>
-        <p class="mt-3 text-sm font-medium text-[#3b4a54]">
+        <p class="mt-3 text-sm font-medium text-ink">
           {{ search ? 'Nenhuma conversa encontrada' : 'Fila vazia por aqui' }}
         </p>
         <p class="mt-1 text-xs">

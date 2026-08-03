@@ -4,9 +4,71 @@
 
 @layer base {
   :root {
+    --color-canvas: 243 245 246;
+    --color-panel: 255 255 255;
+    --color-panel-muted: 237 240 241;
+    --color-panel-raised: 255 255 255;
+    --color-ink: 32 38 41;
+    --color-ink-secondary: 79 92 98;
+    --color-ink-muted: 91 104 111;
+    --color-ink-faint: 102 114 120;
+    --color-line: 220 225 227;
+    --color-line-strong: 197 205 209;
+    --color-neutral-action: 42 51 55;
+    --color-disabled: 199 205 208;
+    --color-nav: 31 81 69;
+    --color-chat: 235 232 226;
+    --color-message-in: 255 255 255;
+    --color-message-out: 218 244 226;
+    --color-success-soft: 235 248 241;
+    --color-success: 30 137 91;
+    --color-success-strong: 20 105 69;
+    --color-warning-soft: 255 247 226;
+    --color-warning: 190 124 23;
+    --color-warning-strong: 132 82 12;
+    --color-danger-soft: 254 239 241;
+    --color-danger: 210 65 83;
+    --color-danger-strong: 157 37 52;
+    --color-info-soft: 235 246 252;
+    --color-info: 31 132 180;
+    --color-info-strong: 23 94 128;
+    --scrollbar-thumb: 102 116 123;
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     color-scheme: light;
+  }
+
+  :root.dark {
+    --color-canvas: 17 19 21;
+    --color-panel: 24 27 29;
+    --color-panel-muted: 32 36 39;
+    --color-panel-raised: 38 43 46;
+    --color-ink: 232 236 238;
+    --color-ink-secondary: 174 184 189;
+    --color-ink-muted: 136 149 155;
+    --color-ink-faint: 120 132 138;
+    --color-line: 47 54 58;
+    --color-line-strong: 65 73 77;
+    --color-neutral-action: 54 64 68;
+    --color-disabled: 70 78 82;
+    --color-nav: 21 26 25;
+    --color-chat: 15 18 19;
+    --color-message-in: 32 36 39;
+    --color-message-out: 20 73 60;
+    --color-success-soft: 21 52 40;
+    --color-success: 85 201 148;
+    --color-success-strong: 158 231 196;
+    --color-warning-soft: 58 45 21;
+    --color-warning: 232 180 83;
+    --color-warning-strong: 251 214 142;
+    --color-danger-soft: 62 29 34;
+    --color-danger: 238 123 136;
+    --color-danger-strong: 251 181 189;
+    --color-info-soft: 23 47 58;
+    --color-info: 105 190 229;
+    --color-info-strong: 177 224 246;
+    --scrollbar-thumb: 136 149 155;
+    color-scheme: dark;
   }
 
   html,
@@ -16,13 +78,20 @@
   }
 
   body {
-    @apply m-0 bg-[#e9edef] text-[#111b21] antialiased;
+    @apply m-0 bg-canvas text-ink antialiased;
   }
 
   button,
   input,
+  select,
   textarea {
     font: inherit;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply bg-panel text-ink placeholder:text-ink-faint;
   }
 
   button {
@@ -32,20 +101,24 @@
   ::selection {
     @apply bg-fluvius-100 text-fluvius-900;
   }
+
+  :root.dark ::selection {
+    @apply bg-fluvius-700 text-white;
+  }
 }
 
 @layer components {
   .chat-wallpaper {
-    background-color: #efeae2;
+    background-color: rgb(var(--color-chat));
     background-image:
-      linear-gradient(rgba(239, 234, 226, 0.88), rgba(239, 234, 226, 0.88)),
-      radial-gradient(circle at 12px 12px, rgba(17, 107, 87, 0.12) 1.2px, transparent 1.5px),
-      radial-gradient(circle at 36px 36px, rgba(17, 107, 87, 0.08) 1px, transparent 1.4px);
+      linear-gradient(rgb(var(--color-chat) / 0.92), rgb(var(--color-chat) / 0.92)),
+      radial-gradient(circle at 12px 12px, rgb(22 133 106 / 0.1) 1.2px, transparent 1.5px),
+      radial-gradient(circle at 36px 36px, rgb(22 133 106 / 0.06) 1px, transparent 1.4px);
     background-size: auto, 48px 48px, 48px 48px;
   }
 
   .soft-scrollbar {
-    scrollbar-color: rgba(100, 116, 139, 0.36) transparent;
+    scrollbar-color: rgb(var(--scrollbar-thumb) / 0.36) transparent;
     scrollbar-width: thin;
   }
 
@@ -55,7 +128,7 @@
 
   .soft-scrollbar::-webkit-scrollbar-thumb {
     border-radius: 9999px;
-    background: rgba(100, 116, 139, 0.32);
+    background: rgb(var(--scrollbar-thumb) / 0.32);
   }
 
   .message-tail-in,
@@ -76,12 +149,27 @@
   .message-tail-in::before {
     left: -8px;
     border-width: 0 10px 10px 0;
-    border-color: transparent #fff transparent transparent;
+    border-color: transparent rgb(var(--color-message-in)) transparent transparent;
   }
 
   .message-tail-out::before {
     right: -8px;
     border-width: 0 0 10px 10px;
-    border-color: transparent transparent transparent #d9fdd3;
+    border-color: transparent transparent transparent rgb(var(--color-message-out));
+  }
+}
+
+@layer utilities {
+  :root.dark .bg-fluvius-50 {
+    @apply bg-fluvius-700/15;
+  }
+
+  :root.dark .border-fluvius-100 {
+    @apply border-fluvius-600/30;
+  }
+
+  :root.dark .text-fluvius-700,
+  :root.dark .text-fluvius-800 {
+    @apply text-emerald-300;
   }
 }

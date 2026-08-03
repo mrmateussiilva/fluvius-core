@@ -71,7 +71,7 @@ const bubbleClass = computed(() => {
     return ['!max-w-none', '!bg-transparent', '!p-0', '!shadow-none']
   }
   return [
-    outgoing ? 'bg-[#d9fdd3]' : 'bg-white',
+    outgoing ? 'bg-message-out' : 'bg-message-in',
     outgoing && props.groupStart ? 'message-tail-out' : '',
     !outgoing && props.groupStart ? 'message-tail-in' : '',
     outgoing && !props.groupStart ? 'rounded-tr-[4px]' : '',
@@ -153,17 +153,17 @@ function showDetails() {
     :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="relative max-w-[88%] rounded-lg px-2.5 py-1.5 text-[#111b21] shadow-[0_1px_1px_rgba(11,20,26,0.13)] sm:max-w-[76%] lg:max-w-[68%]"
+      class="relative max-w-[88%] rounded-lg px-2.5 py-1.5 text-ink shadow-[0_1px_1px_rgba(11,20,26,0.13)] sm:max-w-[76%] lg:max-w-[68%]"
       :class="bubbleClass"
     >
       <button
         type="button"
-        class="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-l from-white/95 via-white/85 to-white/60 text-[#667781] opacity-100 shadow-sm transition hover:text-[#111b21] focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+        class="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-l from-message-in/95 via-message-in/85 to-message-in/60 text-ink-muted opacity-100 shadow-sm transition hover:text-ink focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
         :class="
           isNativeSticker
             ? '!bg-black/45 !text-white'
             : message.direction === 'outgoing'
-              ? '!from-[#d9fdd3] !via-[#d9fdd3]/90'
+              ? '!from-message-out !via-message-out/90'
               : ''
         "
         title="Ações da mensagem"
@@ -180,11 +180,11 @@ function showDetails() {
       />
       <div
         v-if="menuOpen"
-        class="absolute right-1 top-7 z-30 w-48 overflow-hidden rounded-lg bg-white py-1 text-[13px] text-[#3b4a54] shadow-2xl ring-1 ring-black/5"
+        class="absolute right-1 top-7 z-30 w-48 overflow-hidden rounded-lg bg-panel py-1 text-[13px] text-ink shadow-2xl ring-1 ring-black/5"
       >
         <button
           v-if="canReply"
-          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-[#f0f2f5]"
+          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-panel-muted"
           @click="reply"
         >
           <Reply class="h-4 w-4" />
@@ -192,14 +192,14 @@ function showDetails() {
         </button>
         <button
           v-if="canCopy"
-          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-[#f0f2f5]"
+          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-panel-muted"
           @click="copyMessage"
         >
           <Copy class="h-4 w-4" />
           Copiar texto
         </button>
         <button
-          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-[#f0f2f5]"
+          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-panel-muted"
           @click="showDetails"
         >
           <Info class="h-4 w-4" />
@@ -207,7 +207,7 @@ function showDetails() {
         </button>
         <button
           v-if="message.status === 'failed' && message.direction === 'outgoing'"
-          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-rose-700 transition hover:bg-rose-50"
+          class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-danger-strong transition hover:bg-danger-soft"
           :disabled="retrying"
           @click="retry"
         >
@@ -226,8 +226,8 @@ function showDetails() {
           isNativeSticker
             ? 'absolute left-1 top-1 z-[1] rounded-full bg-black/55 px-2 py-0.5 text-white shadow-sm'
             : message.direction === 'outgoing'
-              ? 'mb-0.5 pr-7 text-emerald-700'
-              : 'mb-0.5 pr-7 text-sky-700'
+              ? 'mb-0.5 pr-7 text-success-strong'
+              : 'mb-0.5 pr-7 text-info-strong'
         "
       >
         {{ message.participant_name || message.sender_name }}
@@ -235,13 +235,13 @@ function showDetails() {
 
       <button
         v-if="message.reply_to"
-        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[3px] bg-black/[0.035] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.06] sm:min-w-48"
-        :class="message.reply_to.direction === 'incoming' ? 'border-sky-500' : 'border-fluvius-500'"
+        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[3px] bg-ink/[0.04] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-ink/[0.07] sm:min-w-48"
+        :class="message.reply_to.direction === 'incoming' ? 'border-info' : 'border-fluvius-500'"
         @click="emit('jumpTo', message.reply_to.id)"
       >
         <span
           class="block font-semibold"
-          :class="message.reply_to.direction === 'incoming' ? 'text-sky-700' : 'text-fluvius-700'"
+          :class="message.reply_to.direction === 'incoming' ? 'text-info-strong' : 'text-fluvius-700 dark:text-emerald-300'"
         >
           {{
             message.reply_to.direction === 'incoming'
@@ -251,7 +251,7 @@ function showDetails() {
               : message.reply_to.sender_name || 'Equipe'
           }}
         </span>
-        <span class="mt-0.5 block max-w-72 truncate text-[#54656f]">
+        <span class="mt-0.5 block max-w-72 truncate text-ink-secondary">
           {{ message.reply_to.body || `[${message.reply_to.message_type}]` }}
         </span>
       </button>
@@ -328,9 +328,9 @@ function showDetails() {
             :href="attachment.public_url"
             target="_blank"
             rel="noopener noreferrer"
-            class="flex min-w-52 items-center gap-3 rounded-lg bg-black/[0.045] p-3 pr-2 transition hover:bg-black/[0.075] sm:min-w-64"
+            class="flex min-w-52 items-center gap-3 rounded-lg bg-ink/[0.045] p-3 pr-2 transition hover:bg-ink/[0.075] sm:min-w-64"
           >
-            <div class="relative grid h-11 w-10 shrink-0 place-items-center rounded-md bg-white/80 text-fluvius-700 shadow-sm">
+            <div class="relative grid h-11 w-10 shrink-0 place-items-center rounded-md bg-panel/80 text-fluvius-700 shadow-sm">
               <FileText class="h-5 w-5" />
               <span class="absolute -bottom-1 rounded bg-fluvius-700 px-1 text-[7px] font-bold text-white">
                 {{ fileExtension(attachment.file_name) }}
@@ -338,11 +338,11 @@ function showDetails() {
             </div>
             <div class="min-w-0 flex-1">
               <p class="truncate text-xs font-medium">{{ attachment.file_name }}</p>
-              <p class="mt-0.5 text-[10px] uppercase text-[#667781]">
+              <p class="mt-0.5 text-[10px] uppercase text-ink-muted">
                 {{ fileSize(attachment.size_bytes) }}
               </p>
             </div>
-            <Download class="h-4 w-4 shrink-0 text-[#667781]" />
+            <Download class="h-4 w-4 shrink-0 text-ink-muted" />
           </a>
         </template>
       </div>
@@ -355,27 +355,27 @@ function showDetails() {
       </p>
       <p
         v-else-if="!message.attachments.length"
-        class="px-0.5 pr-5 text-[13px] italic text-[#667781]"
+        class="px-0.5 pr-5 text-[13px] italic text-ink-muted"
       >
         Conteúdo indisponível
       </p>
 
       <p
         v-if="message.edit_content_unavailable"
-        class="mt-1 rounded-md bg-amber-50/90 px-2 py-1 text-[10.5px] leading-4 text-amber-800"
+        class="mt-1 rounded-md bg-warning-soft/90 px-2 py-1 text-[10.5px] leading-4 text-warning-strong"
       >
         Editada no WhatsApp · o novo texto não foi disponibilizado pelo canal
       </p>
 
       <p
         v-if="message.error"
-        class="mt-1.5 rounded-md bg-rose-50/90 px-2 py-1.5 text-[11px] leading-4 text-rose-700"
+        class="mt-1.5 rounded-md bg-danger-soft/90 px-2 py-1.5 text-[11px] leading-4 text-danger-strong"
       >
         {{ message.error }}
       </p>
       <button
         v-if="message.status === 'failed' && message.direction === 'outgoing'"
-        class="mt-1.5 flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-white/50"
+        class="mt-1.5 flex items-center gap-1 rounded-md px-1 py-1 text-[11px] font-semibold text-danger-strong transition hover:bg-panel/50"
         :disabled="retrying"
         @click="retry"
       >
@@ -384,7 +384,7 @@ function showDetails() {
       </button>
 
       <div
-        class="mt-0.5 flex items-center justify-end gap-0.5 px-0.5 text-[9.5px] leading-3 text-[#667781]"
+        class="mt-0.5 flex items-center justify-end gap-0.5 px-0.5 text-[9.5px] leading-3 text-ink-muted"
         :class="{
           'absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-white shadow-sm':
             isNativeSticker,
@@ -404,10 +404,10 @@ function showDetails() {
           />
           <CheckCheck
             v-else-if="message.status === 'read'"
-            class="h-3.5 w-3.5 text-[#53bdeb]"
+            class="h-3.5 w-3.5 text-info"
             :aria-label="statusLabel"
           />
-          <CircleAlert v-else class="h-3 w-3 text-rose-600" :aria-label="statusLabel" />
+          <CircleAlert v-else class="h-3 w-3 text-danger" :aria-label="statusLabel" />
         </span>
       </div>
 
@@ -419,12 +419,12 @@ function showDetails() {
       />
       <div
         v-if="detailsOpen"
-        class="absolute bottom-5 right-0 z-50 w-72 rounded-xl bg-white p-4 text-left text-xs text-[#3b4a54] shadow-2xl ring-1 ring-black/5"
+        class="absolute bottom-5 right-0 z-50 w-72 rounded-lg bg-panel p-4 text-left text-xs text-ink shadow-2xl ring-1 ring-black/5"
       >
-        <div class="flex items-center justify-between border-b border-[#e9edef] pb-2.5">
-          <p class="font-semibold text-[#111b21]">Dados da mensagem</p>
+        <div class="flex items-center justify-between border-b border-line pb-2.5">
+          <p class="font-semibold text-ink">Dados da mensagem</p>
           <button
-            class="rounded-full p-1 text-[#667781] hover:bg-[#f0f2f5]"
+            class="rounded-full p-1 text-ink-muted hover:bg-panel-muted"
             title="Fechar"
             @click="detailsOpen = false"
           >
@@ -433,31 +433,31 @@ function showDetails() {
         </div>
         <dl class="mt-3 space-y-2.5">
           <div class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Criada</dt>
+            <dt class="text-ink-muted">Criada</dt>
             <dd class="text-right">{{ dateTimeLabel(message.created_at) }}</dd>
           </div>
           <div class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Enviada</dt>
+            <dt class="text-ink-muted">Enviada</dt>
             <dd class="text-right">{{ dateTimeLabel(message.sent_at) }}</dd>
           </div>
           <div class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Entregue</dt>
+            <dt class="text-ink-muted">Entregue</dt>
             <dd class="text-right">{{ dateTimeLabel(message.delivered_at) }}</dd>
           </div>
           <div class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Lida</dt>
+            <dt class="text-ink-muted">Lida</dt>
             <dd class="text-right">{{ dateTimeLabel(message.read_at) }}</dd>
           </div>
           <div v-if="message.edited_at" class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Editada</dt>
+            <dt class="text-ink-muted">Editada</dt>
             <dd class="text-right">{{ dateTimeLabel(message.edited_at) }}</dd>
           </div>
           <div v-if="message.sender_name" class="flex justify-between gap-3">
-            <dt class="text-[#667781]">Atendente</dt>
+            <dt class="text-ink-muted">Atendente</dt>
             <dd class="text-right">{{ message.sender_name }}</dd>
           </div>
-          <div class="flex justify-between gap-3 border-t border-[#e9edef] pt-2.5">
-            <dt class="text-[#667781]">Tentativas</dt>
+          <div class="flex justify-between gap-3 border-t border-line pt-2.5">
+            <dt class="text-ink-muted">Tentativas</dt>
             <dd>{{ message.attempt_count }}</dd>
           </div>
         </dl>
