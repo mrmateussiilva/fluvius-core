@@ -48,6 +48,10 @@ const operationalAlertClass = computed(() =>
     : 'border-warning/30 bg-warning-soft text-warning-strong',
 )
 
+function ensureRealtimeConnection() {
+  realtime.ensureConnected()
+}
+
 onMounted(async () => {
   try {
     await auth.restore()
@@ -56,10 +60,16 @@ onMounted(async () => {
   } catch {
     availableTenants.value = []
   }
+  if (auth.user) realtime.connect()
+  document.addEventListener('visibilitychange', ensureRealtimeConnection)
+  window.addEventListener('online', ensureRealtimeConnection)
 })
 
 onBeforeUnmount(() => {
   operations.stopPolling()
+  document.removeEventListener('visibilitychange', ensureRealtimeConnection)
+  window.removeEventListener('online', ensureRealtimeConnection)
+  realtime.disconnect()
 })
 
 async function logout() {

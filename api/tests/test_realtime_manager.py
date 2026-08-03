@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from app.realtime.manager import RealtimeManager
@@ -21,6 +22,22 @@ class FakeWebSocket:
 
 
 class RealtimeManagerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_routes_broadcast_through_the_realtime_broker(self) -> None:
+        manager = RealtimeManager()
+        tenant_id = uuid4()
+        data = {"id": str(uuid4()), "channel_id": str(uuid4())}
+
+        with (
+            patch("app.realtime.manager.settings.environment", "production"),
+            patch(
+                "app.realtime.broker.emit_realtime_event",
+                new=AsyncMock(return_value=True),
+            ) as emit,
+        ):
+            await manager.broadcast(tenant_id, "message.created", data)
+
+        emit.assert_awaited_once_with(tenant_id, "message.created", data)
+
     async def test_broadcasts_only_to_users_authorized_for_the_channel(self) -> None:
         manager = RealtimeManager()
         tenant_id = uuid4()

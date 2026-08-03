@@ -74,6 +74,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         )
         with self.client.websocket_connect("/ws") as websocket:
             websocket.send_text("ping")
+            self.assertEqual(websocket.receive_text(), "pong")
 
         content = b"%PDF-1.4\nprivate tenant attachment\n"
         storage_key = (

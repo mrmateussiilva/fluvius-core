@@ -11,7 +11,6 @@ from app.security import decode_access_token
 from app.tenants.models import Tenant
 from app.users.models import TenantUser, TenantUserChannel
 
-
 router = APIRouter()
 
 
@@ -89,6 +88,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     )
     try:
         while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
+            message = await websocket.receive_text()
+            if message == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, RuntimeError):
         realtime_manager.disconnect(tenant_id, websocket)

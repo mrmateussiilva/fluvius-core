@@ -222,15 +222,24 @@ conexão na sala em memória do tenant. Eventos planejados:
 - `contact.updated`
 - `channel.status.updated`
 
-Eventos produzidos pelo delivery worker atravessam Redis Pub/Sub até a API. Os
-demais eventos ainda usam o gerenciador em memória; portanto, duas ou mais
-réplicas da API exigem migrar toda a emissão para o broker. Presença, replay e
-cursor continuam fora desta etapa.
+Todos os eventos produzidos pela API, pelos webhooks e pelos workers atravessam
+o canal Redis Pub/Sub `fluvius:realtime`. Cada processo uvicorn mantém seu
+próprio listener e faz somente o fan-out local para os WebSockets conectados
+naquele processo. Invalidações de usuário e tenant usam o mesmo canal, garantindo
+que alteração de acesso encerre conexões em todos os workers. Se a publicação no
+Redis falhar, o processo emissor ainda tenta a entrega local, mas registra a
+degradação sem tratar o fan-out como concluído. Presença, replay e cursor
+continuam fora desta etapa.
 
-O cliente trata o tipo e a conversa informados em cada evento. Mensagens da conversa selecionada
-são conciliadas por ID, evitando duplicação entre a resposta HTTP e o WebSocket. A contagem de não
-lidas só é zerada quando a aba está visível; ao voltar para a tela, a conversa selecionada é
-sincronizada novamente.
+O cliente trata o tipo e a conversa informados em cada evento, agrupando eventos
+próximos em uma única atualização para não multiplicar leituras durante rajadas.
+Mensagens da conversa selecionada são conciliadas por ID, evitando duplicação
+entre a resposta HTTP e o WebSocket. O navegador envia `ping` a cada 20 segundos
+e exige `pong` em até oito segundos; conexão sem resposta é encerrada e refeita
+com backoff. Ao reconectar, voltar para a aba ou recuperar a rede, a lista e a
+conversa selecionada são sincronizadas novamente, cobrindo eventos ocorridos
+durante a interrupção. A contagem de não lidas só é zerada quando a aba está
+visível.
 
 ## Fila
 
