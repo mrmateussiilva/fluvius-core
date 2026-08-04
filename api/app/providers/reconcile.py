@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.channels.models import WhatsAppChannel
 from app.common.enums import ChannelProvider
+from app.config import settings
 from app.database import SessionLocal
 from app.jobs.queue import redis_connection
 from app.providers.base import IgnoredWebhookEvent, IncomingMessageEditResult
@@ -19,9 +20,14 @@ from app.providers.evolution_credentials import (
 )
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
-from app.providers.pending_events import PENDING_EDIT_ERROR, PENDING_RECEIPT_ERROR
+from app.providers.pending_events import (
+    PENDING_EDIT_ERROR,
+    PENDING_INCOMING_MESSAGE_ERROR,
+    PENDING_MESSAGE_ERRORS,
+    PENDING_RECEIPT_ERROR,
+)
 from app.providers.status_updates import apply_message_status_update
-from app.providers.webhook_router import apply_message_edit
+from app.providers.webhook_router import apply_message_edit, whatsapp_webhook
 
 logger = logging.getLogger(__name__)
 RECONCILE_LOCK_KEY = "fluvius:webhook-reconcile-lock"
@@ -122,9 +128,7 @@ async def reconcile_pending_events_for_channel_report(
                 ProviderEvent.channel_id == channel_id,
                 ProviderEvent.processed.is_(False),
                 ProviderEvent.created_at >= cutoff,
-                ProviderEvent.processing_error.in_(
-                    (PENDING_RECEIPT_ERROR, PENDING_EDIT_ERROR)
-                ),
+                ProviderEvent.processing_error.in_(PENDING_MESSAGE_ERRORS),
             )
             .order_by(ProviderEvent.created_at)
             .limit(limit)
@@ -142,7 +146,21 @@ async def reconcile_pending_events_for_channel_report(
 
     resolved = 0
     for event in events:
+        event_id = event.id
         try:
+            if event.processing_error == PENDING_INCOMING_MESSAGE_ERROR:
+                await whatsapp_webhook(
+                    provider=channel.provider,
+                    channel_id=channel.id,
+                    payload=event.payload,
+                    x_webhook_secret=settings.webhook_secret,
+                    db=db,
+                )
+                refreshed_event = db.get(ProviderEvent, event_id)
+                if refreshed_event is not None and refreshed_event.processed:
+                    resolved += 1
+                continue
+
             if event.processing_error == PENDING_RECEIPT_ERROR:
                 update = adapter.handle_message_status(event.payload)
                 if update is None:
@@ -207,9 +225,7 @@ async def _run_reconcile_batch() -> WebhookReconcileBatchResult:
                 )
                 .where(
                     ProviderEvent.processed.is_(False),
-                    ProviderEvent.processing_error.in_(
-                        (PENDING_RECEIPT_ERROR, PENDING_EDIT_ERROR)
-                    ),
+                    ProviderEvent.processing_error.in_(PENDING_MESSAGE_ERRORS),
                     ProviderEvent.created_at >= datetime.now(UTC) - RECONCILE_MAX_AGE,
                 )
                 .group_by(WhatsAppChannel.tenant_id, WhatsAppChannel.id)

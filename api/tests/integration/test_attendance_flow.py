@@ -1,4 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
+from threading import Barrier
 from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
@@ -15,6 +17,8 @@ from app.delivery.models import MessageDelivery
 from app.delivery.tasks import run_delivery
 from app.messages.models import Message, MessageContactShare, MessageRevision
 from app.providers.base import SendResult, SharedContact
+from app.providers.models import ProviderEvent
+from app.providers.webhook_router import lock_provider_thread
 from app.storage.base import StoredFile
 
 from .base import PostgresIntegrationTestCase
@@ -380,6 +384,98 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
 
         self.assertEqual(conversation_count, 1)
         self.assertEqual(incoming_count, 2)
+
+    def test_parallel_messages_create_one_thread_without_losing_messages(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        group_number = "5527999381129-1552477393"
+        payloads = []
+        for message_id, body in (
+            ("parallel-group-message-1", "Primeira mensagem paralela"),
+            ("parallel-group-message-2", "Segunda mensagem paralela"),
+        ):
+            payload = self.incoming_payload(message_id, body)
+            payload["id"] = f"envelope-{message_id}"
+            payload["data"]["Info"].update(
+                {
+                    "Sender": "5527999999999@s.whatsapp.net",
+                    "SenderAlt": "5527999999999@s.whatsapp.net",
+                    "Chat": f"{group_number}@g.us",
+                    "ChatName": "Grupo Concorrente",
+                    "IsGroup": True,
+                }
+            )
+            payloads.append(payload)
+
+        barrier = Barrier(2)
+
+        def synchronized_lock(db, **kwargs) -> None:
+            barrier.wait(timeout=5)
+            lock_provider_thread(db, **kwargs)
+
+        def send(payload):
+            return self.client.post(webhook_url, json=payload)
+
+        with (
+            patch(
+                "app.providers.webhook_router.lock_provider_thread",
+                side_effect=synchronized_lock,
+            ),
+            patch(
+                "app.providers.webhook_router.needs_group_profile_import",
+                return_value=False,
+            ),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            responses = list(executor.map(send, payloads))
+
+        self.assertEqual([response.status_code for response in responses], [202, 202])
+        self.assertEqual(
+            [response.json()["status"] for response in responses],
+            ["accepted", "accepted"],
+        )
+
+        with SessionLocal() as db:
+            contact = db.scalar(
+                select(Contact).where(
+                    Contact.tenant_id == self.tenant_a.tenant_id,
+                    Contact.phone_number == group_number,
+                )
+            )
+            self.assertIsNotNone(contact)
+            conversation_count = db.scalar(
+                select(func.count(Conversation.id)).where(
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                    Conversation.channel_id == self.tenant_a.channel_id,
+                    Conversation.contact_id == contact.id,
+                )
+            )
+            message_count = db.scalar(
+                select(func.count(Message.id)).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id.in_(
+                        ("parallel-group-message-1", "parallel-group-message-2")
+                    ),
+                )
+            )
+            processed_event_count = db.scalar(
+                select(func.count(ProviderEvent.id)).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id.in_(
+                        (
+                            "message:parallel-group-message-1",
+                            "message:parallel-group-message-2",
+                        )
+                    ),
+                    ProviderEvent.processed.is_(True),
+                )
+            )
+
+        self.assertEqual(conversation_count, 1)
+        self.assertEqual(message_count, 2)
+        self.assertEqual(processed_event_count, 2)
 
     def test_contact_directory_creates_updates_and_starts_conversation(self) -> None:
         created = self.client.post(

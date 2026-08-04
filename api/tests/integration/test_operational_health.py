@@ -16,7 +16,10 @@ from app.delivery.models import MessageDelivery
 from app.messages.models import Message
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.models import ProviderEvent
-from app.providers.pending_events import PENDING_RECEIPT_ERROR
+from app.providers.pending_events import (
+    PENDING_INCOMING_MESSAGE_ERROR,
+    PENDING_RECEIPT_ERROR,
+)
 from app.providers.reconcile import WebhookReconcileRuntime
 from app.users.models import TenantUser
 
@@ -389,3 +392,76 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             self.assertIsNone(event_a.processing_error)
             self.assertFalse(event_b.processed)
             self.assertIsNotNone(audit)
+
+    def test_reconcile_webhooks_recovers_a_persisted_incoming_message(self) -> None:
+        provider_message_id = "ops-reconcile-incoming-1"
+        customer_phone = "5527999443322"
+        event_payload = {
+            "event": "Message",
+            "instanceId": "integration-instance",
+            "instanceName": "tenant-a",
+            "data": {
+                "Info": {
+                    "ID": provider_message_id,
+                    "Sender": f"{customer_phone}@s.whatsapp.net",
+                    "Chat": f"{customer_phone}@s.whatsapp.net",
+                    "IsFromMe": False,
+                    "IsGroup": False,
+                    "PushName": "Cliente Recuperado",
+                    "Timestamp": "2026-08-04T08:00:00-03:00",
+                    "Type": "text",
+                },
+                "Message": {"conversation": "Mensagem recuperada"},
+            },
+        }
+        with SessionLocal() as db:
+            event = ProviderEvent(
+                tenant_id=self.tenant_a.tenant_id,
+                channel_id=self.tenant_a.channel_id,
+                provider="evolution_go",
+                event_type="Message",
+                provider_event_id=f"message:{provider_message_id}",
+                payload=event_payload,
+                processed=False,
+                processing_error=PENDING_INCOMING_MESSAGE_ERROR,
+            )
+            db.add(event)
+            db.commit()
+            event_id = event.id
+
+        provider = EvolutionGoProvider(api_key="test-token")
+        with (
+            patch("app.providers.reconcile.claim_evolution_credential"),
+            patch("app.providers.reconcile.get_provider", return_value=provider),
+            patch("app.providers.webhook_router.claim_evolution_credential"),
+            patch("app.providers.webhook_router.get_provider", return_value=provider),
+        ):
+            response = self.client.post(
+                "/api/v1/operations/webhooks/reconcile",
+                headers=self.headers_a,
+                json={"channel_id": str(self.tenant_a.channel_id)},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["checked_events"], 1)
+        self.assertEqual(response.json()["resolved_events"], 1)
+        self.assertEqual(response.json()["remaining_pending_events"], 0)
+
+        with SessionLocal() as db:
+            event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.id == event_id,
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == provider_message_id,
+                )
+            )
+
+        self.assertTrue(event.processed)
+        self.assertIsNone(event.processing_error)
+        self.assertIsNotNone(message)
+        self.assertEqual(message.body, "Mensagem recuperada")

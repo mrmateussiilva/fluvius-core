@@ -598,10 +598,21 @@ class EvolutionGoProvider(WhatsAppProvider):
         return sanitized
 
     def webhook_event_id(self, payload: dict[str, Any]) -> str | None:
-        inherited = super().webhook_event_id(payload)
-        if inherited:
-            return inherited
-        if str(payload.get("event") or "").lower() == "receipt":
+        event_type = str(payload.get("event") or "").lower()
+        data = payload.get("data", {})
+        if event_type == "message" and isinstance(data, dict):
+            key = self._dict_value(data, "key", "Key")
+            info = self._dict_value(data, "info", "Info")
+            value = (
+                key.get("id")
+                or key.get("ID")
+                or info.get("ID")
+                or info.get("id")
+                or data.get("id")
+            )
+            if value:
+                return f"message:{value}"
+        if event_type == "receipt":
             try:
                 receipt = self.handle_message_status(payload)
             except (IgnoredWebhookEvent, ValueError):
@@ -610,7 +621,9 @@ class EvolutionGoProvider(WhatsAppProvider):
                 receipt_ids = ",".join(sorted(receipt.provider_message_ids))
                 identity = f"{receipt.status.value}:{receipt_ids}"
                 return f"receipt:{sha256(identity.encode()).hexdigest()}"
-        data = payload.get("data", {})
+        inherited = super().webhook_event_id(payload)
+        if inherited:
+            return inherited
         if not isinstance(data, dict):
             return None
         info = self._dict_value(data, "info", "Info")

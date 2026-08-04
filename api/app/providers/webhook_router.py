@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,11 @@ from app.providers.evolution_credentials import (
 )
 from app.providers.factory import get_provider
 from app.providers.models import ProviderEvent
-from app.providers.pending_events import PENDING_EDIT_ERROR, PENDING_RECEIPT_ERROR
+from app.providers.pending_events import (
+    PENDING_EDIT_ERROR,
+    PENDING_INCOMING_MESSAGE_ERROR,
+    PENDING_RECEIPT_ERROR,
+)
 from app.providers.status_updates import apply_message_status_update
 from app.realtime.manager import realtime_manager
 
@@ -51,6 +55,20 @@ def reopen_from_provider(conversation: Conversation) -> bool:
     conversation.status = ConversationStatus.NEW
     conversation.assigned_user_id = None
     return True
+
+
+def lock_provider_thread(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    channel_id: UUID,
+    thread_number: str,
+) -> None:
+    lock_key = f"{tenant_id}:{channel_id}:{thread_number}"
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+        {"lock_key": lock_key},
+    )
 
 
 def apply_message_edit(
@@ -141,24 +159,51 @@ async def whatsapp_webhook(
         )
 
     event_type = str(payload.get("event") or payload.get("type") or "unknown")
+    normalized_event = event_type.lower().replace("_", ".")
     event_id = provider_adapter.webhook_event_id(payload)
     sanitized_payload = provider_adapter.sanitize_webhook_payload(payload)
-    event = ProviderEvent(
-        tenant_id=channel.tenant_id,
-        channel_id=channel.id,
-        provider=provider.value,
-        event_type=event_type,
-        provider_event_id=str(event_id) if event_id else None,
-        payload=sanitized_payload,
-    )
-    db.add(event)
-    try:
-        db.flush()
-    except IntegrityError:
-        db.rollback()
-        return {"status": "duplicate"}
+    event = None
+    if event_id is not None:
+        event = db.scalar(
+            select(ProviderEvent).where(
+                ProviderEvent.tenant_id == channel.tenant_id,
+                ProviderEvent.channel_id == channel.id,
+                ProviderEvent.provider_event_id == str(event_id),
+            )
+        )
+        if event is not None and event.processed:
+            return {"status": "duplicate"}
+    if event is None:
+        event = ProviderEvent(
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            provider=provider.value,
+            event_type=event_type,
+            provider_event_id=str(event_id) if event_id else None,
+            payload=sanitized_payload,
+            processing_error=(
+                PENDING_INCOMING_MESSAGE_ERROR
+                if normalized_event == "message"
+                else None
+            ),
+        )
+        db.add(event)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            if event_id is None:
+                return {"status": "duplicate"}
+            event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.tenant_id == channel.tenant_id,
+                    ProviderEvent.channel_id == channel.id,
+                    ProviderEvent.provider_event_id == str(event_id),
+                )
+            )
+            if event is None or event.processed:
+                return {"status": "duplicate"}
 
-    normalized_event = event_type.lower().replace("_", ".")
     if normalized_event in {"connected", "disconnected", "loggedout"} or any(
         part in normalized_event for part in ("connection", "status", "qrcode")
     ):
@@ -242,6 +287,21 @@ async def whatsapp_webhook(
             )
             return {"status": "accepted"}
 
+        thread_number = (
+            incoming.chat_id
+            if incoming.is_group and incoming.chat_id
+            else incoming.from_number
+        )
+        lock_provider_thread(
+            db,
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            thread_number=thread_number,
+        )
+        db.refresh(event)
+        if event.processed:
+            db.commit()
+            return {"status": "duplicate"}
         duplicate = db.scalar(
             select(Message).where(
                 Message.tenant_id == channel.tenant_id,
@@ -250,14 +310,10 @@ async def whatsapp_webhook(
         )
         if duplicate:
             event.processed = True
+            event.processing_error = None
             db.commit()
             return {"status": "duplicate"}
 
-        thread_number = (
-            incoming.chat_id
-            if incoming.is_group and incoming.chat_id
-            else incoming.from_number
-        )
         contact = db.scalar(
             select(Contact).where(
                 Contact.tenant_id == channel.tenant_id,
@@ -438,6 +494,7 @@ async def whatsapp_webhook(
                 pass
 
         event.processed = True
+        event.processing_error = None
         db.commit()
         if created_conversation:
             await realtime_manager.broadcast(
@@ -499,6 +556,7 @@ async def whatsapp_webhook(
         return {"status": "accepted"}
     except IgnoredWebhookEvent:
         event.processed = True
+        event.processing_error = None
         db.commit()
         return {"status": "ignored"}
     except (ValueError, NotImplementedError) as exc:

@@ -103,9 +103,14 @@ Timeouts de envio usam 12s (connect 5s); consultas de perfil/grupo usam 6s
 (connect 3s). Chamadas de perfil passam por um circuit breaker em memória por
 `base_url`: após falhas consecutivas o adapter deixa de consultar o gateway por
 alguns segundos e devolve perfil parcial, evitando prender workers HTTP.
-Recibos e edições que chegam antes da mensagem original ficam em
-`provider_events` com erros canônicos e são reprocessados automaticamente pelo
-loop de reconciliação da API e pela sincronização administrativa.
+O evento sanitizado recebe commit em `provider_events` antes da criação da
+mensagem. Mensagens usam o ID interno do objeto `Message` do Evolution como
+identidade, sem confiar no ID genérico do envelope, e webhooks simultâneos da
+mesma conversa são serializados no PostgreSQL. Se o processamento de uma
+mensagem for interrompido depois do aceite, ela permanece pendente e entra no
+loop de reconciliação. Recibos e edições que chegam antes da mensagem original
+também ficam com erros canônicos e são reprocessados automaticamente pelo loop
+da API e pela sincronização administrativa.
 
 O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter preserva separadamente `FullName`/`FirstName` da agenda, `PushName`, nome comercial/verificado, confirmação do número, recado e URL da foto. Um nome igual ao telefone, um JID ou um placeholder não é aceito como nome exibível. O nome operacional definido no Fluvius sempre tem prioridade e nunca é sobrescrito pelo webhook ou pela sincronização. Grupos usam `/group/info` e `/user/avatar`, normalizando assunto, descrição, foto, contagem de membros e lista parcial de participantes quando o provider disponibiliza esses campos. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 

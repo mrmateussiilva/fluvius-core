@@ -108,7 +108,19 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertNotIn("instanceToken", sanitized)
         self.assertNotIn("base64", sanitized["data"]["Message"])
         self.assertEqual(payload["data"]["Message"]["base64"], "YmluYXJ5")
-        self.assertEqual(self.provider.webhook_event_id(message_payload()), "MESSAGE-123")
+        self.assertEqual(
+            self.provider.webhook_event_id(message_payload()),
+            "message:MESSAGE-123",
+        )
+
+    def test_message_event_id_uses_message_identity_instead_of_envelope_id(self) -> None:
+        payload = message_payload()
+        payload["id"] = "ENVELOPE-456"
+
+        self.assertEqual(
+            self.provider.webhook_event_id(payload),
+            "message:MESSAGE-123",
+        )
 
     def test_parses_evolution_go_072_message_payload(self) -> None:
         result = asyncio.run(self.provider.handle_webhook(message_payload()))

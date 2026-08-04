@@ -62,10 +62,19 @@ porque somente uma transição bloqueada da outbox pode chegar ao provider.
 
 1. O gateway chama `/api/v1/webhooks/whatsapp/{provider}/{channel_id}`.
 2. A API valida a credencial do webhook e encontra o canal; o tenant vem do canal, nunca do payload. No Evolution Go 0.7.2, o `instanceToken` do corpo é validado pelo adapter.
-3. O payload sanitizado entra em `provider_events`, permitindo auditoria, deduplicação e reprocessamento futuro. Credenciais são removidas antes da persistência.
+3. O payload sanitizado entra em `provider_events` e recebe commit antes do
+   processamento de domínio. Credenciais são removidas antes da persistência.
+   Eventos `Message` usam o ID real da mensagem como identidade, mesmo quando o
+   gateway envia um ID diferente no envelope.
 4. O adapter normaliza o evento como mensagem nova ou edição. Reações são
    reconhecidas e ignoradas no MVP, sem gerar bolhas artificiais.
-5. A API deduplica pelo ID da mensagem, encontra/cria o contato e usa sua conversa única naquele canal. Se ela estava finalizada, é reaberta como `new`, sem perder o histórico e sem manter a atribuição anterior.
+5. A API deduplica pelo ID da mensagem e adquire um lock transacional por
+   tenant, canal e conversa. Webhooks de conversas diferentes continuam em
+   paralelo, mas mensagens simultâneas do mesmo atendimento não disputam a
+   criação do contato, da conversa ou da mensagem entre workers. Em seguida, a
+   API encontra/cria o contato e usa sua conversa única naquele canal. Se ela
+   estava finalizada, é reaberta como `new`, sem perder o histórico e sem manter
+   a atribuição anterior.
 6. Para mídia, o adapter normaliza base64, MIME type e nome; a API valida limite, assinatura binária e coerência entre conteúdo/MIME/extensão, grava o arquivo no storage e cria `MessageAttachment` com SHA-256 no mesmo tenant.
 7. A mensagem incoming é persistida e os eventos realtime são emitidos.
 
@@ -159,9 +168,10 @@ nunca contém jobs ou dados de outros tenants, mesmo que Redis e os workers seja
 compartilhados. O frontend consulta esse retrato a cada 30 segundos enquanto a
 aba está visível e mostra um alerta global quando a operação exige atenção.
 
-A API também mantém um loop de reconciliação de webhooks pendentes (recibos e
-edições aguardando a mensagem correspondente), com eleição de líder via Redis,
-para não depender só da sincronização administrativa manual. Administradores
+A API também mantém um loop de reconciliação de webhooks pendentes (mensagens
+recebidas cujo processamento foi interrompido, recibos e edições aguardando a
+mensagem correspondente), com eleição de líder via Redis, para não depender só
+da sincronização administrativa manual. Administradores
 podem acionar `POST /api/v1/operations/webhooks/reconcile` para reprocessar, de
 forma tenant-scoped e auditada, eventos pendentes do tenant ou de um canal
 específico.
