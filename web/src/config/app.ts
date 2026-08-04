@@ -1,3 +1,3 @@
 export const APP_NAME = 'Fluvius Core'
-export const APP_VERSION = '0.0.25'
+export const APP_VERSION = '0.0.26'
 export const APP_TITLE = `${APP_NAME} v${APP_VERSION}`
