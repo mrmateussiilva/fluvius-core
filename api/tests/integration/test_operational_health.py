@@ -14,7 +14,9 @@ from app.common.enums import (
 from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.messages.models import Message
+from app.providers.base import MessageHistoryRequestResult
 from app.providers.evolution_go import EvolutionGoProvider
+from app.providers.history_reconcile import HistoryReconcileRuntime
 from app.providers.models import ProviderEvent
 from app.providers.pending_events import (
     PENDING_INCOMING_MESSAGE_ERROR,
@@ -24,6 +26,22 @@ from app.providers.reconcile import WebhookReconcileRuntime
 from app.users.models import TenantUser
 
 from .base import PostgresIntegrationTestCase
+
+
+class HistoryRequestProvider:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def request_message_history(self, channel, anchor, *, count: int):
+        self.calls.append(
+            {
+                "channel_id": channel.id,
+                "provider_message_id": anchor.provider_message_id,
+                "chat_address": anchor.chat_address,
+                "count": count,
+            }
+        )
+        return MessageHistoryRequestResult(success=True)
 
 
 class OperationalHealthTest(PostgresIntegrationTestCase):
@@ -273,6 +291,18 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
                 last_checked_events=10,
                 last_resolved_events=7,
             ),
+        ), patch(
+            "app.operations.router.get_history_reconcile_runtime",
+            return_value=HistoryReconcileRuntime(
+                active=True,
+                heartbeat_at=now,
+                last_started_at=now,
+                last_finished_at=now,
+                last_scanned_channels=1,
+                last_checked_threads=4,
+                last_requested_threads=3,
+                last_failed_threads=1,
+            ),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -285,6 +315,11 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         self.assertEqual(runtime["last_scanned_channels"], 2)
         self.assertEqual(runtime["last_checked_events"], 10)
         self.assertEqual(runtime["last_resolved_events"], 7)
+        history_runtime = response.json()["history_reconcile"]
+        self.assertTrue(history_runtime["active"])
+        self.assertEqual(history_runtime["last_checked_threads"], 4)
+        self.assertEqual(history_runtime["last_requested_threads"], 3)
+        self.assertEqual(history_runtime["last_failed_threads"], 1)
 
     def test_reconcile_webhooks_endpoint_is_tenant_scoped(self) -> None:
         with SessionLocal() as db:
@@ -391,6 +426,58 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             self.assertTrue(event_a.processed)
             self.assertIsNone(event_a.processing_error)
             self.assertFalse(event_b.processed)
+            self.assertIsNotNone(audit)
+
+    def test_history_sync_request_endpoint_is_tenant_scoped(self) -> None:
+        with SessionLocal() as db:
+            db.add(
+                Message(
+                    tenant_id=self.tenant_a.tenant_id,
+                    conversation_id=self.tenant_a.conversation_id,
+                    direction=MessageDirection.INCOMING,
+                    message_type=MessageType.TEXT,
+                    status=MessageStatus.DELIVERED,
+                    body="Âncora de histórico",
+                    provider_message_id="ops-history-anchor-a",
+                    sent_at=datetime.now(UTC),
+                )
+            )
+            db.commit()
+
+        provider = HistoryRequestProvider()
+        with (
+            patch("app.providers.history_reconcile.claim_evolution_credential"),
+            patch("app.providers.history_reconcile.get_provider", return_value=provider),
+            patch("app.providers.history_reconcile._claim_thread_cooldown", return_value=True),
+        ):
+            response = self.client.post(
+                "/api/v1/operations/history-sync/request",
+                headers=self.headers_a,
+                json={"channel_id": str(self.tenant_a.channel_id)},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["scanned_channels"], 1)
+        self.assertEqual(payload["checked_threads"], 1)
+        self.assertEqual(payload["requested_threads"], 1)
+        self.assertEqual(payload["failed_threads"], 0)
+        self.assertEqual(provider.calls[0]["provider_message_id"], "ops-history-anchor-a")
+
+        cross_tenant = self.client.post(
+            "/api/v1/operations/history-sync/request",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_b.channel_id)},
+        )
+        self.assertEqual(cross_tenant.status_code, 404)
+
+        with SessionLocal() as db:
+            audit = db.scalar(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == self.tenant_a.tenant_id,
+                    AuditLog.action == "operations.history_sync.requested",
+                )
+            )
             self.assertIsNotNone(audit)
 
     def test_reconcile_webhooks_recovers_a_persisted_incoming_message(self) -> None:

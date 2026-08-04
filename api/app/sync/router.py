@@ -171,8 +171,8 @@ def create_sync_run(
             str(context.tenant_id),
             job_id=f"sync-{run.id}",
             job_timeout=1800,
-            result_ttl=3600,
-            failure_ttl=86400,
+            result_ttl=300,
+            failure_ttl=7200,
         )
     except Exception as exc:
         run = db.scalar(

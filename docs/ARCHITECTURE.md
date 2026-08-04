@@ -182,6 +182,17 @@ podem acionar `POST /api/v1/operations/webhooks/reconcile` para reprocessar, de
 forma tenant-scoped e auditada, eventos pendentes do tenant ou de um canal
 específico.
 
+Além disso, um reconciliador de histórico roda a cada cinco minutos para canais
+Evolution Go conectados. Ele escolhe conversas recentes com mensagem externa
+conhecida, respeita cooldown por conversa no Redis e chama `/chat/history-sync`
+a partir dessa âncora. Quando o gateway devolve eventos `HistorySync`, a API
+normaliza cada mensagem recuperada e a coloca na mesma `ProviderEventInbox` dos
+webhooks comuns, preservando deduplicação por `provider_message_id`, staging de
+mídia e broadcasts realtime. Administradores podem acionar
+`POST /api/v1/operations/history-sync/request`; o endpoint é tenant-scoped,
+auditado e apenas solicita o histórico ao provider, pois a entrega das mensagens
+recuperadas continua assíncrona pelo webhook.
+
 ## Administração da plataforma
 
 `User.is_platform_admin` é uma autorização global distinta do papel `admin` de

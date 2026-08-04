@@ -41,6 +41,9 @@
 - `ProviderEvent` pertence ao canal e guarda somente o payload sanitizado.
 - `ProviderEventInbox` é único por evento `Message`; guarda estado da fila,
   tentativas, conteúdo normalizado sem base64 e metadados da mídia staged.
+  Mensagens recuperadas via `HistorySync` entram como eventos sintéticos
+  `HistorySync.Message`, usando o mesmo identificador `message:<provider_id>`
+  para manter idempotência com webhooks comuns.
 - `ProviderCredential` pertence a um canal e provider; guarda somente ciphertext autenticado, fingerprint, versão da cifra e estado seguro do provisionamento.
 - `SyncRun` pertence ao tenant, canal e usuário solicitante; guarda somente estado, limites, contadores e erro seguro da execução.
 

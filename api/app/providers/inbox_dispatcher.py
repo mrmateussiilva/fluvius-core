@@ -61,8 +61,8 @@ def dispatch_provider_event_inbox(inbox_id: UUID, tenant_id: UUID) -> bool:
             str(tenant_id),
             job_id=rq_job_id,
             job_timeout=120,
-            result_ttl=3600,
-            failure_ttl=86400,
+            result_ttl=300,
+            failure_ttl=3600,
         )
         return True
     except Exception:

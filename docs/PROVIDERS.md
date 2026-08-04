@@ -116,16 +116,25 @@ tentativas o item exige reconciliação administrativa. Recibos e edições que
 chegam antes da mensagem original continuam com erros canônicos e são
 reprocessados automaticamente.
 
+O Evolution Go 0.7.2 não expõe uma rota paginada confirmada para listar
+mensagens. O Fluvius usa `/chat/history-sync` de forma conservadora: para
+conversas recentes de canais conectados, a API solicita ao WhatsApp um history
+sync a partir da última mensagem local conhecida. Eventos `HistorySync`
+recebidos do gateway são quebrados em eventos sintéticos `HistorySync.Message`,
+deduplicados pelo mesmo `message:<provider_message_id>` dos webhooks comuns e
+processados pela `ProviderEventInbox`. Esse fluxo não garante recuperar uma
+mensagem que o próprio WhatsApp/gateway não reenviar, mas cobre quedas
+transitórias de webhook sem criar uma segunda lógica de persistência.
+
 O perfil de contato combina, em paralelo, `/user/check`, `/user/info`, `/user/avatar` e `/user/contacts`. O adapter preserva separadamente `FullName`/`FirstName` da agenda, `PushName`, nome comercial/verificado, confirmação do número, recado e URL da foto. Um nome igual ao telefone, um JID ou um placeholder não é aceito como nome exibível. O nome operacional definido no Fluvius sempre tem prioridade e nunca é sobrescrito pelo webhook ou pela sincronização. Grupos usam `/group/info` e `/user/avatar`, normalizando assunto, descrição, foto, contagem de membros e lista parcial de participantes quando o provider disponibiliza esses campos. Cada fonte tem timeout independente e falha parcial não elimina os dados obtidos pelas demais; URLs de avatar fora de HTTP(S) são descartadas. O frontend acessa apenas `/api/v1/contacts/{id}` e solicita atualização pela API.
 
-O adapter atual não possui um endpoint confirmado para listar ou importar o
-histórico completo de mensagens. Por isso, a sincronização administrativa de
-mensagens não chama uma rota presumida do gateway: ela reprocessa somente
-edições e recibos recentes que o webhook já persistiu como pendentes em
-`provider_events`. A sincronização de contatos atualiza contatos e grupos já
-associados às conversas do canal. Para Evolution Go, ela também pode consultar
-`/group/myall` ou `/group/list` para manter um cache auxiliar de grupos, mas
-isso não cria conversas nem atendimento sem mensagem recebida.
+A sincronização administrativa de mensagens continua sem chamar uma rota
+presumida de listagem completa: ela reprocessa somente edições e recibos
+recentes que o webhook já persistiu como pendentes em `provider_events`. A
+sincronização de contatos atualiza contatos e grupos já associados às conversas
+do canal. Para Evolution Go, ela também pode consultar `/group/myall` ou
+`/group/list` para manter um cache auxiliar de grupos, mas isso não cria
+conversas nem atendimento sem mensagem recebida.
 
 ## TODO de compatibilidade Evolution Go
 

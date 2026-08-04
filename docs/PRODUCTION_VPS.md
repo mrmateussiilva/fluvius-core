@@ -232,9 +232,13 @@ healthchecks, limites de recursos, limite de PIDs e rotação do log local.
 Administradores de cada empresa também possuem **Saúde operacional** no menu.
 A tela verifica a cada 30 segundos a presença dos workers de entrega,
 recebimento e manutenção, entregas e inbox aguardando há mais de dois minutos,
-falhas nas últimas 24 horas e o estado/último evento dos canais daquele tenant. Alertas amarelos
-indicam degradação; alertas vermelhos indicam risco direto para o envio. Durante
-um deploy, o aviso de worker offline pode aparecer transitoriamente até o novo
+falhas nas últimas 24 horas, o estado/último evento dos canais daquele tenant e
+os heartbeats dos reconciliadores automáticos de webhooks e histórico. A tela
+também permite solicitar history sync ao provider para conversas recentes de
+canais conectados; essa ação apenas pede o reenvio ao gateway, e as mensagens
+recuperadas entram depois pela inbox de webhooks. Alertas amarelos indicam
+degradação; alertas vermelhos indicam risco direto para o envio. Durante um
+deploy, o aviso de worker offline pode aparecer transitoriamente até o novo
 processo registrar seu heartbeat no RQ.
 
 Rollback de código deve ser feito pela execução manual do workflow de produção,

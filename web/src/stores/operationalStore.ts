@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import {
   getOperationalHealth,
+  requestHistorySync,
   reconcileWebhooks,
 } from '../api/operations'
 import type {
+  HistoryReconcileResult,
   OperationalHealth,
   WebhookReconcileResult,
 } from '../api/types'
@@ -14,8 +16,10 @@ export const useOperationalStore = defineStore('operational', {
   state: () => ({
     health: null as OperationalHealth | null,
     lastReconcile: null as WebhookReconcileResult | null,
+    lastHistorySync: null as HistoryReconcileResult | null,
     loading: false,
     reconciling: false,
+    historySyncing: false,
     error: '',
     pollTimer: null as number | null,
   }),
@@ -52,6 +56,25 @@ export const useOperationalStore = defineStore('operational', {
             : 'Não foi possível reconciliar os webhooks'
       } finally {
         this.reconciling = false
+      }
+    },
+    async requestHistory(channelId?: string) {
+      if (this.historySyncing) return
+      this.historySyncing = true
+      try {
+        this.lastHistorySync = await requestHistorySync({
+          channel_id: channelId || null,
+          limit_per_channel: 20,
+        })
+        this.error = ''
+        await this.refresh()
+      } catch (exception) {
+        this.error =
+          exception instanceof Error
+            ? exception.message
+            : 'Não foi possível solicitar o histórico ao provider'
+      } finally {
+        this.historySyncing = false
       }
     },
     startPolling() {

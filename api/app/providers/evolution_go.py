@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import json
 import mimetypes
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -25,6 +26,8 @@ from app.providers.base import (
     IgnoredWebhookEvent,
     IncomingMessageEditResult,
     IncomingMessageResult,
+    MessageHistoryAnchor,
+    MessageHistoryRequestResult,
     MessageStatusUpdateResult,
     QRCodeResult,
     SendResult,
@@ -41,7 +44,13 @@ class EvolutionGoProvider(WhatsAppProvider):
     public contract is still changing; see docs/PROVIDERS.md before upgrading it.
     """
 
-    webhook_events = ["MESSAGE", "CONNECTION", "QRCODE", "READ_RECEIPT"]
+    webhook_events = [
+        "MESSAGE",
+        "CONNECTION",
+        "QRCODE",
+        "READ_RECEIPT",
+        "HISTORY_SYNC",
+    ]
     default_timeout = httpx.Timeout(12.0, connect=5.0)
     profile_timeout = httpx.Timeout(6.0, connect=3.0)
 
@@ -353,6 +362,55 @@ class EvolutionGoProvider(WhatsAppProvider):
             return []
         return self._parse_group_directory(payload)
 
+    async def request_message_history(
+        self,
+        channel: WhatsAppChannel,
+        anchor: MessageHistoryAnchor,
+        *,
+        count: int,
+    ) -> MessageHistoryRequestResult:
+        try:
+            await self._configure_webhook_best_effort(channel)
+            response = await self._request(
+                "POST",
+                "/chat/history-sync",
+                json={
+                    "messageInfo": {
+                        "ID": anchor.provider_message_id,
+                        "Chat": self._history_chat_jid(
+                            anchor.chat_address,
+                            is_group=anchor.is_group,
+                        ),
+                        "IsFromMe": anchor.is_from_me,
+                        "IsGroup": anchor.is_group,
+                        "Timestamp": anchor.timestamp.isoformat(),
+                    },
+                    "count": count,
+                },
+            )
+            response.raise_for_status()
+            return MessageHistoryRequestResult(
+                success=True,
+                provider_message_id=self._message_id(response.json()),
+            )
+        except httpx.HTTPError as exc:
+            return MessageHistoryRequestResult(
+                success=False,
+                error=self._http_error_from_exception(exc),
+                retryable=True,
+            )
+        except (ValueError, KeyError, TypeError):
+            return MessageHistoryRequestResult(
+                success=False,
+                error="Evolution Go retornou uma resposta de history sync inválida.",
+            )
+
+    async def _configure_webhook_best_effort(self, channel: WhatsAppChannel) -> None:
+        try:
+            await self._configure_webhook(channel)
+        except httpx.HTTPError:
+            return
+
     async def _profile_request(
         self, path: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
@@ -503,6 +561,36 @@ class EvolutionGoProvider(WhatsAppProvider):
             raw_payload=payload,
         )
 
+    async def handle_history_sync(
+        self, payload: dict[str, Any]
+    ) -> list[IncomingMessageResult]:
+        event_type = str(payload.get("event") or payload.get("type") or "").lower()
+        if event_type not in {"historysync", "history_sync"}:
+            return []
+
+        data = payload.get("data", payload)
+        messages: list[IncomingMessageResult] = []
+        seen: set[str] = set()
+        for web_message, conversation in self._history_web_messages(data):
+            message_payload = self._history_message_payload(
+                payload,
+                web_message,
+                conversation,
+            )
+            if message_payload is None:
+                continue
+            try:
+                incoming = await self.handle_webhook(message_payload)
+            except (IgnoredWebhookEvent, ValueError):
+                continue
+            if not isinstance(incoming, IncomingMessageResult):
+                continue
+            if incoming.provider_message_id in seen:
+                continue
+            seen.add(incoming.provider_message_id)
+            messages.append(incoming)
+        return messages
+
     def handle_message_status(
         self, payload: dict[str, Any]
     ) -> MessageStatusUpdateResult | None:
@@ -621,6 +709,18 @@ class EvolutionGoProvider(WhatsAppProvider):
                 receipt_ids = ",".join(sorted(receipt.provider_message_ids))
                 identity = f"{receipt.status.value}:{receipt_ids}"
                 return f"receipt:{sha256(identity.encode()).hexdigest()}"
+        if event_type in {"historysync", "history_sync"}:
+            try:
+                payload_hash = sha256(
+                    json.dumps(
+                        self.sanitize_webhook_payload(payload),
+                        sort_keys=True,
+                        default=str,
+                    ).encode()
+                ).hexdigest()
+            except (TypeError, ValueError):
+                payload_hash = sha256(str(payload).encode()).hexdigest()
+            return f"history-sync:{payload_hash}"
         inherited = super().webhook_event_id(payload)
         if inherited:
             return inherited
@@ -963,6 +1063,145 @@ class EvolutionGoProvider(WhatsAppProvider):
             ),
         )
 
+    @classmethod
+    def _history_chat_jid(cls, value: str, *, is_group: bool) -> str:
+        if "@" in value:
+            return value
+        digits = cls._digits(value) or value
+        suffix = "g.us" if is_group else "s.whatsapp.net"
+        return f"{digits}@{suffix}"
+
+    @classmethod
+    def _history_web_messages(
+        cls,
+        payload: Any,
+    ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        messages: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+        def walk(value: Any, conversation: dict[str, Any] | None = None) -> None:
+            if isinstance(value, list):
+                for item in value:
+                    walk(item, conversation)
+                return
+            if not isinstance(value, dict):
+                return
+
+            next_conversation = conversation
+            raw_messages = value.get("Messages") or value.get("messages")
+            if isinstance(raw_messages, list):
+                next_conversation = value
+
+            key = cls._dict_value(value, "key", "Key")
+            message = cls._dict_value(value, "message", "Message")
+            message_id = cls._text_value(
+                key,
+                "ID",
+                "id",
+                "Id",
+                "messageID",
+                "messageId",
+            )
+            if key and message and message_id:
+                messages.append((value, next_conversation or {}))
+
+            for child in value.values():
+                if child is raw_messages:
+                    walk(child, next_conversation)
+                else:
+                    walk(child, next_conversation)
+
+        walk(payload)
+        return messages
+
+    @classmethod
+    def _history_message_payload(
+        cls,
+        envelope: dict[str, Any],
+        web_message: dict[str, Any],
+        conversation: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        key = cls._dict_value(web_message, "key", "Key")
+        message = cls._dict_value(web_message, "message", "Message")
+        message_id = cls._text_value(
+            key,
+            "ID",
+            "id",
+            "Id",
+            "messageID",
+            "messageId",
+        )
+        remote_jid = (
+            cls._text_value(
+                key,
+                "remoteJid",
+                "RemoteJid",
+                "remoteJID",
+                "RemoteJID",
+            )
+            or cls._history_conversation_jid(conversation)
+        )
+        if not message_id or not remote_jid or not message:
+            return None
+
+        is_from_me = (
+            cls._optional_bool(
+                key.get("fromMe")
+                if "fromMe" in key
+                else key.get("FromMe", key.get("isFromMe"))
+            )
+            is True
+        )
+        participant = cls._text_value(key, "participant", "Participant")
+        is_group = remote_jid.endswith("@g.us") or bool(
+            participant and participant != remote_jid
+        )
+        sender = participant if is_group and participant else remote_jid
+        timestamp = (
+            web_message.get("messageTimestamp")
+            or web_message.get("MessageTimestamp")
+            or web_message.get("Timestamp")
+            or web_message.get("timestamp")
+        )
+        info = {
+            "ID": message_id,
+            "Chat": remote_jid,
+            "Sender": sender,
+            "IsFromMe": is_from_me,
+            "IsGroup": is_group,
+            "PushName": cls._text_value(web_message, "pushName", "PushName"),
+            "Timestamp": timestamp,
+        }
+        if is_from_me and not is_group:
+            info["RecipientAlt"] = remote_jid
+        if participant:
+            info["SenderAlt"] = participant
+
+        return {
+            "event": "Message",
+            "instanceToken": envelope.get("instanceToken"),
+            "instanceId": envelope.get("instanceId"),
+            "instanceName": envelope.get("instanceName"),
+            "data": {
+                "Info": info,
+                "Key": key,
+                "Message": message,
+                "historySync": True,
+            },
+        }
+
+    @classmethod
+    def _history_conversation_jid(cls, conversation: dict[str, Any]) -> str | None:
+        return cls._text_value(
+            conversation,
+            "ID",
+            "id",
+            "JID",
+            "Jid",
+            "jid",
+            "Chat",
+            "chat",
+        )
+
     @staticmethod
     def _response_data(response: dict[str, Any] | None) -> Any:
         if not isinstance(response, dict):
@@ -1186,6 +1425,12 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "Configure EVOLUTION_GO_API_KEY e reinicie a API."
             )
         return f"Evolution Go respondeu com HTTP {status_code}"
+
+    @classmethod
+    def _http_error_from_exception(cls, exc: httpx.HTTPError) -> str:
+        if isinstance(exc, httpx.HTTPStatusError):
+            return cls._http_error_message(exc)
+        return "Evolution Go indisponível para solicitar history sync."
 
     @classmethod
     def _send_error_result(cls, exc: httpx.HTTPError) -> SendResult:

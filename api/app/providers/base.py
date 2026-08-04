@@ -60,6 +60,21 @@ class IncomingMessageResult(BaseModel):
     raw_payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class MessageHistoryAnchor(BaseModel):
+    provider_message_id: str
+    chat_address: str
+    is_group: bool = False
+    is_from_me: bool = False
+    timestamp: datetime
+
+
+class MessageHistoryRequestResult(BaseModel):
+    success: bool
+    provider_message_id: str | None = None
+    error: str | None = None
+    retryable: bool = False
+
+
 class IncomingMessageEditResult(BaseModel):
     provider_event_id: str
     target_provider_message_id: str
@@ -149,6 +164,20 @@ class WhatsAppProvider(ABC):
 
     async def list_groups(self, channel: WhatsAppChannel) -> list[GroupDirectoryEntry]:
         raise NotImplementedError("Listagem de grupos não implementada para este provider")
+
+    async def request_message_history(
+        self,
+        channel: WhatsAppChannel,
+        anchor: MessageHistoryAnchor,
+        *,
+        count: int,
+    ) -> MessageHistoryRequestResult:
+        raise NotImplementedError("History sync não implementado para este provider")
+
+    async def handle_history_sync(
+        self, payload: dict[str, Any]
+    ) -> list[IncomingMessageResult]:
+        return []
 
     @abstractmethod
     async def send_text(

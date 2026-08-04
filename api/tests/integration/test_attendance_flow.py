@@ -1,5 +1,7 @@
+import asyncio
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from threading import Barrier
 from unittest.mock import AsyncMock, patch
@@ -17,7 +19,8 @@ from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.delivery.tasks import run_delivery
 from app.messages.models import Message, MessageContactShare, MessageRevision
-from app.providers.base import SendResult, SharedContact
+from app.providers.base import MessageHistoryRequestResult, SendResult, SharedContact
+from app.providers.history_reconcile import request_history_for_channel_report
 from app.providers.inbox_tasks import run_provider_event_inbox
 from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.webhook_router import lock_provider_thread
@@ -94,6 +97,24 @@ class ConfirmingProvider:
             provider_message_id=self.provider_message_id,
             status=MessageStatus.SENT,
         )
+
+
+class HistoryRequestProvider:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    async def request_message_history(self, channel, anchor, *, count: int):
+        self.calls.append(
+            {
+                "channel_id": channel.id,
+                "provider_message_id": anchor.provider_message_id,
+                "chat_address": anchor.chat_address,
+                "is_group": anchor.is_group,
+                "is_from_me": anchor.is_from_me,
+                "count": count,
+            }
+        )
+        return MessageHistoryRequestResult(success=True, provider_message_id="history-request-1")
 
 
 class AttendanceFlowTest(PostgresIntegrationTestCase):
@@ -499,6 +520,124 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(conversation_count, 1)
         self.assertEqual(message_count, 2)
         self.assertEqual(processed_event_count, 2)
+
+    def test_history_sync_event_is_split_into_durable_inbox_messages(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        history_payload = {
+            "event": "HistorySync",
+            "instanceId": "integration-instance",
+            "instanceName": "tenant-a",
+            "instanceToken": settings.evolution_go_api_key,
+            "data": {
+                "Data": {
+                    "Conversations": [
+                        {
+                            "ID": f"{self.customer_phone}@s.whatsapp.net",
+                            "Messages": [
+                                {
+                                    "Message": {
+                                        "key": {
+                                            "remoteJid": f"{self.customer_phone}@s.whatsapp.net",
+                                            "fromMe": False,
+                                            "id": "history-message-1",
+                                        },
+                                        "message": {
+                                            "conversation": "Mensagem recuperada"
+                                        },
+                                        "messageTimestamp": 1785322800,
+                                        "pushName": "Cliente Histórico",
+                                    }
+                                }
+                            ],
+                        }
+                    ]
+                }
+            },
+        }
+
+        response = self.post_webhook(webhook_url, history_payload)
+
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertEqual(response.json()["status"], "accepted")
+        with SessionLocal() as db:
+            history_event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.event_type == "HistorySync",
+                )
+            )
+            message_event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id == "message:history-message-1",
+                )
+            )
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == "history-message-1",
+                )
+            )
+
+        self.assertIsNotNone(history_event)
+        self.assertTrue(history_event.processed)
+        self.assertIsNotNone(message_event)
+        self.assertTrue(message_event.processed)
+        self.assertIsNotNone(message)
+        self.assertEqual(message.body, "Mensagem recuperada")
+
+    def test_history_reconcile_requests_recent_conversation_history(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        response = self.post_webhook(
+            webhook_url,
+            self.incoming_payload("history-anchor-1", "Âncora"),
+        )
+        self.assertEqual(response.status_code, 202, response.text)
+        with SessionLocal() as db:
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == "history-anchor-1",
+                )
+            )
+            anchor_time = datetime.now(UTC) + timedelta(minutes=1)
+            message.sent_at = anchor_time
+            conversation = db.scalar(
+                select(Conversation).where(
+                    Conversation.id == message.conversation_id,
+                    Conversation.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            conversation.last_message_at = anchor_time
+            db.commit()
+        provider = HistoryRequestProvider()
+
+        with (
+            patch("app.providers.history_reconcile.get_provider", return_value=provider),
+            patch("app.providers.history_reconcile._claim_thread_cooldown", return_value=True),
+            SessionLocal() as db,
+        ):
+            result = asyncio.run(
+                request_history_for_channel_report(
+                    db,
+                    tenant_id=self.tenant_a.tenant_id,
+                    channel_id=self.tenant_a.channel_id,
+                    limit=5,
+                )
+            )
+
+        self.assertEqual(result.checked_threads, 1)
+        self.assertEqual(result.requested_threads, 1)
+        self.assertEqual(result.failed_threads, 0)
+        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls[0]["provider_message_id"], "history-anchor-1")
+        self.assertEqual(provider.calls[0]["chat_address"], self.customer_phone)
 
     def test_media_is_durable_before_acceptance_and_survives_queue_failure(self) -> None:
         webhook_url = (

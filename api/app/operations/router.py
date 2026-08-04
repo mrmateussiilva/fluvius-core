@@ -20,12 +20,20 @@ from app.jobs.queue import (
 )
 from app.messages.models import Message
 from app.operations.schemas import (
+    HistoryReconcileRequest,
+    HistoryReconcileResponse,
+    HistoryReconcileRuntimeResponse,
     OperationalChannelHealth,
     OperationalHealthResponse,
     OperationalStatus,
     WebhookReconcileRequest,
     WebhookReconcileResponse,
     WebhookReconcileRuntimeResponse,
+)
+from app.providers.history_reconcile import (
+    get_history_reconcile_runtime,
+    request_history_for_channel_report,
+    request_history_for_connected_channels_report,
 )
 from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.pending_events import PENDING_MESSAGE_ERRORS
@@ -227,6 +235,7 @@ def operational_health(
         maintenance_worker_online,
     ) = _worker_health()
     webhook_reconcile = get_webhook_reconcile_runtime()
+    history_reconcile = get_history_reconcile_runtime()
     issues: list[str] = []
     critical = False
     if not redis_available:
@@ -278,6 +287,11 @@ def operational_health(
     if failed_provider_events:
         issues.append(
             f"{failed_provider_events} evento(s) de webhook com erro de processamento."
+        )
+    if redis_available and connected_channels and not history_reconcile.active:
+        issues.append(
+            "Reconciliador de histórico sem heartbeat recente; mensagens perdidas "
+            "pelo provider não serão solicitadas novamente."
         )
     if stale_connected_channels:
         issues.append(
@@ -332,6 +346,18 @@ def operational_health(
             last_scanned_channels=webhook_reconcile.last_scanned_channels,
             last_checked_events=webhook_reconcile.last_checked_events,
             last_resolved_events=webhook_reconcile.last_resolved_events,
+        ),
+        history_reconcile=HistoryReconcileRuntimeResponse(
+            active=history_reconcile.active,
+            heartbeat_at=history_reconcile.heartbeat_at,
+            last_started_at=history_reconcile.last_started_at,
+            last_finished_at=history_reconcile.last_finished_at,
+            last_error_at=history_reconcile.last_error_at,
+            last_error=history_reconcile.last_error,
+            last_scanned_channels=history_reconcile.last_scanned_channels,
+            last_checked_threads=history_reconcile.last_checked_threads,
+            last_requested_threads=history_reconcile.last_requested_threads,
+            last_failed_threads=history_reconcile.last_failed_threads,
         ),
         stale_connected_channels=stale_connected_channels,
         connected_channels=connected_channels,
@@ -401,6 +427,61 @@ async def reconcile_webhooks(
         resolved_events=resolved_events,
         remaining_pending_events=remaining,
         oldest_pending_event_at=oldest,
+    )
+
+
+@router.post(
+    "/history-sync/request",
+    response_model=HistoryReconcileResponse,
+)
+async def request_history_sync(
+    payload: HistoryReconcileRequest,
+    context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> HistoryReconcileResponse:
+    if payload.channel_id is not None:
+        channel_ids = _reconcile_channel_ids(
+            db,
+            tenant_id=context.tenant_id,
+            channel_id=payload.channel_id,
+        )
+        result = await request_history_for_channel_report(
+            db,
+            tenant_id=context.tenant_id,
+            channel_id=payload.channel_id,
+            limit=payload.limit_per_channel,
+        )
+        scanned_channels = len(channel_ids)
+    else:
+        batch = await request_history_for_connected_channels_report(
+            tenant_id=context.tenant_id,
+            limit_per_channel=payload.limit_per_channel,
+        )
+        result = batch
+        scanned_channels = batch.scanned_channels
+
+    db.add(
+        AuditLog(
+            tenant_id=context.tenant_id,
+            user_id=context.user.id,
+            action="operations.history_sync.requested",
+            entity_type="whatsapp_channel" if payload.channel_id else "whatsapp_channels",
+            entity_id=payload.channel_id,
+            metadata_={
+                "scanned_channels": scanned_channels,
+                "checked_threads": result.checked_threads,
+                "requested_threads": result.requested_threads,
+                "failed_threads": result.failed_threads,
+            },
+        )
+    )
+    db.commit()
+    return HistoryReconcileResponse(
+        channel_id=payload.channel_id,
+        scanned_channels=scanned_channels,
+        checked_threads=result.checked_threads,
+        requested_threads=result.requested_threads,
+        failed_threads=result.failed_threads,
     )
 
 

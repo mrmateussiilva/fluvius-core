@@ -199,6 +199,27 @@ async def _accept_message_event(
             detail=str(exc),
         ) from exc
 
+    return await _accept_normalized_incoming_event(
+        db=db,
+        channel=channel,
+        event_type=event_type,
+        event_id=event_id,
+        sanitized_payload=sanitized_payload,
+        incoming=incoming,
+        event=event,
+    )
+
+
+async def _accept_normalized_incoming_event(
+    *,
+    db: Session,
+    channel: WhatsAppChannel,
+    event_type: str,
+    event_id: str | None,
+    sanitized_payload: dict,
+    incoming: IncomingMessageResult | IncomingMessageEditResult,
+    event: ProviderEvent | None = None,
+) -> dict[str, str]:
     staged = None
     media_error = None
     if isinstance(incoming, IncomingMessageResult):
@@ -279,6 +300,75 @@ async def _accept_message_event(
     return {"status": "accepted"}
 
 
+async def _accept_history_sync_event(
+    *,
+    db: Session,
+    channel: WhatsAppChannel,
+    provider_adapter: WhatsAppProvider,
+    event_type: str,
+    event_id: str | None,
+    payload: dict,
+    sanitized_payload: dict,
+) -> dict[str, str]:
+    event = _find_provider_event(
+        db,
+        tenant_id=channel.tenant_id,
+        channel_id=channel.id,
+        event_id=event_id,
+    )
+    if event is not None and event.processed:
+        return {"status": "duplicate"}
+
+    try:
+        incoming_messages = await provider_adapter.handle_history_sync(payload)
+    except (ValueError, NotImplementedError) as exc:
+        event = event or ProviderEvent(
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            provider=channel.provider.value,
+            event_type=event_type,
+            provider_event_id=str(event_id) if event_id else None,
+            payload=sanitized_payload,
+        )
+        event.processing_error = str(exc)
+        db.add(event)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    event = event or ProviderEvent(
+        tenant_id=channel.tenant_id,
+        channel_id=channel.id,
+        provider=channel.provider.value,
+        event_type=event_type,
+        provider_event_id=str(event_id) if event_id else None,
+        payload=sanitized_payload,
+    )
+    event.processed = True
+    event.processing_error = None
+    db.add(event)
+    db.commit()
+
+    accepted = 0
+    for incoming in incoming_messages:
+        message_event_id = f"message:{incoming.provider_message_id}"
+        result = await _accept_normalized_incoming_event(
+            db=db,
+            channel=channel,
+            event_type="HistorySync.Message",
+            event_id=message_event_id,
+            sanitized_payload=provider_adapter.sanitize_webhook_payload(
+                incoming.raw_payload
+            ),
+            incoming=incoming,
+        )
+        if result["status"] == "accepted":
+            accepted += 1
+    return {"status": "accepted" if accepted else "ignored"}
+
+
 def _find_provider_event(
     db: Session,
     *,
@@ -341,6 +431,16 @@ async def whatsapp_webhook(
     sanitized_payload = provider_adapter.sanitize_webhook_payload(payload)
     if normalized_event == "message":
         return await _accept_message_event(
+            db=db,
+            channel=channel,
+            provider_adapter=provider_adapter,
+            event_type=event_type,
+            event_id=event_id,
+            payload=payload,
+            sanitized_payload=sanitized_payload,
+        )
+    if normalized_event in {"historysync", "history.sync"}:
+        return await _accept_history_sync_event(
             db=db,
             channel=channel,
             provider_adapter=provider_adapter,

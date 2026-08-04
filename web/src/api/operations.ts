@@ -1,5 +1,6 @@
 import { http } from './http'
 import type {
+  HistoryReconcileResult,
   OperationalHealth,
   WebhookReconcileResult,
 } from './types'
@@ -12,6 +13,15 @@ export const reconcileWebhooks = (payload: {
   limit_per_channel?: number
 } = {}) =>
   http<WebhookReconcileResult>('/api/v1/operations/webhooks/reconcile', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const requestHistorySync = (payload: {
+  channel_id?: string | null
+  limit_per_channel?: number
+} = {}) =>
+  http<HistoryReconcileResult>('/api/v1/operations/history-sync/request', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

@@ -32,6 +32,19 @@ class WebhookReconcileRuntimeResponse(BaseModel):
     last_resolved_events: int = 0
 
 
+class HistoryReconcileRuntimeResponse(BaseModel):
+    active: bool
+    heartbeat_at: datetime | None = None
+    last_started_at: datetime | None = None
+    last_finished_at: datetime | None = None
+    last_error_at: datetime | None = None
+    last_error: str | None = None
+    last_scanned_channels: int = 0
+    last_checked_threads: int = 0
+    last_requested_threads: int = 0
+    last_failed_threads: int = 0
+
+
 class OperationalHealthResponse(BaseModel):
     status: OperationalStatus
     generated_at: datetime
@@ -50,6 +63,7 @@ class OperationalHealthResponse(BaseModel):
     failed_provider_events: int = 0
     oldest_pending_event_at: datetime | None = None
     webhook_reconcile: WebhookReconcileRuntimeResponse
+    history_reconcile: HistoryReconcileRuntimeResponse
     stale_connected_channels: int = 0
     connected_channels: int
     total_channels: int
@@ -69,3 +83,16 @@ class WebhookReconcileResponse(BaseModel):
     resolved_events: int
     remaining_pending_events: int
     oldest_pending_event_at: datetime | None = None
+
+
+class HistoryReconcileRequest(BaseModel):
+    channel_id: UUID | None = None
+    limit_per_channel: int = Field(default=20, ge=1, le=50)
+
+
+class HistoryReconcileResponse(BaseModel):
+    channel_id: UUID | None = None
+    scanned_channels: int
+    checked_threads: int
+    requested_threads: int
+    failed_threads: int

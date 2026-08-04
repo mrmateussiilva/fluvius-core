@@ -334,6 +334,54 @@ onMounted(async () => {
               Conectados há 30+ min sem nenhum evento
             </p>
           </article>
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <RefreshCw class="h-5 w-5 text-info" />
+              <span
+                class="rounded-full px-2 py-1 text-[10px] font-semibold ring-1"
+                :class="reconcileStatusClass(operations.health.history_reconcile.active)"
+              >
+                {{
+                  operations.health.history_reconcile.active
+                    ? 'Auto ativo'
+                    : 'Auto parado'
+                }}
+              </span>
+            </div>
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              Histórico do provider
+            </p>
+            <p class="mt-1 text-2xl font-semibold text-ink">
+              {{ operations.health.history_reconcile.last_requested_threads }}
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">
+              thread(s) solicitada(s) no último lote ·
+              {{ operations.health.history_reconcile.last_failed_threads }} falha(s)
+            </p>
+            <p
+              v-if="operations.lastHistorySync"
+              class="mt-2 text-xs text-success-strong"
+            >
+              Agora:
+              {{ operations.lastHistorySync.requested_threads }} solicitada(s);
+              {{ operations.lastHistorySync.failed_threads }} falha(s)
+            </p>
+            <button
+              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
+              :disabled="
+                operations.historySyncing ||
+                operations.health.connected_channels === 0
+              "
+              @click="operations.requestHistory()"
+            >
+              <LoaderCircle
+                v-if="operations.historySyncing"
+                class="h-4 w-4 animate-spin"
+              />
+              <RefreshCw v-else class="h-4 w-4" />
+              Solicitar histórico
+            </button>
+          </article>
         </section>
 
         <section class="mt-5 overflow-hidden rounded-lg border border-line bg-panel shadow-sm">

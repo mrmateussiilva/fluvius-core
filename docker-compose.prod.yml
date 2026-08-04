@@ -65,7 +65,7 @@ services:
         "--requirepass",
         "${REDIS_PASSWORD:?configure REDIS_PASSWORD}",
         "--maxmemory",
-        "384mb",
+        "768mb",
         "--maxmemory-policy",
         "noeviction",
       ]
@@ -82,7 +82,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
-    mem_limit: 512m
+    mem_limit: 896m
     cpus: 0.5
     pids_limit: 100
     networks:
