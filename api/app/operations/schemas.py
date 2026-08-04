@@ -37,11 +37,15 @@ class OperationalHealthResponse(BaseModel):
     generated_at: datetime
     redis_available: bool
     delivery_worker_online: bool
+    webhook_worker_online: bool
     maintenance_worker_online: bool
     pending_deliveries: int
     delayed_deliveries: int
     failed_deliveries_24h: int
     oldest_pending_at: datetime | None
+    pending_inbox_events: int = 0
+    delayed_inbox_events: int = 0
+    failed_inbox_events_24h: int = 0
     pending_provider_events: int = 0
     failed_provider_events: int = 0
     oldest_pending_event_at: datetime | None = None

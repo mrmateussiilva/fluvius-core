@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -24,6 +25,7 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "contacts"
     __table_args__ = (
         UniqueConstraint("tenant_id", "phone_number", name="uq_contacts_tenant_phone"),
+        Index("ix_contacts_tenant_kind", "tenant_id", "kind"),
     )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -37,7 +39,6 @@ class Contact(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
         default=ContactKind.DIRECT,
         nullable=False,
-        index=True,
     )
     name: Mapped[str | None] = mapped_column(String(160))
     address_book_name: Mapped[str | None] = mapped_column(String(160))

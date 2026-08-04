@@ -171,6 +171,13 @@ são encadeadas imediatamente após a confirmação terminal da anterior. O loop
 dois segundos do dispatcher é mantido para recuperar entregas que não puderam
 ser enfileiradas diretamente.
 
+O serviço `webhook-worker` consome `fluvius-webhooks` com um processo por
+padrão, configurável por `WEBHOOK_WORKER_PROCESSES`. A API confirma o webhook
+somente depois de persistir inbox e staging; o worker cria contato, conversa,
+mensagem e anexo. O dispatcher recupera itens não enfileirados e jobs
+interrompidos. Para preservar o teto de memória da VPS, `worker` e
+`webhook-worker` usam 384 MB cada por padrão.
+
 Não troque esse script por `docker compose up -d --build` em produção. O fluxo
 genérico recria serviços em bloco, pode deixar o Caddy sem upstream por mais
 tempo e volta a acoplar migration ao boot da API.
@@ -183,7 +190,7 @@ curl -fsS https://fluvius.finderbit.com.br/health/ready
 
 # Logs
 docker compose --env-file .env.production -f docker-compose.prod.yml \
-  logs -f api worker delivery-worker evolution-go web
+  logs -f api worker delivery-worker webhook-worker evolution-go web
 
 # Proxy do host
 sudo systemctl status caddy
@@ -223,9 +230,9 @@ positiva com PostgreSQL e Redis. Os containers usam `restart: unless-stopped`,
 healthchecks, limites de recursos, limite de PIDs e rotação do log local.
 
 Administradores de cada empresa também possuem **Saúde operacional** no menu.
-A tela verifica a cada 30 segundos a presença dos workers de entrega e
-manutenção, entregas aguardando há mais de dois minutos, falhas nas últimas 24
-horas e o estado/último evento dos canais daquele tenant. Alertas amarelos
+A tela verifica a cada 30 segundos a presença dos workers de entrega,
+recebimento e manutenção, entregas e inbox aguardando há mais de dois minutos,
+falhas nas últimas 24 horas e o estado/último evento dos canais daquele tenant. Alertas amarelos
 indicam degradação; alertas vermelhos indicam risco direto para o envio. Durante
 um deploy, o aviso de worker offline pode aparecer transitoriamente até o novo
 processo registrar seu heartbeat no RQ.

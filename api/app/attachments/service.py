@@ -47,6 +47,10 @@ class UnsupportedAttachmentError(ValueError):
     pass
 
 
+class IncomingAttachmentStorageError(OSError):
+    pass
+
+
 class _HTMLStructureDetector(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -74,6 +78,15 @@ class _HTMLStructureDetector(HTMLParser):
 class ValidatedAttachment:
     message_type: MessageType
     content_type: str
+    content_sha256: str
+
+
+@dataclass(frozen=True)
+class StagedIncomingAttachment:
+    storage_key: str
+    file_name: str
+    content_type: str
+    size_bytes: int
     content_sha256: str
 
 
@@ -247,8 +260,33 @@ async def persist_incoming_attachment(
     message: Message,
     incoming: IncomingMessageResult,
 ) -> tuple[MessageAttachment | None, str | None]:
-    if incoming.message_type == MessageType.TEXT or not incoming.media_base64:
+    try:
+        staged, error = await stage_incoming_attachment(
+            tenant_id=tenant_id,
+            incoming=incoming,
+        )
+    except IncomingAttachmentStorageError:
+        return None, "Não foi possível armazenar a mídia recebida"
+    if staged is None:
+        return None, error
+    attachment = _create_staged_attachment(
+        db,
+        tenant_id=tenant_id,
+        message=message,
+        staged=staged,
+    )
+    return attachment, None
+
+
+async def stage_incoming_attachment(
+    *,
+    tenant_id: UUID,
+    incoming: IncomingMessageResult,
+) -> tuple[StagedIncomingAttachment | None, str | None]:
+    if incoming.message_type == MessageType.TEXT:
         return None, None
+    if not incoming.media_base64:
+        return None, "Provider não disponibilizou o conteúdo da mídia recebida"
     encoded = incoming.media_base64
     if encoded.startswith("data:") and "," in encoded:
         encoded = encoded.split(",", 1)[1]
@@ -284,20 +322,65 @@ async def persist_incoming_attachment(
         return None, "Tipo da mídia recebida não corresponde ao conteúdo"
     try:
         stored = await LocalStorageProvider().save(str(tenant_id), file_name, content)
+    except OSError as exc:
+        raise IncomingAttachmentStorageError from exc
+    return (
+        StagedIncomingAttachment(
+            storage_key=stored.key,
+            file_name=file_name,
+            content_type=validated.content_type,
+            size_bytes=stored.size_bytes,
+            content_sha256=validated.content_sha256,
+        ),
+        None,
+    )
+
+
+async def persist_staged_incoming_attachment(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    message: Message,
+    staged: StagedIncomingAttachment,
+) -> tuple[MessageAttachment | None, str | None]:
+    storage = LocalStorageProvider()
+    path = storage.path_for(staged.storage_key)
+    if path is None or not path.is_file():
+        return None, "Mídia recebida não está disponível no storage"
+    try:
+        content = await asyncio.to_thread(path.read_bytes)
     except OSError:
-        return None, "Não foi possível armazenar a mídia recebida"
+        return None, "Não foi possível ler a mídia recebida no storage"
+    if len(content) != staged.size_bytes or sha256(content).hexdigest() != staged.content_sha256:
+        return None, "Mídia recebida falhou na verificação de integridade"
+    attachment = _create_staged_attachment(
+        db,
+        tenant_id=tenant_id,
+        message=message,
+        staged=staged,
+    )
+    return attachment, None
+
+
+def _create_staged_attachment(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    message: Message,
+    staged: StagedIncomingAttachment,
+) -> MessageAttachment:
     attachment = MessageAttachment(
         tenant_id=tenant_id,
         message_id=message.id,
-        file_name=file_name,
-        content_type=validated.content_type,
-        size_bytes=stored.size_bytes,
-        content_sha256=validated.content_sha256,
-        storage_key=stored.key,
-        public_url=stored.public_url,
+        file_name=staged.file_name,
+        content_type=staged.content_type,
+        size_bytes=staged.size_bytes,
+        content_sha256=staged.content_sha256,
+        storage_key=staged.storage_key,
+        public_url=LocalStorageProvider().public_url_for(staged.storage_key),
     )
     db.add(attachment)
-    return attachment, None
+    return attachment
 
 
 def _default_content_type(message_type: MessageType) -> str:

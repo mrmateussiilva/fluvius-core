@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
@@ -5,7 +6,12 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.attachments.service import persist_incoming_attachment
+from app.attachments.service import (
+    IncomingAttachmentStorageError,
+    StagedIncomingAttachment,
+    persist_incoming_attachment,
+    stage_incoming_attachment,
+)
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelProvider,
@@ -28,13 +34,16 @@ from app.messages.models import Message, MessageContactShare, MessageRevision
 from app.providers.base import (
     IgnoredWebhookEvent,
     IncomingMessageEditResult,
+    IncomingMessageResult,
+    WhatsAppProvider,
 )
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
 )
 from app.providers.factory import get_provider
-from app.providers.models import ProviderEvent
+from app.providers.inbox_dispatcher import dispatch_provider_event_inbox
+from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.pending_events import (
     PENDING_EDIT_ERROR,
     PENDING_INCOMING_MESSAGE_ERROR,
@@ -42,6 +51,7 @@ from app.providers.pending_events import (
 )
 from app.providers.status_updates import apply_message_status_update
 from app.realtime.manager import realtime_manager
+from app.storage.local import LocalStorageProvider
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 EDIT_CONTENT_UNAVAILABLE = (
@@ -127,6 +137,173 @@ def apply_message_edit(
     return message
 
 
+async def _accept_message_event(
+    *,
+    db: Session,
+    channel: WhatsAppChannel,
+    provider_adapter: WhatsAppProvider,
+    event_type: str,
+    event_id: str | None,
+    payload: dict,
+    sanitized_payload: dict,
+) -> dict[str, str]:
+    event = _find_provider_event(
+        db,
+        tenant_id=channel.tenant_id,
+        channel_id=channel.id,
+        event_id=event_id,
+    )
+    if event is not None:
+        if event.processed:
+            return {"status": "duplicate"}
+        existing_inbox = db.scalar(
+            select(ProviderEventInbox).where(
+                ProviderEventInbox.tenant_id == channel.tenant_id,
+                ProviderEventInbox.provider_event_id == event.id,
+            )
+        )
+        if existing_inbox is not None:
+            dispatch_provider_event_inbox(existing_inbox.id, channel.tenant_id)
+            return {"status": "accepted"}
+
+    try:
+        incoming = await provider_adapter.handle_webhook(payload)
+    except IgnoredWebhookEvent:
+        event = event or ProviderEvent(
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            provider=channel.provider.value,
+            event_type=event_type,
+            provider_event_id=str(event_id) if event_id else None,
+            payload=sanitized_payload,
+        )
+        event.processed = True
+        event.processing_error = None
+        db.add(event)
+        db.commit()
+        return {"status": "ignored"}
+    except (ValueError, NotImplementedError) as exc:
+        event = event or ProviderEvent(
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            provider=channel.provider.value,
+            event_type=event_type,
+            provider_event_id=str(event_id) if event_id else None,
+            payload=sanitized_payload,
+        )
+        event.processing_error = str(exc)
+        db.add(event)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    staged = None
+    media_error = None
+    if isinstance(incoming, IncomingMessageResult):
+        try:
+            staged, media_error = await stage_incoming_attachment(
+                tenant_id=channel.tenant_id,
+                incoming=incoming,
+            )
+        except IncomingAttachmentStorageError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Storage temporariamente indisponível para receber a mídia",
+            ) from exc
+        normalized_kind = "message"
+    else:
+        normalized_kind = "edit"
+    normalized_payload = incoming.model_dump(
+        mode="json",
+        exclude={"media_base64", "raw_payload"},
+    )
+
+    event = event or ProviderEvent(
+        tenant_id=channel.tenant_id,
+        channel_id=channel.id,
+        provider=channel.provider.value,
+        event_type=event_type,
+        provider_event_id=str(event_id) if event_id else None,
+        payload=sanitized_payload,
+    )
+    inbox = None
+    try:
+        event.processing_error = PENDING_INCOMING_MESSAGE_ERROR
+        db.add(event)
+        db.flush()
+        inbox = ProviderEventInbox(
+            tenant_id=channel.tenant_id,
+            provider_event_id=event.id,
+            normalized_kind=normalized_kind,
+            normalized_payload=normalized_payload,
+            status="queued",
+            next_attempt_at=datetime.now(UTC),
+            media_storage_key=staged.storage_key if staged else None,
+            media_file_name=staged.file_name if staged else None,
+            media_content_type=staged.content_type if staged else None,
+            media_size_bytes=staged.size_bytes if staged else None,
+            media_content_sha256=staged.content_sha256 if staged else None,
+            media_error=media_error,
+        )
+        db.add(inbox)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        await _discard_staged_attachment(staged)
+        duplicate = _find_provider_event(
+            db,
+            tenant_id=channel.tenant_id,
+            channel_id=channel.id,
+            event_id=event_id,
+        )
+        if duplicate is None:
+            return {"status": "duplicate"}
+        duplicate_inbox = db.scalar(
+            select(ProviderEventInbox).where(
+                ProviderEventInbox.tenant_id == channel.tenant_id,
+                ProviderEventInbox.provider_event_id == duplicate.id,
+            )
+        )
+        if duplicate_inbox is not None:
+            dispatch_provider_event_inbox(duplicate_inbox.id, channel.tenant_id)
+        return {"status": "duplicate"}
+    except Exception:
+        db.rollback()
+        await _discard_staged_attachment(staged)
+        raise
+
+    if inbox is not None:
+        dispatch_provider_event_inbox(inbox.id, channel.tenant_id)
+    return {"status": "accepted"}
+
+
+def _find_provider_event(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    channel_id: UUID,
+    event_id: str | None,
+) -> ProviderEvent | None:
+    if event_id is None:
+        return None
+    return db.scalar(
+        select(ProviderEvent).where(
+            ProviderEvent.tenant_id == tenant_id,
+            ProviderEvent.channel_id == channel_id,
+            ProviderEvent.provider_event_id == str(event_id),
+        )
+    )
+
+
+async def _discard_staged_attachment(
+    staged: StagedIncomingAttachment | None,
+) -> None:
+    if staged is not None:
+        await LocalStorageProvider().delete(staged.storage_key)
+
+
 @router.post("/whatsapp/{provider}/{channel_id}", status_code=status.HTTP_202_ACCEPTED)
 async def whatsapp_webhook(
     provider: ChannelProvider,
@@ -162,6 +339,16 @@ async def whatsapp_webhook(
     normalized_event = event_type.lower().replace("_", ".")
     event_id = provider_adapter.webhook_event_id(payload)
     sanitized_payload = provider_adapter.sanitize_webhook_payload(payload)
+    if normalized_event == "message":
+        return await _accept_message_event(
+            db=db,
+            channel=channel,
+            provider_adapter=provider_adapter,
+            event_type=event_type,
+            event_id=event_id,
+            payload=payload,
+            sanitized_payload=sanitized_payload,
+        )
     event = None
     if event_id is not None:
         event = db.scalar(

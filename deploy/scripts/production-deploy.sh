@@ -87,6 +87,7 @@ verify_services_running() {
     api
     worker
     delivery-worker
+    webhook-worker
     web
   )
 
@@ -118,7 +119,7 @@ verify_datastores_ready
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 api
 "${COMPOSE[@]}" exec -T api alembic current </dev/null
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 \
-  worker delivery-worker
+  worker delivery-worker webhook-worker
 "${COMPOSE[@]}" up -d --no-deps --force-recreate --wait --wait-timeout 300 web
 "${COMPOSE[@]}" ps
 verify_services_running

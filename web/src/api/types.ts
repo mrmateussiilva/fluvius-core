@@ -135,11 +135,15 @@ export interface OperationalHealth {
   generated_at: string
   redis_available: boolean
   delivery_worker_online: boolean
+  webhook_worker_online: boolean
   maintenance_worker_online: boolean
   pending_deliveries: number
   delayed_deliveries: number
   failed_deliveries_24h: number
   oldest_pending_at: string | null
+  pending_inbox_events: number
+  delayed_inbox_events: number
+  failed_inbox_events_24h: number
   pending_provider_events: number
   failed_provider_events: number
   oldest_pending_event_at: string | null

@@ -6,7 +6,7 @@ from hashlib import sha256
 from uuid import UUID
 
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 
 from app.channels.models import WhatsAppChannel
@@ -24,6 +24,8 @@ from app.conversations.models import Conversation
 from app.database import Base, SessionLocal, engine, load_all_models
 from app.main import app
 from app.messages.models import Message
+from app.providers.inbox_tasks import run_provider_event_inbox
+from app.providers.models import ProviderEventInbox
 from app.quick_replies.models import QuickReply
 from app.security import hash_password
 from app.tenants.models import Tenant
@@ -69,7 +71,7 @@ class PostgresIntegrationTestCase(unittest.TestCase):
             revision = connection.execute(
                 text("SELECT version_num FROM alembic_version")
             ).scalar_one()
-        if revision != "20260802_0024":
+        if revision != "20260804_0025":
             raise RuntimeError(f"Schema de teste está na revisão inesperada {revision}")
 
         cls.password_hash = hash_password(TEST_PASSWORD)
@@ -93,6 +95,33 @@ class PostgresIntegrationTestCase(unittest.TestCase):
         table_names = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
         with engine.begin() as connection:
             connection.execute(text(f"TRUNCATE TABLE {table_names} CASCADE"))
+
+    def post_webhook(self, url: str, payload: dict, *, process: bool = True):
+        response = self.client.post(url, json=payload)
+        if process and response.status_code == 202:
+            self.process_pending_webhook_inbox()
+        return response
+
+    def process_pending_webhook_inbox(self) -> int:
+        with SessionLocal() as db:
+            pending = list(
+                db.execute(
+                    select(
+                        ProviderEventInbox.id,
+                        ProviderEventInbox.tenant_id,
+                    )
+                    .where(
+                        ProviderEventInbox.status.in_(
+                            ("queued", "enqueued", "retry_wait")
+                        )
+                    )
+                    .order_by(ProviderEventInbox.created_at)
+                )
+            )
+        return sum(
+            run_provider_event_inbox(str(inbox_id), str(tenant_id))
+            for inbox_id, tenant_id in pending
+        )
 
     def _create_tenant_fixture(self, label: str, phone_number: str) -> TenantFixture:
         now = datetime.now(UTC)

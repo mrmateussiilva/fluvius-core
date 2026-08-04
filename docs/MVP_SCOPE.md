@@ -31,6 +31,8 @@
 - Receber e enviar texto.
 - Entrega assíncrona de texto e mídia por worker exclusivo, com outbox
   persistente, ordem por conversa e retry conservador.
+- Recebimento assíncrono por worker exclusivo, com inbox persistente,
+  staging íntegro de mídia antes do aceite, retry e recuperação administrativa.
 - Responder/citar mensagens, refletir edições, acompanhar horários de
   entrega/leitura e reenviar falhas manualmente.
 - Anexos de imagem, documento, áudio, vídeo e figurinha nativa, com limite local de 25 MB, validação do conteúdo e envio idempotente. O compositor aceita até dez arquivos por lote e preserva o resultado individual de cada envio. Documentos incluem PDF, Office, HTML, JSON, XML, texto, CSV e ZIP; formatos renderizáveis como HTML são entregues apenas para download. PNG e JPG escolhidos como figurinha são convertidos para WebP 512×512 antes do envio.

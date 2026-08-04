@@ -97,7 +97,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
 
         with patch(
             "app.operations.router._worker_health",
-            return_value=(True, True, True),
+            return_value=(True, True, True, True),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -135,7 +135,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
     def test_offline_delivery_worker_is_critical(self) -> None:
         with patch(
             "app.operations.router._worker_health",
-            return_value=(True, False, True),
+            return_value=(True, False, True, True),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -194,7 +194,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
 
         with patch(
             "app.operations.router._worker_health",
-            return_value=(True, True, True),
+            return_value=(True, True, True, True),
         ), patch(
             "app.operations.router.get_webhook_reconcile_runtime",
             return_value=WebhookReconcileRuntime(active=True, heartbeat_at=now),
@@ -240,7 +240,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
 
         with patch(
             "app.operations.router._worker_health",
-            return_value=(True, True, True),
+            return_value=(True, True, True, True),
         ), patch(
             "app.operations.router.get_webhook_reconcile_runtime",
             return_value=WebhookReconcileRuntime(active=False),
@@ -261,7 +261,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         now = datetime.now(UTC)
         with patch(
             "app.operations.router._worker_health",
-            return_value=(True, True, True),
+            return_value=(True, True, True, True),
         ), patch(
             "app.operations.router.get_webhook_reconcile_runtime",
             return_value=WebhookReconcileRuntime(

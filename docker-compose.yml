@@ -107,6 +107,38 @@ services:
       redis:
         condition: service_healthy
 
+  webhook-worker:
+    build: ./api
+    command:
+      [
+        "rq",
+        "worker-pool",
+        "--url",
+        "redis://redis:6379/0",
+        "--num-workers",
+        "${WEBHOOK_WORKER_PROCESSES:-1}",
+        "fluvius-webhooks",
+      ]
+    dns:
+      - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
+      - ${DOCKER_DNS_SECONDARY:-8.8.8.8}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fluvius}:${POSTGRES_PASSWORD:-fluvius}@postgres:5432/${POSTGRES_DB:-fluvius}
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-local-only-change-me}
+      PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+      EVOLUTION_GO_BASE_URL: http://evolution-go:8080
+      EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-local-evolution-key}
+      EVOLUTION_GO_INSTANCE_TOKENS: '${EVOLUTION_GO_INSTANCE_TOKENS:-{}}'
+      PROVIDER_CREDENTIALS_KEY: ${PROVIDER_CREDENTIALS_KEY:-}
+    volumes:
+      - api_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   web:
     build: ./web
     environment:

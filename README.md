@@ -86,7 +86,7 @@ canais legados.
 ```bash
 docker compose up --build
 docker compose down
-docker compose logs -f api delivery-worker worker evolution-go
+docker compose logs -f api delivery-worker webhook-worker worker evolution-go
 docker compose exec api alembic current
 docker compose exec api alembic upgrade head
 docker compose exec web npm run build

@@ -205,6 +205,26 @@ onMounted(async () => {
             </p>
           </article>
           <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+            <RadioTower class="h-5 w-5 text-info-strong" />
+            <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              Worker de recebimento
+            </p>
+            <p
+              class="mt-1 font-semibold"
+              :class="
+                operations.health.webhook_worker_online
+                  ? 'text-success-strong'
+                  : 'text-danger-strong'
+              "
+            >
+              {{ operations.health.webhook_worker_online ? 'Online' : 'Offline' }}
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">
+              {{ operations.health.pending_inbox_events }} na inbox ·
+              {{ operations.health.delayed_inbox_events }} atrasada(s)
+            </p>
+          </article>
+          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
             <Wrench class="h-5 w-5 text-info-strong" />
             <p class="mt-4 text-xs font-semibold uppercase tracking-wide text-ink-faint">
               Worker de manutenção
@@ -241,6 +261,7 @@ onMounted(async () => {
               {{ operations.health.failed_deliveries_24h }}
             </p>
             <p class="mt-1 text-xs text-ink-muted">
+              {{ operations.health.failed_inbox_events_24h }} recebimento(s) com falha ·
               Mais antiga pendente:
               {{ formatDate(operations.health.oldest_pending_at) }}
             </p>
@@ -288,7 +309,8 @@ onMounted(async () => {
               class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="
                 operations.reconciling ||
-                operations.health.pending_provider_events === 0
+                (operations.health.pending_provider_events === 0 &&
+                  operations.health.failed_provider_events === 0)
               "
               @click="operations.reconcile()"
             >

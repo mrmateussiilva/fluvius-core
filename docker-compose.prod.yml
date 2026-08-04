@@ -164,8 +164,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    mem_limit: 768m
-    cpus: 1
+    mem_limit: 384m
+    cpus: 0.75
     pids_limit: 200
     networks:
       - backend
@@ -205,6 +205,45 @@ services:
         condition: service_healthy
     mem_limit: 768m
     cpus: 1
+    pids_limit: 200
+    networks:
+      - backend
+
+  webhook-worker:
+    <<: *service-defaults
+    build: ./api
+    user: "10001:10001"
+    command:
+      [
+        "rq",
+        "worker-pool",
+        "--url",
+        "redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0",
+        "--num-workers",
+        "${WEBHOOK_WORKER_PROCESSES:-1}",
+        "fluvius-webhooks",
+      ]
+    environment: *api-environment
+    volumes:
+      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from app.config import settings; from redis import Redis; c=Redis.from_url(settings.redis_url); assert c.ping(); c.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    mem_limit: 384m
+    cpus: 0.75
     pids_limit: 200
     networks:
       - backend

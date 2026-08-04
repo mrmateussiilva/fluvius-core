@@ -19,7 +19,8 @@ from app.providers.evolution_credentials import (
     claim_evolution_credential,
 )
 from app.providers.factory import get_provider
-from app.providers.models import ProviderEvent
+from app.providers.inbox_tasks import run_provider_event_inbox
+from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.pending_events import (
     PENDING_EDIT_ERROR,
     PENDING_INCOMING_MESSAGE_ERROR,
@@ -149,13 +150,34 @@ async def reconcile_pending_events_for_channel_report(
         event_id = event.id
         try:
             if event.processing_error == PENDING_INCOMING_MESSAGE_ERROR:
-                await whatsapp_webhook(
-                    provider=channel.provider,
-                    channel_id=channel.id,
-                    payload=event.payload,
-                    x_webhook_secret=settings.webhook_secret,
-                    db=db,
+                inbox = db.scalar(
+                    select(ProviderEventInbox).where(
+                        ProviderEventInbox.tenant_id == tenant_id,
+                        ProviderEventInbox.provider_event_id == event.id,
+                    )
                 )
+                if inbox is None:
+                    await whatsapp_webhook(
+                        provider=channel.provider,
+                        channel_id=channel.id,
+                        payload=event.payload,
+                        x_webhook_secret=settings.webhook_secret,
+                        db=db,
+                    )
+                    inbox = db.scalar(
+                        select(ProviderEventInbox).where(
+                            ProviderEventInbox.tenant_id == tenant_id,
+                            ProviderEventInbox.provider_event_id == event_id,
+                        )
+                    )
+                if inbox is not None:
+                    db.commit()
+                    await asyncio.to_thread(
+                        run_provider_event_inbox,
+                        str(inbox.id),
+                        str(tenant_id),
+                    )
+                    db.expire_all()
                 refreshed_event = db.get(ProviderEvent, event_id)
                 if refreshed_event is not None and refreshed_event.processed:
                     resolved += 1
@@ -178,7 +200,20 @@ async def reconcile_pending_events_for_channel_report(
                 continue
 
             if event.processing_error == PENDING_EDIT_ERROR:
-                incoming = await adapter.handle_webhook(event.payload)
+                inbox = db.scalar(
+                    select(ProviderEventInbox).where(
+                        ProviderEventInbox.tenant_id == tenant_id,
+                        ProviderEventInbox.provider_event_id == event.id,
+                        ProviderEventInbox.normalized_kind == "edit",
+                    )
+                )
+                incoming = (
+                    IncomingMessageEditResult.model_validate(
+                        inbox.normalized_payload
+                    )
+                    if inbox is not None
+                    else await adapter.handle_webhook(event.payload)
+                )
                 if isinstance(incoming, IncomingMessageEditResult):
                     edited = apply_message_edit(
                         db,
@@ -271,6 +306,48 @@ def get_webhook_reconcile_runtime() -> WebhookReconcileRuntime:
         last_checked_events=_decode_int(stats.get("last_checked_events")),
         last_resolved_events=_decode_int(stats.get("last_resolved_events")),
     )
+
+
+def reset_failed_provider_inbox_for_channel(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    channel_id: UUID,
+    limit: int,
+) -> int:
+    failed_rows = list(
+        db.execute(
+            select(ProviderEventInbox, ProviderEvent)
+            .join(
+                ProviderEvent,
+                (ProviderEvent.id == ProviderEventInbox.provider_event_id)
+                & (ProviderEvent.tenant_id == tenant_id),
+            )
+            .where(
+                ProviderEventInbox.tenant_id == tenant_id,
+                ProviderEventInbox.status == "failed",
+                ProviderEvent.tenant_id == tenant_id,
+                ProviderEvent.channel_id == channel_id,
+                ProviderEvent.processed.is_(False),
+            )
+            .order_by(ProviderEventInbox.created_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    now = datetime.now(UTC)
+    for inbox, event in failed_rows:
+        inbox.status = "queued"
+        inbox.attempt_count = 0
+        inbox.next_attempt_at = now
+        inbox.locked_at = None
+        inbox.rq_job_id = None
+        inbox.last_error = None
+        inbox.completed_at = None
+        event.processing_error = PENDING_INCOMING_MESSAGE_ERROR
+    if failed_rows:
+        db.commit()
+    return len(failed_rows)
 
 
 def _claim_reconcile_lock() -> bool:

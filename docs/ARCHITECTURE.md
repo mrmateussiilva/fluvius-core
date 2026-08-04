@@ -62,21 +62,27 @@ porque somente uma transição bloqueada da outbox pode chegar ao provider.
 
 1. O gateway chama `/api/v1/webhooks/whatsapp/{provider}/{channel_id}`.
 2. A API valida a credencial do webhook e encontra o canal; o tenant vem do canal, nunca do payload. No Evolution Go 0.7.2, o `instanceToken` do corpo é validado pelo adapter.
-3. O payload sanitizado entra em `provider_events` e recebe commit antes do
-   processamento de domínio. Credenciais são removidas antes da persistência.
-   Eventos `Message` usam o ID real da mensagem como identidade, mesmo quando o
-   gateway envia um ID diferente no envelope.
-4. O adapter normaliza o evento como mensagem nova ou edição. Reações são
-   reconhecidas e ignoradas no MVP, sem gerar bolhas artificiais.
-5. A API deduplica pelo ID da mensagem e adquire um lock transacional por
+3. O adapter normaliza `Message` como mensagem nova ou edição. Reações são
+   reconhecidas e ignoradas no MVP, sem gerar bolhas artificiais. O payload
+   sanitizado não preserva credenciais, base64 ou material criptográfico.
+4. A API valida e grava a mídia no storage antes do aceite. Na mesma transação,
+   persiste `ProviderEvent` e `ProviderEventInbox(queued)` com o conteúdo
+   normalizado, hash e referência do arquivo. Só então responde `202`; falha de
+   storage retorna `503`, permitindo nova entrega pelo gateway.
+5. O enqueue imediato usa `fluvius-webhooks`. Se Redis estiver indisponível, a
+   inbox continua no PostgreSQL e o dispatcher tenta novamente. Jobs
+   interrompidos retornam a `retry_wait`; após oito tentativas ficam `failed` e
+   podem ser reiniciados pelo reconciliador administrativo.
+6. O webhook worker deduplica pelo ID real da mensagem e adquire um lock por
    tenant, canal e conversa. Webhooks de conversas diferentes continuam em
    paralelo, mas mensagens simultâneas do mesmo atendimento não disputam a
-   criação do contato, da conversa ou da mensagem entre workers. Em seguida, a
-   API encontra/cria o contato e usa sua conversa única naquele canal. Se ela
+   criação do contato, da conversa ou da mensagem entre workers. Em seguida, o
+   worker encontra/cria o contato e usa sua conversa única naquele canal. Se ela
    estava finalizada, é reaberta como `new`, sem perder o histórico e sem manter
    a atribuição anterior.
-6. Para mídia, o adapter normaliza base64, MIME type e nome; a API valida limite, assinatura binária e coerência entre conteúdo/MIME/extensão, grava o arquivo no storage e cria `MessageAttachment` com SHA-256 no mesmo tenant.
-7. A mensagem incoming é persistida e os eventos realtime são emitidos.
+7. O worker verifica novamente tamanho e SHA-256 da mídia staged, cria o
+   `MessageAttachment`, persiste a mensagem e conclui inbox e evento na mesma
+   transação. Depois do commit, publica os eventos realtime.
 
 Uma edição localiza a mensagem original pelo ID externo dentro do mesmo tenant
 e canal, grava uma `MessageRevision`, atualiza a mesma linha e emite

@@ -118,7 +118,7 @@ Logs da aplicação:
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml \
-  logs -f api worker delivery-worker evolution-go web
+  logs -f api worker delivery-worker webhook-worker evolution-go web
 ```
 
 Logs do último deploy pelo GitHub ficam em

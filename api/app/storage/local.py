@@ -27,6 +27,11 @@ class LocalStorageProvider(StorageProvider):
             size_bytes=len(content),
         )
 
+    async def delete(self, key: str) -> None:
+        target = self.path_for(key)
+        if target is not None:
+            target.unlink(missing_ok=True)
+
     def public_url_for(self, key: str) -> str:
         return f"{settings.public_api_url.rstrip('/')}/storage/{key}"
 

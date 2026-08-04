@@ -20,7 +20,7 @@ services:
     command:
       - sh
       - -c
-      - alembic upgrade head && python -m unittest discover -s tests -v
+      - alembic upgrade head && alembic check && python -m unittest discover -s tests -v
     environment:
       DATABASE_URL: postgresql+psycopg://fluvius_test:fluvius_test@postgres-test:5432/fluvius_test
       ENVIRONMENT: test

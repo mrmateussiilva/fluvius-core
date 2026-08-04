@@ -1,3 +1,4 @@
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from threading import Barrier
@@ -17,9 +18,11 @@ from app.delivery.models import MessageDelivery
 from app.delivery.tasks import run_delivery
 from app.messages.models import Message, MessageContactShare, MessageRevision
 from app.providers.base import SendResult, SharedContact
-from app.providers.models import ProviderEvent
+from app.providers.inbox_tasks import run_provider_event_inbox
+from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.webhook_router import lock_provider_thread
 from app.storage.base import StoredFile
+from app.storage.local import LocalStorageProvider
 
 from .base import PostgresIntegrationTestCase
 
@@ -166,7 +169,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         first_payload = self.incoming_payload("incoming-integration-1", "Olá")
         first_payload["tenant_id"] = str(self.tenant_b.tenant_id)
 
-        incoming = self.client.post(webhook_url, json=first_payload)
+        incoming = self.post_webhook(webhook_url, first_payload)
         self.assertEqual(incoming.status_code, 202, incoming.text)
         self.assertEqual(incoming.json()["status"], "accepted")
 
@@ -343,7 +346,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             "incoming-integration-2",
             "Ainda preciso de ajuda",
         )
-        reopened = self.client.post(webhook_url, json=second_payload)
+        reopened = self.post_webhook(webhook_url, second_payload)
         self.assertEqual(reopened.status_code, 202, reopened.text)
 
         current = self.client.get(
@@ -354,7 +357,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(current.json()["status"], "new")
         self.assertIsNone(current.json()["assigned_user_id"])
 
-        duplicate = self.client.post(webhook_url, json=second_payload)
+        duplicate = self.post_webhook(webhook_url, second_payload)
         self.assertEqual(duplicate.status_code, 202)
         self.assertEqual(duplicate.json()["status"], "duplicate")
 
@@ -409,26 +412,10 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             )
             payloads.append(payload)
 
-        barrier = Barrier(2)
-
-        def synchronized_lock(db, **kwargs) -> None:
-            barrier.wait(timeout=5)
-            lock_provider_thread(db, **kwargs)
-
         def send(payload):
             return self.client.post(webhook_url, json=payload)
 
-        with (
-            patch(
-                "app.providers.webhook_router.lock_provider_thread",
-                side_effect=synchronized_lock,
-            ),
-            patch(
-                "app.providers.webhook_router.needs_group_profile_import",
-                return_value=False,
-            ),
-            ThreadPoolExecutor(max_workers=2) as executor,
-        ):
+        with ThreadPoolExecutor(max_workers=2) as executor:
             responses = list(executor.map(send, payloads))
 
         self.assertEqual([response.status_code for response in responses], [202, 202])
@@ -436,6 +423,42 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             [response.json()["status"] for response in responses],
             ["accepted", "accepted"],
         )
+
+        with SessionLocal() as db:
+            pending_inbox = list(
+                db.execute(
+                    select(
+                        ProviderEventInbox.id,
+                        ProviderEventInbox.tenant_id,
+                    ).where(
+                        ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                        ProviderEventInbox.status == "queued",
+                    )
+                )
+            )
+        barrier = Barrier(2)
+
+        def synchronized_lock(db, **kwargs) -> None:
+            barrier.wait(timeout=5)
+            lock_provider_thread(db, **kwargs)
+
+        def process_inbox(item) -> bool:
+            inbox_id, tenant_id = item
+            return run_provider_event_inbox(str(inbox_id), str(tenant_id))
+
+        with (
+            patch(
+                "app.providers.inbox_processor.lock_provider_thread",
+                side_effect=synchronized_lock,
+            ),
+            patch(
+                "app.providers.inbox_processor.needs_group_profile_import",
+                return_value=False,
+            ),
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            processed = list(executor.map(process_inbox, pending_inbox))
+        self.assertEqual(processed, [True, True])
 
         with SessionLocal() as db:
             contact = db.scalar(
@@ -476,6 +499,247 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(conversation_count, 1)
         self.assertEqual(message_count, 2)
         self.assertEqual(processed_event_count, 2)
+
+    def test_media_is_durable_before_acceptance_and_survives_queue_failure(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        provider_message_id = "durable-incoming-image-1"
+        content = b"\x89PNG\r\n\x1a\nfluvius-durable-inbox"
+        payload = self.incoming_payload(provider_message_id, "Imagem recebida")
+        payload["data"]["Info"]["Type"] = "image"
+        payload["data"]["Message"] = {
+            "imageMessage": {
+                "mimetype": "image/png",
+                "caption": "Imagem recebida",
+                "fileName": "durable.png",
+            },
+            "base64": base64.b64encode(content).decode(),
+        }
+
+        with patch(
+            "app.providers.webhook_router.dispatch_provider_event_inbox",
+            return_value=False,
+        ):
+            response = self.post_webhook(webhook_url, payload, process=False)
+
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertEqual(response.json()["status"], "accepted")
+        with SessionLocal() as db:
+            event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id
+                    == f"message:{provider_message_id}",
+                )
+            )
+            inbox = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEventInbox.provider_event_id == event.id,
+                )
+            )
+            message_before_worker = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == provider_message_id,
+                )
+            )
+
+        self.assertFalse(event.processed)
+        self.assertNotIn("instanceToken", event.payload)
+        self.assertNotIn("base64", event.payload["data"]["Message"])
+        self.assertNotIn("media_base64", inbox.normalized_payload)
+        self.assertEqual(inbox.status, "queued")
+        self.assertIsNone(message_before_worker)
+        staged_path = LocalStorageProvider().path_for(inbox.media_storage_key)
+        self.assertIsNotNone(staged_path)
+        self.assertEqual(staged_path.read_bytes(), content)
+
+        processed = run_provider_event_inbox(
+            str(inbox.id),
+            str(self.tenant_a.tenant_id),
+        )
+        self.assertTrue(processed)
+        with SessionLocal() as db:
+            completed_inbox = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.id == inbox.id,
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            message = db.scalar(
+                select(Message).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == provider_message_id,
+                )
+            )
+            attachment = db.scalar(
+                select(MessageAttachment).where(
+                    MessageAttachment.tenant_id == self.tenant_a.tenant_id,
+                    MessageAttachment.message_id == message.id,
+                )
+            )
+        self.assertEqual(completed_inbox.status, "completed")
+        self.assertEqual(attachment.storage_key, inbox.media_storage_key)
+        self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
+
+    def test_interrupted_inbox_processing_is_retried_idempotently(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        provider_message_id = "durable-incoming-retry-1"
+        response = self.post_webhook(
+            webhook_url,
+            self.incoming_payload(provider_message_id, "Recuperar depois"),
+            process=False,
+        )
+        self.assertEqual(response.status_code, 202, response.text)
+        with SessionLocal() as db:
+            inbox = db.scalar(
+                select(ProviderEventInbox)
+                .join(
+                    ProviderEvent,
+                    (ProviderEvent.id == ProviderEventInbox.provider_event_id)
+                    & (ProviderEvent.tenant_id == self.tenant_a.tenant_id),
+                )
+                .where(
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id
+                    == f"message:{provider_message_id}",
+                )
+            )
+
+        with patch(
+            "app.providers.inbox_tasks._process_provider_event_inbox",
+            new=AsyncMock(side_effect=RuntimeError("simulated worker stop")),
+        ):
+            first_attempt = run_provider_event_inbox(
+                str(inbox.id),
+                str(self.tenant_a.tenant_id),
+            )
+        self.assertFalse(first_attempt)
+        with SessionLocal() as db:
+            retrying = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.id == inbox.id,
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+            self.assertEqual(retrying.status, "retry_wait")
+            self.assertEqual(retrying.attempt_count, 1)
+
+        second_attempt = run_provider_event_inbox(
+            str(inbox.id),
+            str(self.tenant_a.tenant_id),
+        )
+        self.assertTrue(second_attempt)
+        with SessionLocal() as db:
+            message_count = db.scalar(
+                select(func.count(Message.id)).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == provider_message_id,
+                )
+            )
+            completed = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.id == inbox.id,
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+        self.assertEqual(message_count, 1)
+        self.assertEqual(completed.status, "completed")
+        self.assertEqual(completed.attempt_count, 2)
+
+    def test_media_webhook_is_not_accepted_when_staging_fails(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        provider_message_id = "durable-incoming-storage-failure"
+        payload = self.incoming_payload(provider_message_id, "Imagem")
+        payload["data"]["Info"]["Type"] = "image"
+        payload["data"]["Message"] = {
+            "imageMessage": {
+                "mimetype": "image/png",
+                "fileName": "failure.png",
+            },
+            "base64": base64.b64encode(b"\x89PNG\r\n\x1a\nfailure").decode(),
+        }
+
+        with patch(
+            "app.attachments.service.LocalStorageProvider.save",
+            new=AsyncMock(side_effect=OSError("storage unavailable")),
+        ):
+            response = self.post_webhook(webhook_url, payload, process=False)
+
+        self.assertEqual(response.status_code, 503, response.text)
+        with SessionLocal() as db:
+            event_count = db.scalar(
+                select(func.count(ProviderEvent.id)).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id
+                    == f"message:{provider_message_id}",
+                )
+            )
+        self.assertEqual(event_count, 0)
+
+    def test_admin_reconcile_retries_a_failed_inbox_event(self) -> None:
+        webhook_url = (
+            "/api/v1/webhooks/whatsapp/evolution_go/"
+            f"{self.tenant_a.channel_id}"
+        )
+        provider_message_id = "durable-incoming-manual-retry"
+        accepted = self.post_webhook(
+            webhook_url,
+            self.incoming_payload(provider_message_id, "Retentativa manual"),
+            process=False,
+        )
+        self.assertEqual(accepted.status_code, 202, accepted.text)
+        with SessionLocal() as db:
+            event = db.scalar(
+                select(ProviderEvent).where(
+                    ProviderEvent.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEvent.provider_event_id
+                    == f"message:{provider_message_id}",
+                )
+            )
+            inbox = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                    ProviderEventInbox.provider_event_id == event.id,
+                )
+            )
+            inbox.status = "failed"
+            inbox.attempt_count = inbox.max_attempts
+            inbox.completed_at = inbox.created_at
+            event.processing_error = "Falha terminal simulada"
+            db.commit()
+
+        reconciled = self.client.post(
+            "/api/v1/operations/webhooks/reconcile",
+            headers=self.headers_a,
+            json={"channel_id": str(self.tenant_a.channel_id)},
+        )
+        self.assertEqual(reconciled.status_code, 200, reconciled.text)
+        self.assertEqual(reconciled.json()["resolved_events"], 1)
+        with SessionLocal() as db:
+            message_count = db.scalar(
+                select(func.count(Message.id)).where(
+                    Message.tenant_id == self.tenant_a.tenant_id,
+                    Message.provider_message_id == provider_message_id,
+                )
+            )
+            completed = db.scalar(
+                select(ProviderEventInbox).where(
+                    ProviderEventInbox.id == inbox.id,
+                    ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
+                )
+            )
+        self.assertEqual(message_count, 1)
+        self.assertEqual(completed.status, "completed")
 
     def test_contact_directory_creates_updates_and_starts_conversation(self) -> None:
         created = self.client.post(
@@ -600,10 +864,10 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             }
         )
 
-        response = self.client.post(
+        response = self.post_webhook(
             "/api/v1/webhooks/whatsapp/evolution_go/"
             f"{self.tenant_a.channel_id}",
-            json=payload,
+            payload,
         )
 
         self.assertEqual(response.status_code, 202, response.text)
@@ -849,31 +1113,31 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             f"{self.tenant_a.channel_id}"
         )
         original_id = "incoming-edit-original"
-        created = self.client.post(
+        created = self.post_webhook(
             webhook_url,
-            json=self.incoming_payload(original_id, "Texto antes da edição"),
+            self.incoming_payload(original_id, "Texto antes da edição"),
         )
         self.assertEqual(created.status_code, 202, created.text)
 
-        edited = self.client.post(
+        edited = self.post_webhook(
             webhook_url,
-            json=self.edit_payload(
+            self.edit_payload(
                 "incoming-edit-plaintext",
                 original_id,
                 "Texto depois da edição",
             ),
         )
-        repeated = self.client.post(
+        repeated = self.post_webhook(
             webhook_url,
-            json=self.edit_payload(
+            self.edit_payload(
                 "incoming-edit-plaintext",
                 original_id,
                 "Texto depois da edição",
             ),
         )
-        unavailable = self.client.post(
+        unavailable = self.post_webhook(
             webhook_url,
-            json=self.edit_payload(
+            self.edit_payload(
                 "incoming-edit-encrypted",
                 original_id,
                 None,
@@ -888,7 +1152,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                 "senderTimestampMS": 1785032722922,
             }
         }
-        ignored = self.client.post(webhook_url, json=reaction)
+        ignored = self.post_webhook(webhook_url, reaction)
 
         self.assertEqual(edited.status_code, 202, edited.text)
         self.assertEqual(edited.json()["status"], "accepted")
@@ -935,20 +1199,20 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             f"{self.tenant_a.channel_id}"
         )
         target_id = "incoming-after-edit"
-        pending = self.client.post(
+        pending = self.post_webhook(
             webhook_url,
-            json=self.edit_payload(
+            self.edit_payload(
                 "incoming-edit-before-original",
                 target_id,
                 "Texto já corrigido",
             ),
         )
         self.assertEqual(pending.status_code, 202, pending.text)
-        self.assertEqual(pending.json()["status"], "pending")
+        self.assertEqual(pending.json()["status"], "accepted")
 
-        created = self.client.post(
+        created = self.post_webhook(
             webhook_url,
-            json=self.incoming_payload(target_id, "Texto original atrasado"),
+            self.incoming_payload(target_id, "Texto original atrasado"),
         )
         self.assertEqual(created.status_code, 202, created.text)
 
@@ -969,16 +1233,16 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             "/api/v1/webhooks/whatsapp/evolution_go/"
             f"{self.tenant_a.channel_id}"
         )
-        pending = self.client.post(
+        pending = self.post_webhook(
             webhook_url,
-            json=self.edit_payload(
+            self.edit_payload(
                 "incoming-cross-tenant-edit",
                 "seed-b",
                 "Tentativa cruzada",
             ),
         )
         self.assertEqual(pending.status_code, 202, pending.text)
-        self.assertEqual(pending.json()["status"], "pending")
+        self.assertEqual(pending.json()["status"], "accepted")
 
         with SessionLocal() as db:
             tenant_b_message = db.scalar(
