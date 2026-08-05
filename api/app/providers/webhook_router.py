@@ -1,5 +1,8 @@
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select, text
@@ -536,12 +539,16 @@ async def whatsapp_webhook(
             db.commit()
             return {"status": "ignored"}
         except ValueError as exc:
+            logger.warning(
+                "Recibo com payload inválido ignorado (channel=%s event=%s): %s",
+                channel.id,
+                event_type,
+                exc,
+            )
+            event.processed = True
             event.processing_error = str(exc)
             db.commit()
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=str(exc),
-            ) from exc
+            return {"status": "ignored"}
 
     try:
         incoming = await provider_adapter.handle_webhook(payload)
