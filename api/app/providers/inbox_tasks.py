@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.database import SessionLocal
+from app.jobs.runtime import prepare_job_runtime
 from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.pending_events import PENDING_INCOMING_MESSAGE_ERROR
 
@@ -17,6 +18,7 @@ TERMINAL_INBOX_ERROR = (
 
 
 def run_provider_event_inbox(inbox_id: str, tenant_id: str) -> bool:
+    prepare_job_runtime()
     parsed_inbox_id = UUID(inbox_id)
     parsed_tenant_id = UUID(tenant_id)
     with SessionLocal() as db:
