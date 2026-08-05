@@ -194,13 +194,17 @@ async def _accept_message_event(
             provider_event_id=str(event_id) if event_id else None,
             payload=sanitized_payload,
         )
+        logger.warning(
+            "Evento de mensagem com payload inválido ignorado (channel=%s event=%s): %s",
+            channel.id,
+            event_type,
+            exc,
+        )
+        event.processed = True
         event.processing_error = str(exc)
         db.add(event)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        return {"status": "ignored"}
 
     return await _accept_normalized_incoming_event(
         db=db,
@@ -333,13 +337,17 @@ async def _accept_history_sync_event(
             provider_event_id=str(event_id) if event_id else None,
             payload=sanitized_payload,
         )
+        logger.warning(
+            "HistorySync com payload inválido ignorado (channel=%s event=%s): %s",
+            channel.id,
+            event_type,
+            exc,
+        )
+        event.processed = True
         event.processing_error = str(exc)
         db.add(event)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        return {"status": "ignored"}
 
     event = event or ProviderEvent(
         tenant_id=channel.tenant_id,
@@ -854,12 +862,15 @@ async def whatsapp_webhook(
         db.commit()
         return {"status": "ignored"}
     except (ValueError, NotImplementedError) as exc:
+        logger.warning(
+            "Webhook com payload inválido ignorado (channel=%s event=%s): %s",
+            channel.id if hasattr(channel, 'id') else '?',
+            exc.__class__.__name__,
+            exc,
+        )
         event.processing_error = str(exc)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(exc),
-        ) from exc
+        return {"status": "ignored"}
 
 
 async def _process_channel_status(channel: WhatsAppChannel, payload: dict, db: Session) -> None:
