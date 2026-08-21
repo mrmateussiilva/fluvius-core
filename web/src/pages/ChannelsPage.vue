@@ -7,6 +7,7 @@ import {
   ref,
 } from 'vue'
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   Clipboard,
@@ -15,12 +16,14 @@ import {
   QrCode,
   RefreshCw,
   Smartphone,
+  Trash2,
   Wifi,
   X,
 } from 'lucide-vue-next'
 import {
   connectChannel,
   createChannel,
+  deleteChannel,
   getChannelStatus,
   listChannels,
 } from '../api/channels'
@@ -273,6 +276,38 @@ async function copyPairingCode() {
   }
 }
 
+const deletingChannel = ref<Channel | null>(null)
+const deleting = ref(false)
+
+function confirmDelete(channel: Channel) {
+  deletingChannel.value = channel
+}
+
+function cancelDelete() {
+  deletingChannel.value = null
+  deleting.value = false
+}
+
+async function executeDelete() {
+  if (!deletingChannel.value) return
+  const channel = deletingChannel.value
+  deleting.value = true
+  error.value = ''
+  notice.value = ''
+  try {
+    await deleteChannel(channel.id)
+    channels.value = channels.value.filter((item) => item.id !== channel.id)
+    notice.value = `O canal “${channel.name}” foi excluído com sucesso.`
+    deletingChannel.value = null
+  } catch (exception) {
+    const message =
+      exception instanceof Error ? exception.message : 'Falha ao excluir canal'
+    error.value = message
+  } finally {
+    deleting.value = false
+  }
+}
+
 function handleVisibilityChange() {
   if (document.visibilityState === 'visible' && connection.channel) {
     void pollStatus()
@@ -431,6 +466,15 @@ onBeforeUnmount(() => {
             <RefreshCw class="h-4 w-4" />
             Verificar
           </button>
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-lg border border-line p-2 text-ink-muted transition hover:border-danger/40 hover:bg-danger-soft hover:text-danger-strong"
+            title="Excluir canal"
+            aria-label="Excluir canal"
+            @click="confirmDelete(channel)"
+          >
+            <Trash2 class="h-4 w-4" />
+          </button>
         </div>
       </div>
       <p v-if="!loadingChannels && !channels.length" class="p-10 text-center text-sm text-ink-muted">
@@ -538,5 +582,55 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
+
+    <div
+      v-if="deletingChannel"
+      class="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 backdrop-blur-sm"
+      @click.self="cancelDelete"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-channel-title"
+        class="w-full max-w-md overflow-hidden rounded-lg bg-panel p-6 shadow-2xl"
+      >
+        <div class="flex items-start gap-4">
+          <div class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-danger-soft text-danger">
+            <AlertTriangle class="h-5 w-5" />
+          </div>
+          <div>
+            <h3 id="delete-channel-title" class="text-base font-semibold text-ink">
+              Excluir canal
+            </h3>
+            <p class="mt-1 text-sm leading-5 text-ink-muted">
+              Tem certeza de que deseja excluir o canal <strong class="text-ink">{{ deletingChannel.name }}</strong>?
+              Esta ação removerá a instância no gateway e o histórico deste canal.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            :disabled="deleting"
+            class="rounded-lg px-4 py-2 text-sm font-semibold text-ink-secondary transition hover:bg-panel-muted disabled:opacity-50"
+            @click="cancelDelete"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            :disabled="deleting"
+            class="inline-flex items-center gap-2 rounded-lg bg-danger px-4 py-2 text-sm font-semibold text-white transition hover:bg-danger-hover disabled:opacity-50"
+            @click="executeDelete"
+          >
+            <LoaderCircle v-if="deleting" class="h-4 w-4 animate-spin" />
+            <Trash2 v-else class="h-4 w-4" />
+            {{ deleting ? 'Excluindo…' : 'Sim, excluir canal' }}
+          </button>
+        </div>
+      </section>
+    </div>
   </Teleport>
 </template>
+

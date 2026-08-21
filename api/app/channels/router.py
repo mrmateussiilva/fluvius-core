@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,9 +10,13 @@ from app.channels.models import WhatsAppChannel
 from app.channels.schemas import ChannelCreate, ChannelResponse
 from app.common.audit_models import AuditLog
 from app.common.enums import ChannelProvider, ChannelStatus
+from app.conversations.models import Conversation
 from app.database import get_db
 from app.providers.base import ChannelStatusResult, QRCodeResult
-from app.providers.evolution_admin import EvolutionGoProvisioningError
+from app.providers.evolution_admin import (
+    EvolutionGoAdminClient,
+    EvolutionGoProvisioningError,
+)
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
@@ -297,3 +301,41 @@ async def channel_qr(
 ) -> QRCodeResult:
     """Backward-compatible QR route; new clients should use POST /connect."""
     return await connect_tenant_channel(channel_id, context, db)
+
+
+@router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_channel(
+    channel_id: UUID,
+    context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> None:
+    channel = get_tenant_channel(db, context.tenant_id, channel_id)
+
+    db.execute(
+        delete(Conversation).where(
+            Conversation.tenant_id == context.tenant_id,
+            Conversation.channel_id == channel.id,
+        )
+    )
+
+    if channel.provider == ChannelProvider.EVOLUTION_GO:
+        try:
+            admin_client = EvolutionGoAdminClient()
+            await admin_client.delete_instance(str(channel.id))
+        except Exception:
+            pass
+
+    db.add(
+        AuditLog(
+            tenant_id=channel.tenant_id,
+            user_id=context.user.id,
+            action="channel.deleted",
+            entity_type="whatsapp_channel",
+            entity_id=channel.id,
+            metadata_={"name": channel.name, "provider": channel.provider.value},
+        )
+    )
+
+    db.delete(channel)
+    db.commit()
+

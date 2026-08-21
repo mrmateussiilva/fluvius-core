@@ -91,3 +91,21 @@ class EvolutionGoAdminClient:
                 "A confirmação da criação não chegou; o estado será verificado novamente.",
                 ambiguous=True,
             ) from exc
+
+    async def delete_instance(self, instance_id: str) -> None:
+        self.ensure_configured()
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(20.0),
+                transport=self.transport,
+            ) as client:
+                response = await client.delete(
+                    f"/instance/delete/{instance_id}",
+                    headers=self.headers,
+                )
+            if response.is_success or response.status_code == 404:
+                return
+        except Exception:
+            pass
+

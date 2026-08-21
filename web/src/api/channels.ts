@@ -29,3 +29,9 @@ export const getChannelQr = (id: string) =>
   http<ChannelConnectionResult>(
     `/api/v1/channels/${id}/qr`,
   )
+export const deleteChannel = (id: string) =>
+  http<void>(
+    `/api/v1/channels/${id}`,
+    { method: 'DELETE' },
+  )
+

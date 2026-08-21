@@ -94,6 +94,27 @@ class EvolutionGoAdminClientTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ativação única da licença", str(raised.exception))
         self.assertFalse(raised.exception.ambiguous)
 
+    async def test_deletes_an_instance_with_the_global_key(self) -> None:
+        captured: dict[str, object] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["method"] = request.method
+            captured["api_key"] = request.headers["apikey"]
+            return httpx.Response(200, json={"message": "success"})
+
+        client = EvolutionGoAdminClient(
+            base_url="https://evolution.internal",
+            global_api_key="global-secret",
+            transport=httpx.MockTransport(handler),
+        )
+
+        await client.delete_instance("channel-id-123")
+
+        self.assertEqual(captured["path"], "/instance/delete/channel-id-123")
+        self.assertEqual(captured["method"], "DELETE")
+        self.assertEqual(captured["api_key"], "global-secret")
+
 
 if __name__ == "__main__":
     unittest.main()
