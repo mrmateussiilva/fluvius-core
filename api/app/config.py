@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     evolution_go_instance_tokens: dict[str, str] = Field(default_factory=dict)
     provider_credentials_key: str = ""
     webhook_secret: str = ""
+    history_sync_max_age_days: int = 30
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

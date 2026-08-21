@@ -4,6 +4,7 @@ import httpx
 
 from app.config import settings
 from app.providers.evolution_credentials import ProviderConfigurationError
+from app.providers.evolution_http import get_evolution_http_client
 
 
 class EvolutionGoProvisioningError(RuntimeError):
@@ -50,21 +51,18 @@ class EvolutionGoAdminClient:
         return {"apikey": self.global_api_key, "Content-Type": "application/json"}
 
     async def create_instance(self, instance: EvolutionInstance) -> None:
+        client = get_evolution_http_client(self.base_url, self.transport)
         try:
-            async with httpx.AsyncClient(
-                base_url=self.base_url,
+            response = await client.post(
+                "/instance/create",
+                headers=self.headers,
                 timeout=httpx.Timeout(20.0),
-                transport=self.transport,
-            ) as client:
-                response = await client.post(
-                    "/instance/create",
-                    headers=self.headers,
-                    json={
-                        "instanceId": instance.instance_id,
-                        "name": instance.name,
-                        "token": instance.token,
-                    },
-                )
+                json={
+                    "instanceId": instance.instance_id,
+                    "name": instance.name,
+                    "token": instance.token,
+                },
+            )
             if response.is_success:
                 return
             if response.status_code == 409:
@@ -95,17 +93,15 @@ class EvolutionGoAdminClient:
     async def delete_instance(self, instance_id: str) -> None:
         self.ensure_configured()
         try:
-            async with httpx.AsyncClient(
-                base_url=self.base_url,
+            client = get_evolution_http_client(self.base_url, self.transport)
+            response = await client.delete(
+                f"/instance/delete/{instance_id}",
+                headers=self.headers,
                 timeout=httpx.Timeout(20.0),
-                transport=self.transport,
-            ) as client:
-                response = await client.delete(
-                    f"/instance/delete/{instance_id}",
-                    headers=self.headers,
-                )
+            )
             if response.is_success or response.status_code == 404:
                 return
         except Exception:
             pass
+
 

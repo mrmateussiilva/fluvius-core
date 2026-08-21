@@ -2,7 +2,7 @@ import asyncio
 import copy
 import json
 import mimetypes
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import compare_digest
 from typing import Any
@@ -35,6 +35,7 @@ from app.providers.base import (
     WhatsAppProvider,
 )
 from app.providers.evolution_circuit import evolution_circuit
+from app.providers.evolution_http import get_evolution_http_client
 
 
 class EvolutionGoProvider(WhatsAppProvider):
@@ -59,12 +60,14 @@ class EvolutionGoProvider(WhatsAppProvider):
         base_url: str | None = None,
         api_key: str | None = None,
         webhook_base_url: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = (base_url or settings.evolution_go_base_url).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.evolution_go_api_key
         self.webhook_base_url = (
             webhook_base_url or settings.evolution_go_webhook_base_url
         ).rstrip("/")
+        self.transport = transport
 
     @property
     def headers(self) -> dict[str, str]:
@@ -77,13 +80,13 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         timeout = kwargs.pop("timeout", self.default_timeout)
+        client = get_evolution_http_client(
+            self.base_url, getattr(self, "transport", None)
+        )
         try:
-            async with httpx.AsyncClient(
-                base_url=self.base_url, timeout=timeout
-            ) as client:
-                response = await client.request(
-                    method, path, headers=self.headers, **kwargs
-                )
+            response = await client.request(
+                method, path, headers=self.headers, timeout=timeout, **kwargs
+            )
         except httpx.HTTPError:
             evolution_circuit.record_failure(self._circuit_key)
             raise
@@ -1162,6 +1165,12 @@ class EvolutionGoProvider(WhatsAppProvider):
             or web_message.get("Timestamp")
             or web_message.get("timestamp")
         )
+        parsed_time = cls._timestamp(timestamp)
+        if parsed_time is not None:
+            max_age_days = getattr(settings, "history_sync_max_age_days", 30)
+            cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+            if parsed_time < cutoff:
+                return None
         info = {
             "ID": message_id,
             "Chat": remote_jid,

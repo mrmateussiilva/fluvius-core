@@ -1,6 +1,7 @@
 import asyncio
 import json
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -832,6 +833,31 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             can_advance_message_status(MessageStatus.FAILED, MessageStatus.READ)
         )
 
+    def test_history_sync_skips_messages_older_than_max_age(self) -> None:
+        old_epoch = int((datetime.now(UTC) - timedelta(days=60)).timestamp())
+        recent_epoch = int((datetime.now(UTC) - timedelta(days=2)).timestamp())
+
+        envelope = {"instanceId": "inst-1", "instanceName": "fluvius"}
+        old_msg = {
+            "key": {"id": "old-msg-1", "remoteJid": "5511999999999@s.whatsapp.net"},
+            "message": {"conversation": "Mensagem muito antiga"},
+            "messageTimestamp": old_epoch,
+        }
+        recent_msg = {
+            "key": {"id": "recent-msg-1", "remoteJid": "5511999999999@s.whatsapp.net"},
+            "message": {"conversation": "Mensagem recente"},
+            "messageTimestamp": recent_epoch,
+        }
+        conversation = {"id": "5511999999999@s.whatsapp.net"}
+
+        self.assertIsNone(
+            EvolutionGoProvider._history_message_payload(envelope, old_msg, conversation)
+        )
+        self.assertIsNotNone(
+            EvolutionGoProvider._history_message_payload(envelope, recent_msg, conversation)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
+
