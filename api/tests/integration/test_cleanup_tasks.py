@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from sqlalchemy import update
+
 from app.database import SessionLocal
 from app.providers.cleanup_tasks import cleanup_old_processed_events
 from app.providers.models import ProviderEvent, ProviderEventInbox
@@ -25,7 +27,6 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
                 provider="evolution_go",
                 event_type="Message",
                 processed=True,
-                created_at=old_time,
                 payload={},
             )
             db.add(old_event)
@@ -38,10 +39,22 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
                 provider="evolution_go",
                 event_type="Message",
                 processed=True,
-                created_at=recent_time,
                 payload={},
             )
             db.add(recent_event)
+            db.flush()
+
+            # Update created_at in the database to override server_default
+            db.execute(
+                update(ProviderEvent)
+                .where(ProviderEvent.id == old_event.id)
+                .values(created_at=old_time)
+            )
+            db.execute(
+                update(ProviderEvent)
+                .where(ProviderEvent.id == recent_event.id)
+                .values(created_at=recent_time)
+            )
 
             # Old completed inbox (should be deleted)
             old_inbox = ProviderEventInbox(
@@ -71,6 +84,7 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
             deleted = cleanup_old_processed_events(retention_days=30)
             self.assertGreaterEqual(deleted, 2)
 
+            db.expire_all()
             remaining_old_event = db.get(ProviderEvent, old_event.id)
             remaining_recent_event = db.get(ProviderEvent, recent_event.id)
             remaining_old_inbox = db.get(ProviderEventInbox, old_inbox.id)
