@@ -19,9 +19,14 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
             old_time = datetime.now(UTC) - timedelta(days=40)
             recent_time = datetime.now(UTC) - timedelta(days=5)
 
+            old_event_id = uuid4()
+            recent_event_id = uuid4()
+            old_inbox_id = uuid4()
+            recent_inbox_id = uuid4()
+
             # Old processed event (should be deleted)
             old_event = ProviderEvent(
-                id=uuid4(),
+                id=old_event_id,
                 tenant_id=tenant_id,
                 channel_id=channel_id,
                 provider="evolution_go",
@@ -33,7 +38,7 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
 
             # Recent processed event (should stay)
             recent_event = ProviderEvent(
-                id=uuid4(),
+                id=recent_event_id,
                 tenant_id=tenant_id,
                 channel_id=channel_id,
                 provider="evolution_go",
@@ -47,20 +52,20 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
             # Update created_at in the database to override server_default
             db.execute(
                 update(ProviderEvent)
-                .where(ProviderEvent.id == old_event.id)
+                .where(ProviderEvent.id == old_event_id)
                 .values(created_at=old_time)
             )
             db.execute(
                 update(ProviderEvent)
-                .where(ProviderEvent.id == recent_event.id)
+                .where(ProviderEvent.id == recent_event_id)
                 .values(created_at=recent_time)
             )
 
             # Old completed inbox (should be deleted)
             old_inbox = ProviderEventInbox(
-                id=uuid4(),
+                id=old_inbox_id,
                 tenant_id=tenant_id,
-                provider_event_id=old_event.id,
+                provider_event_id=old_event_id,
                 status="completed",
                 completed_at=old_time,
                 normalized_kind="message",
@@ -70,9 +75,9 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
 
             # Recent completed inbox (should stay)
             recent_inbox = ProviderEventInbox(
-                id=uuid4(),
+                id=recent_inbox_id,
                 tenant_id=tenant_id,
-                provider_event_id=recent_event.id,
+                provider_event_id=recent_event_id,
                 status="completed",
                 completed_at=recent_time,
                 normalized_kind="message",
@@ -85,16 +90,18 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
             self.assertGreaterEqual(deleted, 2)
 
             db.expire_all()
-            remaining_old_event = db.get(ProviderEvent, old_event.id)
-            remaining_recent_event = db.get(ProviderEvent, recent_event.id)
-            remaining_old_inbox = db.get(ProviderEventInbox, old_inbox.id)
-            remaining_recent_inbox = db.get(ProviderEventInbox, recent_inbox.id)
+            remaining_old_event = db.get(ProviderEvent, old_event_id)
+            remaining_recent_event = db.get(ProviderEvent, recent_event_id)
+            remaining_old_inbox = db.get(ProviderEventInbox, old_inbox_id)
+            remaining_recent_inbox = db.get(ProviderEventInbox, recent_inbox_id)
 
             self.assertIsNone(remaining_old_event)
             self.assertIsNotNone(remaining_recent_event)
             self.assertIsNone(remaining_old_inbox)
             self.assertIsNotNone(remaining_recent_inbox)
 
-            db.delete(remaining_recent_inbox)
-            db.delete(remaining_recent_event)
+            if remaining_recent_inbox:
+                db.delete(remaining_recent_inbox)
+            if remaining_recent_event:
+                db.delete(remaining_recent_event)
             db.commit()
