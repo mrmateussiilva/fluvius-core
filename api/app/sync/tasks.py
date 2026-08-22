@@ -51,8 +51,7 @@ def run_sync(sync_run_id: str, tenant_id: str) -> None:
             _mark_fatal_failure(run_id, scoped_tenant_id)
         except Exception:
             logger.exception(
-                "Não foi possível persistir a falha da sincronização %s "
-                "do tenant %s",
+                "Não foi possível persistir a falha da sincronização %s do tenant %s",
                 run_id,
                 scoped_tenant_id,
             )
@@ -114,9 +113,7 @@ async def _run_sync(run_id: UUID, tenant_id: UUID) -> None:
         run.contact_items = sum(
             1 for _contact_id, kind in contact_items if kind == ContactKind.DIRECT
         )
-        run.group_items = sum(
-            1 for _contact_id, kind in contact_items if kind == ContactKind.GROUP
-        )
+        run.group_items = sum(1 for _contact_id, kind in contact_items if kind == ContactKind.GROUP)
         run.message_event_items = len(event_ids)
         run.total_items = len(contact_ids) + len(event_ids)
         db.commit()
@@ -148,8 +145,7 @@ def _contact_items(
         select(Conversation.contact_id, Contact.kind)
         .join(
             Contact,
-            (Contact.id == Conversation.contact_id)
-            & (Contact.tenant_id == tenant_id),
+            (Contact.id == Conversation.contact_id) & (Contact.tenant_id == tenant_id),
         )
         .where(
             Conversation.tenant_id == tenant_id,
@@ -208,8 +204,7 @@ async def _synchronize_contact(
             select(Contact)
             .join(
                 Conversation,
-                (Conversation.contact_id == Contact.id)
-                & (Conversation.tenant_id == tenant_id),
+                (Conversation.contact_id == Contact.id) & (Conversation.tenant_id == tenant_id),
             )
             .where(
                 Contact.id == contact_id,
@@ -313,12 +308,19 @@ async def _reconcile_message_event(
             db.commit()
             return
 
+        now = datetime.now(UTC)
+        stale_cutoff = now - timedelta(minutes=15)
         try:
             if channel.provider == ChannelProvider.EVOLUTION_GO:
                 claim_evolution_credential(db, channel)
             adapter = get_provider(channel.provider, channel, db)
             if event.processing_error == PENDING_RECEIPT_ERROR:
-                update = adapter.handle_message_status(event.payload)
+                try:
+                    update = adapter.handle_message_status(event.payload)
+                except IgnoredWebhookEvent:
+                    event.processed = True
+                    event.processing_error = None
+                    update = None
                 if update is not None:
                     application = apply_message_status_update(
                         db,
@@ -329,8 +331,16 @@ async def _reconcile_message_event(
                     if application.covers(update.provider_message_ids):
                         event.processed = True
                         event.processing_error = None
+                    elif event.created_at < stale_cutoff:
+                        event.processed = True
+                        event.processing_error = "Recibo para mensagem não localizada no canal"
             else:
-                incoming = await adapter.handle_webhook(event.payload)
+                try:
+                    incoming = await adapter.handle_webhook(event.payload)
+                except IgnoredWebhookEvent:
+                    event.processed = True
+                    event.processing_error = None
+                    incoming = None
                 if isinstance(incoming, IncomingMessageEditResult):
                     apply_message_edit(
                         db,
@@ -338,6 +348,9 @@ async def _reconcile_message_event(
                         event=event,
                         edit=incoming,
                     )
+                    if not event.processed and event.created_at < stale_cutoff:
+                        event.processed = True
+                        event.processing_error = "Edição para mensagem original não localizada"
             success = event.processed
             _record_item(
                 db,

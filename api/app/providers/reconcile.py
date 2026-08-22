@@ -19,6 +19,7 @@ from app.providers.evolution_credentials import (
     claim_evolution_credential,
 )
 from app.providers.factory import get_provider
+from app.providers.inbox_dispatcher import dispatch_provider_event_inbox
 from app.providers.inbox_tasks import run_provider_event_inbox
 from app.providers.models import ProviderEvent, ProviderEventInbox
 from app.providers.pending_events import (
@@ -145,6 +146,8 @@ async def reconcile_pending_events_for_channel_report(
     except ProviderConfigurationError:
         return WebhookReconcileChannelResult(checked_events=len(events))
 
+    now = datetime.now(UTC)
+    stale_cutoff = now - timedelta(minutes=15)
     resolved = 0
     for event in events:
         event_id = event.id
@@ -156,14 +159,22 @@ async def reconcile_pending_events_for_channel_report(
                         ProviderEventInbox.provider_event_id == event.id,
                     )
                 )
+                if inbox is not None and inbox.status == "completed":
+                    event.processed = True
+                    event.processing_error = None
+                    resolved += 1
+                    continue
                 if inbox is None:
-                    await whatsapp_webhook(
-                        provider=channel.provider,
-                        channel_id=channel.id,
-                        payload=event.payload,
-                        x_webhook_secret=settings.webhook_secret,
-                        db=db,
-                    )
+                    try:
+                        await whatsapp_webhook(
+                            provider=channel.provider,
+                            channel_id=channel.id,
+                            payload=event.payload,
+                            x_webhook_secret=settings.webhook_secret,
+                            db=db,
+                        )
+                    except Exception:
+                        pass
                     inbox = db.scalar(
                         select(ProviderEventInbox).where(
                             ProviderEventInbox.tenant_id == tenant_id,
@@ -181,11 +192,28 @@ async def reconcile_pending_events_for_channel_report(
                 refreshed_event = db.get(ProviderEvent, event_id)
                 if refreshed_event is not None and refreshed_event.processed:
                     resolved += 1
+                elif event.created_at < stale_cutoff:
+                    event.processed = True
+                    event.processing_error = (
+                        inbox.last_error
+                        if inbox and inbox.last_error
+                        else "Mensagem recebida expirada sem processamento"
+                    )
+                    resolved += 1
                 continue
 
             if event.processing_error == PENDING_RECEIPT_ERROR:
-                update = adapter.handle_message_status(event.payload)
+                try:
+                    update = adapter.handle_message_status(event.payload)
+                except IgnoredWebhookEvent:
+                    event.processed = True
+                    event.processing_error = None
+                    resolved += 1
+                    continue
                 if update is None:
+                    event.processed = True
+                    event.processing_error = None
+                    resolved += 1
                     continue
                 application = apply_message_status_update(
                     db,
@@ -197,6 +225,10 @@ async def reconcile_pending_events_for_channel_report(
                     event.processed = True
                     event.processing_error = None
                     resolved += 1
+                elif event.created_at < stale_cutoff:
+                    event.processed = True
+                    event.processing_error = "Recibo para mensagem não localizada no canal"
+                    resolved += 1
                 continue
 
             if event.processing_error == PENDING_EDIT_ERROR:
@@ -207,13 +239,17 @@ async def reconcile_pending_events_for_channel_report(
                         ProviderEventInbox.normalized_kind == "edit",
                     )
                 )
-                incoming = (
-                    IncomingMessageEditResult.model_validate(
-                        inbox.normalized_payload
+                try:
+                    incoming = (
+                        IncomingMessageEditResult.model_validate(inbox.normalized_payload)
+                        if inbox is not None
+                        else await adapter.handle_webhook(event.payload)
                     )
-                    if inbox is not None
-                    else await adapter.handle_webhook(event.payload)
-                )
+                except IgnoredWebhookEvent:
+                    event.processed = True
+                    event.processing_error = None
+                    resolved += 1
+                    continue
                 if isinstance(incoming, IncomingMessageEditResult):
                     edited = apply_message_edit(
                         db,
@@ -223,7 +259,20 @@ async def reconcile_pending_events_for_channel_report(
                     )
                     if edited is not None and event.processed:
                         resolved += 1
-        except (IgnoredWebhookEvent, ValueError, NotImplementedError):
+                    elif event.created_at < stale_cutoff:
+                        event.processed = True
+                        event.processing_error = "Edição para mensagem original não localizada"
+                        resolved += 1
+                continue
+        except (IgnoredWebhookEvent, NotImplementedError):
+            event.processed = True
+            event.processing_error = None
+            resolved += 1
+            continue
+        except ValueError as exc:
+            event.processed = True
+            event.processing_error = str(exc)
+            resolved += 1
             continue
         except Exception:
             logger.warning(
@@ -291,10 +340,7 @@ def get_webhook_reconcile_runtime() -> WebhookReconcileRuntime:
         return WebhookReconcileRuntime(active=False)
 
     heartbeat = _decode_datetime(raw_heartbeat)
-    stats = {
-        _decode_text(key): _decode_text(value)
-        for key, value in raw_stats.items()
-    }
+    stats = {_decode_text(key): _decode_text(value) for key, value in raw_stats.items()}
     return WebhookReconcileRuntime(
         active=heartbeat is not None,
         heartbeat_at=heartbeat,
@@ -347,6 +393,8 @@ def reset_failed_provider_inbox_for_channel(
         event.processing_error = PENDING_INCOMING_MESSAGE_ERROR
     if failed_rows:
         db.commit()
+        for inbox, _ in failed_rows:
+            dispatch_provider_event_inbox(inbox.id, tenant_id)
     return len(failed_rows)
 
 

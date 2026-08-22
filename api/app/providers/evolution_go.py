@@ -64,9 +64,9 @@ class EvolutionGoProvider(WhatsAppProvider):
     ) -> None:
         self.base_url = (base_url or settings.evolution_go_base_url).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.evolution_go_api_key
-        self.webhook_base_url = (
-            webhook_base_url or settings.evolution_go_webhook_base_url
-        ).rstrip("/")
+        self.webhook_base_url = (webhook_base_url or settings.evolution_go_webhook_base_url).rstrip(
+            "/"
+        )
         self.transport = transport
 
     @property
@@ -80,9 +80,7 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         timeout = kwargs.pop("timeout", self.default_timeout)
-        client = get_evolution_http_client(
-            self.base_url, getattr(self, "transport", None)
-        )
+        client = get_evolution_http_client(self.base_url, getattr(self, "transport", None))
         try:
             response = await client.request(
                 method, path, headers=self.headers, timeout=timeout, **kwargs
@@ -443,9 +441,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         info = self._dict_value(data, "info", "Info")
         message = self._dict_value(data, "message", "Message")
         event_type = str(payload.get("event") or payload.get("type") or "").lower()
-        is_from_me = self._optional_bool(
-            info.get("IsFromMe", info.get("isFromMe"))
-        ) is True
+        is_from_me = self._optional_bool(info.get("IsFromMe", info.get("isFromMe"))) is True
         chat_jid = str(info.get("Chat") or info.get("chat") or "")
         is_group = (
             self._optional_bool(info.get("IsGroup", info.get("isGroup"))) is True
@@ -454,16 +450,10 @@ class EvolutionGoProvider(WhatsAppProvider):
         if event_type == "sendmessage":
             raise IgnoredWebhookEvent("Confirmação de envio processada pela chamada da API")
         if event_type and event_type != "message":
-            raise IgnoredWebhookEvent(
-                f"Evento técnico Evolution Go ignorado: {event_type}"
-            )
+            raise IgnoredWebhookEvent(f"Evento técnico Evolution Go ignorado: {event_type}")
 
         message_id = (
-            key.get("id")
-            or key.get("ID")
-            or info.get("ID")
-            or info.get("id")
-            or data.get("id")
+            key.get("id") or key.get("ID") or info.get("ID") or info.get("id") or data.get("id")
         )
         chat_id, provider_address, participant_phone, from_number = self._chat_identity(
             key,
@@ -485,9 +475,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         reaction = self._dict_value(message, "reactionMessage", "ReactionMessage")
         info_type = str(info.get("Type") or info.get("type") or "").lower()
         if reaction or info_type == "reaction":
-            raise IgnoredWebhookEvent(
-                "Reações não geram mensagens separadas no MVP"
-            )
+            raise IgnoredWebhookEvent("Reações não geram mensagens separadas no MVP")
 
         edit_target, edited_body = self._message_edit(message, info, data)
         if edit_target:
@@ -499,11 +487,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 from_number=from_number,
                 is_group=is_group,
                 chat_id=chat_id if is_group else None,
-                direction=(
-                    MessageDirection.OUTGOING
-                    if is_from_me
-                    else MessageDirection.INCOMING
-                ),
+                direction=(MessageDirection.OUTGOING if is_from_me else MessageDirection.INCOMING),
                 body=edited_body,
                 timestamp=self._timestamp(raw_timestamp),
                 raw_payload=payload,
@@ -527,9 +511,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         if not message_id or not from_number:
             raise ValueError("Webhook Evolution Go sem ID ou remetente")
         if media_type is None and not text and not shared_contacts:
-            raise IgnoredWebhookEvent(
-                "Mensagem sem conteúdo compatível com o MVP"
-            )
+            raise IgnoredWebhookEvent("Mensagem sem conteúdo compatível com o MVP")
 
         participant_name = None if is_from_me else push_name
         return IncomingMessageResult(
@@ -543,13 +525,9 @@ class EvolutionGoProvider(WhatsAppProvider):
             provider_address=provider_address if is_group else None,
             participant_phone=participant_phone if is_group else None,
             participant_name=participant_name if is_group else None,
-            direction=(
-                MessageDirection.OUTGOING if is_from_me else MessageDirection.INCOMING
-            ),
+            direction=(MessageDirection.OUTGOING if is_from_me else MessageDirection.INCOMING),
             message_type=(
-                MessageType.CONTACT
-                if shared_contacts
-                else media_type or MessageType.TEXT
+                MessageType.CONTACT if shared_contacts else media_type or MessageType.TEXT
             ),
             body=text,
             media_url=media_url,
@@ -564,9 +542,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             raw_payload=payload,
         )
 
-    async def handle_history_sync(
-        self, payload: dict[str, Any]
-    ) -> list[IncomingMessageResult]:
+    async def handle_history_sync(self, payload: dict[str, Any]) -> list[IncomingMessageResult]:
         event_type = str(payload.get("event") or payload.get("type") or "").lower()
         if event_type not in {"historysync", "history_sync"}:
             return []
@@ -594,9 +570,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             messages.append(incoming)
         return messages
 
-    def handle_message_status(
-        self, payload: dict[str, Any]
-    ) -> MessageStatusUpdateResult | None:
+    def handle_message_status(self, payload: dict[str, Any]) -> MessageStatusUpdateResult | None:
         event_type = str(payload.get("event") or payload.get("type") or "").lower()
         if event_type != "receipt":
             return None
@@ -604,6 +578,10 @@ class EvolutionGoProvider(WhatsAppProvider):
         data = payload.get("data", {})
         if not isinstance(data, dict):
             raise ValueError("Recibo Evolution Go com data inválido")
+
+        chat = str(data.get("Chat") or data.get("chat") or payload.get("chat") or "").lower()
+        if chat.endswith("@broadcast") or chat == "status@broadcast":
+            raise IgnoredWebhookEvent("Recibos de status/stories do WhatsApp ignorados")
 
         raw_state = str(
             payload.get("state")
@@ -671,9 +649,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             if "base64" in message:
                 message.pop("base64", None)
                 message["mediaStoredSeparately"] = True
-            secret = self._dict_value(
-                message, "secretEncryptedMessage", "SecretEncryptedMessage"
-            )
+            secret = self._dict_value(message, "secretEncryptedMessage", "SecretEncryptedMessage")
             removed_encrypted_payload = False
             for field in ("encIV", "EncIV", "encPayload", "EncPayload"):
                 if field in secret:
@@ -681,9 +657,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                     removed_encrypted_payload = True
             if removed_encrypted_payload:
                 secret["encryptedPayloadRemoved"] = True
-            context = self._dict_value(
-                message, "messageContextInfo", "MessageContextInfo"
-            )
+            context = self._dict_value(message, "messageContextInfo", "MessageContextInfo")
             context.pop("deviceListMetadata", None)
             context.pop("DeviceListMetadata", None)
         return sanitized
@@ -695,11 +669,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             key = self._dict_value(data, "key", "Key")
             info = self._dict_value(data, "info", "Info")
             value = (
-                key.get("id")
-                or key.get("ID")
-                or info.get("ID")
-                or info.get("id")
-                or data.get("id")
+                key.get("id") or key.get("ID") or info.get("ID") or info.get("id") or data.get("id")
             )
             if value:
                 return f"message:{value}"
@@ -771,19 +741,14 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
 
     @classmethod
-    def _parse_group_directory(
-        cls, payload: dict[str, Any]
-    ) -> list[GroupDirectoryEntry]:
+    def _parse_group_directory(cls, payload: dict[str, Any]) -> list[GroupDirectoryEntry]:
         data = cls._response_data(payload)
         items: list[Any]
         if isinstance(data, list):
             items = data
         elif isinstance(data, dict):
             nested = (
-                data.get("Groups")
-                or data.get("groups")
-                or data.get("data")
-                or data.get("Data")
+                data.get("Groups") or data.get("groups") or data.get("data") or data.get("Data")
             )
             items = nested if isinstance(nested, list) else [data]
         else:
@@ -1055,9 +1020,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "firstName",
             ),
             push_name=cls._text_value(saved_contact, "PushName", "pushName"),
-            business_name=cls._text_value(
-                saved_contact, "BusinessName", "businessName"
-            ),
+            business_name=cls._text_value(saved_contact, "BusinessName", "businessName"),
             verified_name=verified_name,
             about=cls._text_value(info_user, "Status", "status"),
             profile_picture_url=cls._avatar_url(avatar),
@@ -1133,31 +1096,24 @@ class EvolutionGoProvider(WhatsAppProvider):
             "messageID",
             "messageId",
         )
-        remote_jid = (
-            cls._text_value(
-                key,
-                "remoteJid",
-                "RemoteJid",
-                "remoteJID",
-                "RemoteJID",
-            )
-            or cls._history_conversation_jid(conversation)
-        )
+        remote_jid = cls._text_value(
+            key,
+            "remoteJid",
+            "RemoteJid",
+            "remoteJID",
+            "RemoteJID",
+        ) or cls._history_conversation_jid(conversation)
         if not message_id or not remote_jid or not message:
             return None
 
         is_from_me = (
             cls._optional_bool(
-                key.get("fromMe")
-                if "fromMe" in key
-                else key.get("FromMe", key.get("isFromMe"))
+                key.get("fromMe") if "fromMe" in key else key.get("FromMe", key.get("isFromMe"))
             )
             is True
         )
         participant = cls._text_value(key, "participant", "Participant")
-        is_group = remote_jid.endswith("@g.us") or bool(
-            participant and participant != remote_jid
-        )
+        is_group = remote_jid.endswith("@g.us") or bool(participant and participant != remote_jid)
         sender = participant if is_group and participant else remote_jid
         timestamp = (
             web_message.get("messageTimestamp")
@@ -1228,9 +1184,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         return {}
 
     @classmethod
-    def _info_user(
-        cls, response: dict[str, Any] | None, phone_number: str
-    ) -> dict[str, Any]:
+    def _info_user(cls, response: dict[str, Any] | None, phone_number: str) -> dict[str, Any]:
         data = cls._response_data(response)
         if not isinstance(data, dict):
             return {}
@@ -1246,9 +1200,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         return next((value for value in users.values() if isinstance(value, dict)), {})
 
     @classmethod
-    def _saved_contact(
-        cls, response: dict[str, Any] | None, phone_number: str
-    ) -> dict[str, Any]:
+    def _saved_contact(cls, response: dict[str, Any] | None, phone_number: str) -> dict[str, Any]:
         data = cls._response_data(response)
         if not isinstance(data, list):
             return {}
@@ -1332,7 +1284,7 @@ class EvolutionGoProvider(WhatsAppProvider):
     def _provider_file_url(self, file_url: str) -> str:
         public_base = settings.public_api_url.rstrip("/")
         if file_url.startswith(f"{public_base}/"):
-            return f"{self.webhook_base_url}{file_url[len(public_base):]}"
+            return f"{self.webhook_base_url}{file_url[len(public_base) :]}"
         return file_url
 
     @staticmethod
@@ -1389,11 +1341,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         if not isinstance(payload, dict):
             raise ValueError("Resposta de QR inválida do Evolution Go")
         qr = payload.get("qrcode") or payload.get("qrCode") or payload.get("base64")
-        pairing = (
-            payload.get("code")
-            or payload.get("pairingCode")
-            or payload.get("pairing_code")
-        )
+        pairing = payload.get("code") or payload.get("pairingCode") or payload.get("pairing_code")
         return QRCodeResult(
             qr_code=str(qr) if qr else None,
             pairing_code=str(pairing) if pairing else None,
@@ -1469,8 +1417,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 success=False,
                 status=MessageStatus.FAILED,
                 error=(
-                    "A resposta do Evolution Go ficou incerta; o reenvio "
-                    "automático foi bloqueado."
+                    "A resposta do Evolution Go ficou incerta; o reenvio automático foi bloqueado."
                 ),
             )
         return SendResult(
@@ -1488,26 +1435,16 @@ class EvolutionGoProvider(WhatsAppProvider):
             message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
         )
         wrapped_message = cls._dict_value(document_wrapper, "message", "Message")
-        wrapped_document = cls._dict_value(
-            wrapped_message, "documentMessage", "DocumentMessage"
-        )
+        wrapped_document = cls._dict_value(wrapped_message, "documentMessage", "DocumentMessage")
         value = (
             message.get("conversation")
             or message.get("Conversation")
-            or cls._dict_value(
-                message, "extendedTextMessage", "ExtendedTextMessage"
-            ).get("text")
-            or cls._dict_value(message, "imageMessage", "ImageMessage").get(
-                "caption"
-            )
-            or cls._dict_value(
-                message, "documentMessage", "DocumentMessage"
-            ).get("caption")
+            or cls._dict_value(message, "extendedTextMessage", "ExtendedTextMessage").get("text")
+            or cls._dict_value(message, "imageMessage", "ImageMessage").get("caption")
+            or cls._dict_value(message, "documentMessage", "DocumentMessage").get("caption")
             or wrapped_document.get("caption")
             or wrapped_document.get("Caption")
-            or cls._dict_value(message, "videoMessage", "VideoMessage").get(
-                "caption"
-            )
+            or cls._dict_value(message, "videoMessage", "VideoMessage").get("caption")
             or data.get("text")
         )
         return str(value) if value is not None else None
@@ -1519,18 +1456,12 @@ class EvolutionGoProvider(WhatsAppProvider):
         info: dict[str, Any],
         data: dict[str, Any],
     ) -> tuple[str | None, str | None]:
-        protocol = cls._dict_value(
-            message, "protocolMessage", "ProtocolMessage"
-        )
-        secret = cls._dict_value(
-            message, "secretEncryptedMessage", "SecretEncryptedMessage"
-        )
+        protocol = cls._dict_value(message, "protocolMessage", "ProtocolMessage")
+        secret = cls._dict_value(message, "secretEncryptedMessage", "SecretEncryptedMessage")
         bot_info = cls._dict_value(info, "MsgBotInfo", "msgBotInfo")
         meta_info = cls._dict_value(info, "MsgMetaInfo", "msgMetaInfo")
         protocol_key = cls._dict_value(protocol, "key", "Key")
-        secret_key = cls._dict_value(
-            secret, "targetMessageKey", "TargetMessageKey"
-        )
+        secret_key = cls._dict_value(secret, "targetMessageKey", "TargetMessageKey")
         target = (
             bot_info.get("EditTargetID")
             or bot_info.get("editTargetID")
@@ -1550,13 +1481,9 @@ class EvolutionGoProvider(WhatsAppProvider):
         if not is_edit or not target:
             return None, None
 
-        edited_message = cls._dict_value(
-            protocol, "editedMessage", "EditedMessage"
-        )
+        edited_message = cls._dict_value(protocol, "editedMessage", "EditedMessage")
         if not edited_message:
-            edited_message = cls._dict_value(
-                message, "editedMessage", "EditedMessage"
-            )
+            edited_message = cls._dict_value(message, "editedMessage", "EditedMessage")
         body = cls._message_text(edited_message) if edited_message else None
         if body is None and not secret:
             body = cls._message_text(message, data)
@@ -1576,22 +1503,16 @@ class EvolutionGoProvider(WhatsAppProvider):
         for keys, message_type in mapping:
             media = EvolutionGoProvider._dict_value(message, *keys)
             if media:
-                return EvolutionGoProvider._media_values(
-                    message, data, media, message_type
-                )
+                return EvolutionGoProvider._media_values(message, data, media, message_type)
         document_wrapper = EvolutionGoProvider._dict_value(
             message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
         )
-        wrapped_message = EvolutionGoProvider._dict_value(
-            document_wrapper, "message", "Message"
-        )
+        wrapped_message = EvolutionGoProvider._dict_value(document_wrapper, "message", "Message")
         document = EvolutionGoProvider._dict_value(
             wrapped_message, "documentMessage", "DocumentMessage"
         )
         if document:
-            return EvolutionGoProvider._media_values(
-                message, data, document, MessageType.DOCUMENT
-            )
+            return EvolutionGoProvider._media_values(message, data, document, MessageType.DOCUMENT)
         return None, None, None, None, None
 
     @staticmethod
@@ -1650,12 +1571,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         if not isinstance(vcard, str) or len(vcard) > 64 * 1024:
             vcard = ""
         fields = cls._vcard_fields(vcard)
-        raw_phone = (
-            payload.get("phone")
-            or payload.get("Phone")
-            or fields.get("TEL")
-            or ""
-        )
+        raw_phone = payload.get("phone") or payload.get("Phone") or fields.get("TEL") or ""
         phone_number = cls._digits(str(raw_phone))
         if not 8 <= len(phone_number) <= 15:
             return None
@@ -1807,14 +1723,8 @@ class EvolutionGoProvider(WhatsAppProvider):
             chat_id = cls._number_from_jid(resolved_chat)
             if not chat_id:
                 raise ValueError("Webhook Evolution Go de grupo sem Chat")
-            provider_address = (
-                resolved_chat
-                if "@" in resolved_chat
-                else f"{chat_id}@g.us"
-            )
-            participant_jid = cls._participant_jid(
-                key, info, data, is_from_me=is_from_me
-            )
+            provider_address = resolved_chat if "@" in resolved_chat else f"{chat_id}@g.us"
+            participant_jid = cls._participant_jid(key, info, data, is_from_me=is_from_me)
             participant_phone = cls._phone_from_jid(participant_jid)
             # Thread key is always the group; participant is metadata only.
             return chat_id, provider_address, participant_phone, chat_id

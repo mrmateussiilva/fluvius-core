@@ -21,6 +21,7 @@ from app.delivery.service import (
 )
 from app.messages.models import Message
 from app.providers.base import SendResult
+from app.providers.status_updates import StatusApplication, can_advance_message_status
 
 
 class MessagePipelineUnitTest(unittest.TestCase):
@@ -209,6 +210,25 @@ class MessagePipelineUnitTest(unittest.TestCase):
         self.assertEqual(msg3.status, MessageStatus.FAILED)
         self.assertEqual(msg3.error, "Instância desconectada")
         self.assertIsNone(msg3.sent_at)
+
+    def test_status_application_and_monotonicity(self) -> None:
+        # Can advance: pending -> sent -> delivered -> read
+        self.assertTrue(can_advance_message_status(MessageStatus.PENDING, MessageStatus.SENT))
+        self.assertTrue(can_advance_message_status(MessageStatus.SENT, MessageStatus.DELIVERED))
+        self.assertTrue(can_advance_message_status(MessageStatus.DELIVERED, MessageStatus.READ))
+        self.assertTrue(can_advance_message_status(MessageStatus.SENT, MessageStatus.READ))
+
+        # Cannot downgrade or advance terminal failed
+        self.assertFalse(can_advance_message_status(MessageStatus.READ, MessageStatus.DELIVERED))
+        self.assertFalse(can_advance_message_status(MessageStatus.DELIVERED, MessageStatus.SENT))
+        self.assertFalse(can_advance_message_status(MessageStatus.FAILED, MessageStatus.READ))
+
+        # StatusApplication covers logic
+        app = StatusApplication(matched_ids={"MSG-1", "MSG-2"}, changed_messages=[])
+        self.assertTrue(app.covers(["MSG-1"]))
+        self.assertTrue(app.covers(["MSG-1", "MSG-2"]))
+        self.assertFalse(app.covers(["MSG-1", "MSG-3"]))
+        self.assertFalse(app.covers(["UNMATCHED-EXTERNAL-ID"]))
 
 
 if __name__ == "__main__":

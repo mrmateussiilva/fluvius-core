@@ -795,6 +795,12 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         with self.assertRaises(IgnoredWebhookEvent):
             self.provider.handle_message_status(receipt_payload("ReadSelf"))
 
+    def test_ignores_status_broadcast_receipt(self) -> None:
+        payload = receipt_payload()
+        payload["data"]["Chat"] = "status@broadcast"
+        with self.assertRaises(IgnoredWebhookEvent):
+            self.provider.handle_message_status(payload)
+
     def test_receipt_event_id_is_stable_and_state_specific(self) -> None:
         delivered = self.provider.webhook_event_id(receipt_payload())
         read = self.provider.webhook_event_id(receipt_payload("Read"))
