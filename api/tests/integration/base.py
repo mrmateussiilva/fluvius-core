@@ -110,11 +110,7 @@ class PostgresIntegrationTestCase(unittest.TestCase):
                         ProviderEventInbox.id,
                         ProviderEventInbox.tenant_id,
                     )
-                    .where(
-                        ProviderEventInbox.status.in_(
-                            ("queued", "enqueued", "retry_wait")
-                        )
-                    )
+                    .where(ProviderEventInbox.status.in_(("queued", "enqueued", "retry_wait")))
                     .order_by(ProviderEventInbox.created_at)
                 )
             )

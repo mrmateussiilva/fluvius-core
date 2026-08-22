@@ -178,6 +178,8 @@ onBeforeUnmount(() => {
       :send-error="store.selectedSendError"
       :operation-loading="store.operationLoading"
       :operation-error="store.operationError"
+      :has-more-messages="store.hasMoreMessagesByConversation[store.selectedId || ''] ?? true"
+      :loading-older-messages="store.loadingOlderMessages"
       @assign="store.assignSelected"
       @close="store.closeSelected"
       @send="sendMessage"
@@ -188,6 +190,7 @@ onBeforeUnmount(() => {
       @back="backToConversationList"
       @show-contact="store.loadSelectedContact()"
       @refresh-contact="store.loadSelectedContact(true)"
+      @load-older="store.selectedId && store.loadOlderMessages(store.selectedId)"
     />
   </div>
 </template>

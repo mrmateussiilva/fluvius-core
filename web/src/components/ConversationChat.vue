@@ -47,6 +47,8 @@ const props = defineProps<{
   sendError: string | null
   operationLoading: boolean
   operationError: string | null
+  hasMoreMessages?: boolean
+  loadingOlderMessages?: boolean
 }>()
 const emit = defineEmits<{
   assign: [userId?: string]
@@ -78,6 +80,7 @@ const emit = defineEmits<{
   back: []
   showContact: []
   refreshContact: []
+  loadOlder: []
 }>()
 const messageList = ref<HTMLElement | null>(null)
 const assignmentTargetId = ref('')
@@ -203,34 +206,23 @@ watch(
   { immediate: true },
 )
 
-function dayKey(value: string) {
-  const date = new Date(value)
-  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
-}
-
-const messageDayGroups = computed(() => {
-  const groups: {
-    key: string
-    createdAt: string
-    items: { message: Message; index: number }[]
-  }[] = []
-
-  props.messages.forEach((message, index) => {
-    const key = dayKey(message.created_at)
-    const currentGroup = groups.at(-1)
-    if (!currentGroup || currentGroup.key !== key) {
-      groups.push({
-        key,
-        createdAt: message.created_at,
-        items: [{ message, index }],
-      })
-      return
-    }
-    currentGroup.items.push({ message, index })
-  })
-
-  return groups
+const longDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
 })
+
+const dateCache = new Map<string, string>()
+function dayKey(value: string) {
+  let key = dateCache.get(value)
+  if (!key) {
+    const date = new Date(value)
+    key = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
+    if (dateCache.size > 2000) dateCache.clear()
+    dateCache.set(value, key)
+  }
+  return key
+}
 
 function belongsToSameGroup(first: Message, second: Message) {
   return (
@@ -243,23 +235,53 @@ function belongsToSameGroup(first: Message, second: Message) {
   )
 }
 
-function isGroupStart(index: number) {
-  return (
-    index === 0 ||
-    !belongsToSameGroup(props.messages[index - 1], props.messages[index])
-  )
-}
+const retryingMessageSet = computed(
+  () => new Set(props.retryingMessageIds),
+)
 
-function isGroupEnd(index: number) {
-  return (
-    index === props.messages.length - 1 ||
-    !belongsToSameGroup(props.messages[index], props.messages[index + 1])
-  )
-}
+const messageDayGroups = computed(() => {
+  const groups: {
+    key: string
+    createdAt: string
+    items: {
+      message: Message
+      index: number
+      groupStart: boolean
+      groupEnd: boolean
+      spacingClass: string
+    }[]
+  }[] = []
 
-function messageSpacing(index: number) {
-  return isGroupStart(index) ? 'mt-2' : 'mt-[2px]'
-}
+  const total = props.messages.length
+  props.messages.forEach((message, index) => {
+    const key = dayKey(message.created_at)
+    const prev = index > 0 ? props.messages[index - 1] : null
+    const next = index < total - 1 ? props.messages[index + 1] : null
+    const groupStart = !prev || !belongsToSameGroup(prev, message)
+    const groupEnd = !next || !belongsToSameGroup(message, next)
+
+    const item = {
+      message,
+      index,
+      groupStart,
+      groupEnd,
+      spacingClass: groupStart ? 'mt-2' : 'mt-[2px]',
+    }
+
+    const currentGroup = groups.at(-1)
+    if (!currentGroup || currentGroup.key !== key) {
+      groups.push({
+        key,
+        createdAt: message.created_at,
+        items: [item],
+      })
+      return
+    }
+    currentGroup.items.push(item)
+  })
+
+  return groups
+})
 
 function dateLabel(value: string) {
   const date = new Date(value)
@@ -269,11 +291,7 @@ function dateLabel(value: string) {
   const dayDifference = Math.round((today.getTime() - messageDay.getTime()) / 86_400_000)
   if (dayDifference === 0) return 'Hoje'
   if (dayDifference === 1) return 'Ontem'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
+  return longDateFormatter.format(date)
 }
 
 function distanceFromBottom(element: HTMLElement) {
@@ -298,6 +316,31 @@ function maybeMarkRead() {
     .find((message) => message.direction === 'incoming')
   if (lastVisibleIncoming) {
     emit('read', conversation.id, lastVisibleIncoming.id)
+  }
+}
+
+let loadingOlder = false
+async function handleScroll() {
+  updateScrollState()
+  const element = messageList.value
+  const conversationId = props.conversation?.id
+  if (!element || !conversationId) return
+  if (
+    element.scrollTop < 80 &&
+    props.hasMoreMessages &&
+    !props.loadingOlderMessages &&
+    !loadingOlder
+  ) {
+    loadingOlder = true
+    const previousScrollHeight = element.scrollHeight
+    const previousScrollTop = element.scrollTop
+    emit('loadOlder')
+    await nextTick()
+    const heightDifference = element.scrollHeight - previousScrollHeight
+    if (heightDifference > 0) {
+      element.scrollTop = previousScrollTop + heightDifference
+    }
+    loadingOlder = false
   }
 }
 
@@ -366,9 +409,8 @@ watch(
 )
 
 watch(
-  () => props.messages.map((message) => message.id).join('|'),
-  async () => {
-    const conversationId = props.conversation?.id
+  () => [props.conversation?.id, props.messages.length, props.messages.at(-1)?.id, props.messages.at(-1)?.status],
+  async ([conversationId]) => {
     if (
       !conversationId ||
       scrollReadyConversationId !== conversationId
@@ -376,12 +418,12 @@ watch(
       return
     }
     const previousIds =
-      knownMessageIds.get(conversationId) || new Set<string>()
+      knownMessageIds.get(conversationId as string) || new Set<string>()
     const added = props.messages.filter(
       (message) => !previousIds.has(message.id),
     )
     knownMessageIds.set(
-      conversationId,
+      conversationId as string,
       new Set(props.messages.map((message) => message.id)),
     )
     if (!added.length) return
@@ -665,9 +707,12 @@ function previewMedia(
         <div
           ref="messageList"
           class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
-          @scroll.passive="updateScrollState"
+          @scroll.passive="handleScroll"
         >
           <div class="mx-auto w-full max-w-5xl">
+            <div v-if="loadingOlderMessages" class="flex justify-center py-2">
+              <span class="h-4 w-4 animate-spin rounded-full border-2 border-fluvius-600 border-t-transparent" />
+            </div>
             <section
               v-for="dayGroup in messageDayGroups"
               :key="dayGroup.key"
@@ -681,22 +726,22 @@ function previewMedia(
                 </span>
               </div>
               <template
-                v-for="{ message, index } in dayGroup.items"
+                v-for="{ message, groupStart, groupEnd, spacingClass } in dayGroup.items"
                 :key="message.id"
               >
                 <div
                   :id="`message-${message.id}`"
-                  class="rounded-lg transition-colors duration-500"
+                  class="message-bubble-wrapper rounded-lg transition-colors duration-500"
                   :class="[
-                    messageSpacing(index),
+                    spacingClass,
                     highlightedMessageId === message.id ? 'bg-warning/20 ring-4 ring-warning/20' : '',
                   ]"
                 >
                   <MessageBubble
                     :message="message"
-                    :retrying="retryingMessageIds.includes(message.id)"
-                    :group-start="isGroupStart(index)"
-                    :group-end="isGroupEnd(index)"
+                    :retrying="retryingMessageSet.has(message.id)"
+                    :group-start="groupStart"
+                    :group-end="groupEnd"
                     @reply="replyingTo = $event"
                     @jump-to="jumpToMessage"
                     @preview="previewMedia"

@@ -19,6 +19,23 @@ import {
 import type { Message, MessageAttachment, MessageType } from '../api/types'
 import AudioMessagePlayer from './AudioMessagePlayer.vue'
 
+const timeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  hour: '2-digit',
+  minute: '2-digit',
+})
+const fullDateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+})
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+
 const props = defineProps<{
   message: Message
   retrying: boolean
@@ -45,18 +62,8 @@ const isNativeSticker = computed(
     props.message.message_type === 'sticker' &&
     props.message.attachments.length > 0,
 )
-const timeLabel = computed(() =>
-  new Intl.DateTimeFormat('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(sentAt.value),
-)
-const fullDateLabel = computed(() =>
-  new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'long',
-    timeStyle: 'short',
-  }).format(sentAt.value),
-)
+const timeLabel = computed(() => timeFormatter.format(sentAt.value))
+const fullDateLabel = computed(() => fullDateFormatter.format(sentAt.value))
 const statusLabel = computed(
   () =>
     ({
@@ -85,14 +92,7 @@ const bubbleClass = computed(() => {
 
 function dateTimeLabel(value: string | null) {
   if (!value) return 'Aguardando'
-  return new Intl.DateTimeFormat('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(new Date(value))
+  return dateTimeFormatter.format(new Date(value))
 }
 
 function fileSize(value: number) {

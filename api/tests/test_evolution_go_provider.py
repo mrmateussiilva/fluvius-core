@@ -171,9 +171,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
 
     def test_parses_encrypted_edit_without_creating_an_empty_message(self) -> None:
         result = asyncio.run(
-            self.provider.handle_webhook(
-                load_fixture("message-edited-encrypted.json")
-            )
+            self.provider.handle_webhook(load_fixture("message-edited-encrypted.json"))
         )
 
         self.assertIsInstance(result, IncomingMessageEditResult)
@@ -191,9 +189,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         payload["data"]["Message"] = {
             "protocolMessage": {
                 "key": {"ID": "ORIGINAL-MESSAGE-2"},
-                "editedMessage": {
-                    "extendedTextMessage": {"text": "Texto corrigido"}
-                },
+                "editedMessage": {"extendedTextMessage": {"text": "Texto corrigido"}},
             }
         }
 
@@ -211,18 +207,12 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             IgnoredWebhookEvent,
             "Reações não geram mensagens",
         ):
-            asyncio.run(
-                self.provider.handle_webhook(
-                    load_fixture("reaction-removed.json")
-                )
-            )
+            asyncio.run(self.provider.handle_webhook(load_fixture("reaction-removed.json")))
 
     def test_sanitizes_encrypted_edit_material(self) -> None:
         payload = message_payload()
         payload["data"]["Message"] = {
-            "messageContextInfo": {
-                "deviceListMetadata": {"senderKeyHash": "sensitive"}
-            },
+            "messageContextInfo": {"deviceListMetadata": {"senderKeyHash": "sensitive"}},
             "secretEncryptedMessage": {
                 "encIV": "sensitive-iv",
                 "encPayload": "sensitive-payload",
@@ -239,9 +229,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         )
         self.assertNotIn("encIV", message["secretEncryptedMessage"])
         self.assertNotIn("encPayload", message["secretEncryptedMessage"])
-        self.assertTrue(
-            message["secretEncryptedMessage"]["encryptedPayloadRemoved"]
-        )
+        self.assertTrue(message["secretEncryptedMessage"]["encryptedPayloadRemoved"])
 
     def test_parses_incoming_image_file(self) -> None:
         payload = message_payload()
@@ -264,9 +252,7 @@ class EvolutionGoWebhookTest(unittest.TestCase):
 
     def test_parses_wrapped_incoming_document_file(self) -> None:
         result = asyncio.run(
-            self.provider.handle_webhook(
-                load_fixture("document-with-caption-message.json")
-            )
+            self.provider.handle_webhook(load_fixture("document-with-caption-message.json"))
         )
 
         self.assertEqual(result.message_type, MessageType.DOCUMENT)
@@ -482,18 +468,12 @@ class EvolutionGoWebhookTest(unittest.TestCase):
     def test_ignores_api_send_confirmation_event(self) -> None:
         with self.assertRaises(IgnoredWebhookEvent):
             asyncio.run(
-                self.provider.handle_webhook(
-                    message_payload(from_me=True, event="SendMessage")
-                )
+                self.provider.handle_webhook(message_payload(from_me=True, event="SendMessage"))
             )
 
     def test_ignores_button_click_technical_event(self) -> None:
         with self.assertRaises(IgnoredWebhookEvent):
-            asyncio.run(
-                self.provider.handle_webhook(
-                    message_payload(event="ButtonClick")
-                )
-            )
+            asyncio.run(self.provider.handle_webhook(message_payload(event="ButtonClick")))
 
     def test_parses_group_messages(self) -> None:
         result = asyncio.run(
@@ -822,16 +802,10 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertNotEqual(delivered, read)
 
     def test_message_status_only_advances(self) -> None:
-        self.assertTrue(
-            can_advance_message_status(MessageStatus.SENT, MessageStatus.DELIVERED)
-        )
+        self.assertTrue(can_advance_message_status(MessageStatus.SENT, MessageStatus.DELIVERED))
         self.assertTrue(can_advance_message_status(MessageStatus.SENT, MessageStatus.READ))
-        self.assertFalse(
-            can_advance_message_status(MessageStatus.READ, MessageStatus.DELIVERED)
-        )
-        self.assertFalse(
-            can_advance_message_status(MessageStatus.FAILED, MessageStatus.READ)
-        )
+        self.assertFalse(can_advance_message_status(MessageStatus.READ, MessageStatus.DELIVERED))
+        self.assertFalse(can_advance_message_status(MessageStatus.FAILED, MessageStatus.READ))
 
     def test_history_sync_skips_messages_older_than_max_age(self) -> None:
         old_epoch = int((datetime.now(UTC) - timedelta(days=60)).timestamp())
@@ -860,4 +834,3 @@ class EvolutionGoWebhookTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

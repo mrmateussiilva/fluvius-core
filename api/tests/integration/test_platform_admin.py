@@ -14,9 +14,7 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
     def setUp(self) -> None:
         super().setUp()
         with SessionLocal() as db:
-            platform_user = db.scalar(
-                select(User).where(User.id == self.tenant_a.user_id)
-            )
+            platform_user = db.scalar(select(User).where(User.id == self.tenant_a.user_id))
             platform_user.is_platform_admin = True
             db.commit()
 
@@ -40,9 +38,7 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
             },
         )
         tenant_a = next(
-            tenant
-            for tenant in allowed.json()
-            if tenant["id"] == str(self.tenant_a.tenant_id)
+            tenant for tenant in allowed.json() if tenant["id"] == str(self.tenant_a.tenant_id)
         )
         self.assertEqual(tenant_a["user_count"], 1)
         self.assertEqual(tenant_a["channel_count"], 1)
@@ -216,14 +212,8 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
         self.assertEqual(old_company.status_code, 403, old_company.text)
 
         with SessionLocal() as db:
-            users = list(
-                db.scalars(
-                    select(User).where(User.email == self.tenant_b.email)
-                )
-            )
-            new_tenant = db.scalar(
-                select(Tenant).where(Tenant.slug == "cliente-teste")
-            )
+            users = list(db.scalars(select(User).where(User.email == self.tenant_b.email)))
+            new_tenant = db.scalar(select(Tenant).where(Tenant.slug == "cliente-teste"))
             new_membership = db.scalar(
                 select(TenantUser).where(
                     TenantUser.tenant_id == new_tenant.id,
@@ -241,9 +231,7 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
             headers=self.headers_a,
         )
         self.assertEqual(access.status_code, 200, access.text)
-        support_headers = {
-            "Authorization": f"Bearer {access.json()['access_token']}"
-        }
+        support_headers = {"Authorization": f"Bearer {access.json()['access_token']}"}
         me = self.client.get("/api/v1/auth/me", headers=support_headers)
         self.assertEqual(me.status_code, 200, me.text)
         self.assertEqual(me.json()["tenant_id"], str(self.tenant_b.tenant_id))
@@ -275,9 +263,7 @@ class PlatformAdminTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(tenant_users.status_code, 200, tenant_users.text)
         support_user = next(
-            user
-            for user in tenant_users.json()
-            if user["id"] == str(self.tenant_a.user_id)
+            user for user in tenant_users.json() if user["id"] == str(self.tenant_a.user_id)
         )
         self.assertTrue(support_user["is_platform_admin"])
 

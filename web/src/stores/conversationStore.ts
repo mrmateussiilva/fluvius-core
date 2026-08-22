@@ -58,6 +58,8 @@ export const useConversationStore = defineStore('conversations', {
     operationError: null as string | null,
     loading: false,
     activeChannelId: null as string | null,
+    hasMoreMessagesByConversation: {} as Record<string, boolean>,
+    loadingOlderMessages: false,
   }),
   getters: {
     selected(state): Conversation | null {
@@ -115,7 +117,35 @@ export const useConversationStore = defineStore('conversations', {
       ])
     },
     async refreshMessages(id: string) {
-      this.messagesByConversation[id] = await messageApi.listMessages(id)
+      const existing = this.messagesByConversation[id] || []
+      const limit = Math.max(existing.length, 100)
+      const fetched = await messageApi.listMessages(id, limit)
+      this.messagesByConversation[id] = fetched
+      this.hasMoreMessagesByConversation[id] = fetched.length >= limit
+    },
+    async loadOlderMessages(id: string): Promise<boolean> {
+      if (this.loadingOlderMessages) return false
+      if (this.hasMoreMessagesByConversation[id] === false) return false
+      const current = this.messagesByConversation[id] || []
+      if (!current.length) return false
+      const oldest = current[0]
+      this.loadingOlderMessages = true
+      try {
+        const older = await messageApi.listMessages(id, 50, oldest.created_at)
+        if (!older.length) {
+          this.hasMoreMessagesByConversation[id] = false
+          return false
+        }
+        const existingIds = new Set(current.map((m) => m.id))
+        const filteredOlder = older.filter((m) => !existingIds.has(m.id))
+        this.messagesByConversation[id] = [...filteredOlder, ...current]
+        this.hasMoreMessagesByConversation[id] = older.length >= 50
+        return filteredOlder.length > 0
+      } catch {
+        return false
+      } finally {
+        this.loadingOlderMessages = false
+      }
     },
     async markConversationRead(id: string, throughMessageId: string) {
       const conversation = this.conversations.find((item) => item.id === id)

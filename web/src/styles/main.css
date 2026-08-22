@@ -131,6 +131,11 @@
     background: rgb(var(--scrollbar-thumb) / 0.32);
   }
 
+  .message-bubble-wrapper {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 56px;
+  }
+
   .message-tail-in,
   .message-tail-out {
     position: relative;

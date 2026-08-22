@@ -94,12 +94,8 @@ class DeliveryWorkerTest(PostgresIntegrationTestCase):
             patch.object(settings, "environment", "development"),
             patch("app.delivery.dispatcher.delivery_queue.enqueue") as enqueue,
         ):
-            self.assertFalse(
-                dispatch_delivery(delivery_id, self.tenant_b.tenant_id)
-            )
-            self.assertTrue(
-                dispatch_delivery(delivery_id, self.tenant_a.tenant_id)
-            )
+            self.assertFalse(dispatch_delivery(delivery_id, self.tenant_b.tenant_id))
+            self.assertTrue(dispatch_delivery(delivery_id, self.tenant_a.tenant_id))
             enqueue.assert_called_once()
             self.assertEqual(
                 enqueue.call_args.args[0],
@@ -387,8 +383,7 @@ class DeliveryWorkerTest(PostgresIntegrationTestCase):
             self.assertEqual(delivery.status, "failed")
 
         retry = self.client.post(
-            f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages/"
-            f"{message_id}/retry",
+            f"/api/v1/conversations/{self.tenant_a.conversation_id}/messages/{message_id}/retry",
             headers=self.headers_a,
         )
         self.assertEqual(retry.status_code, 202, retry.text)

@@ -77,9 +77,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             self.assertEqual(websocket.receive_text(), "pong")
 
         content = b"%PDF-1.4\nprivate tenant attachment\n"
-        storage_key = (
-            f"{self.tenant_a.tenant_id}/{uuid4()}-private-document.pdf"
-        )
+        storage_key = f"{self.tenant_a.tenant_id}/{uuid4()}-private-document.pdf"
         file_path = Path(settings.local_storage_path) / storage_key
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_bytes(content)
@@ -105,20 +103,13 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         protected_url = messages.json()[0]["attachments"][0]["public_url"]
         self.assertEqual(
             protected_url,
-            (
-                f"{settings.public_api_url}/api/v1/attachments/"
-                f"{attachment_id}/content"
-            ),
+            (f"{settings.public_api_url}/api/v1/attachments/{attachment_id}/content"),
         )
-        downloaded = self.client.get(
-            f"/api/v1/attachments/{attachment_id}/content"
-        )
+        downloaded = self.client.get(f"/api/v1/attachments/{attachment_id}/content")
         self.assertEqual(downloaded.status_code, 200, downloaded.text)
         self.assertEqual(downloaded.content, content)
         self.assertEqual(downloaded.headers["cache-control"], "private, max-age=300")
-        self.assertTrue(
-            downloaded.headers["content-disposition"].startswith("attachment;")
-        )
+        self.assertTrue(downloaded.headers["content-disposition"].startswith("attachment;"))
         self.assertEqual(downloaded.headers["x-content-type-options"], "nosniff")
 
         self.client.cookies.clear()
@@ -132,9 +123,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(tenant_b_login.status_code, 200, tenant_b_login.text)
         self.assertEqual(
-            self.client.get(
-                f"/api/v1/attachments/{attachment_id}/content"
-            ).status_code,
+            self.client.get(f"/api/v1/attachments/{attachment_id}/content").status_code,
             404,
         )
 
@@ -183,9 +172,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(login.status_code, 200, login.text)
-        agent_headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        agent_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
         active_team = self.client.get(
             "/api/v1/users/active",
             headers=self.headers_a,
@@ -196,10 +183,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             {str(self.tenant_a.user_id), str(created_user_id)},
         )
         self.assertTrue(
-            all(
-                set(user) == {"id", "name", "role", "channel_ids"}
-                for user in active_team.json()
-            )
+            all(set(user) == {"id", "name", "role", "channel_ids"} for user in active_team.json())
         )
         tenant_b_active_team = self.client.get(
             "/api/v1/users/active",
@@ -398,9 +382,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(login.status_code, 200, login.text)
-        agent_headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        agent_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         channels = self.client.get("/api/v1/channels", headers=agent_headers)
         self.assertEqual(channels.status_code, 200, channels.text)
@@ -549,9 +531,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             {str(self.tenant_a.channel_id)},
         )
 
-        conversations = self.client.get(
-            "/api/v1/conversations", headers=self.headers_a
-        )
+        conversations = self.client.get("/api/v1/conversations", headers=self.headers_a)
         self.assertEqual(conversations.status_code, 200)
         self.assertEqual(
             {conversation["id"] for conversation in conversations.json()},
@@ -568,9 +548,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             {str(self.tenant_a.message_id)},
         )
 
-        quick_replies = self.client.get(
-            "/api/v1/quick-replies", headers=self.headers_a
-        )
+        quick_replies = self.client.get("/api/v1/quick-replies", headers=self.headers_a)
         self.assertEqual(quick_replies.status_code, 200)
         self.assertEqual(
             {reply["id"] for reply in quick_replies.json()},
@@ -926,8 +904,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             marker = db.scalar(
                 select(ConversationRead).where(
                     ConversationRead.tenant_id == self.tenant_a.tenant_id,
-                    ConversationRead.conversation_id
-                    == self.tenant_a.conversation_id,
+                    ConversationRead.conversation_id == self.tenant_a.conversation_id,
                     ConversationRead.user_id == self.tenant_a.user_id,
                 )
             )
@@ -935,8 +912,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                 select(Message).where(
                     Message.id == self.tenant_a.message_id,
                     Message.tenant_id == self.tenant_a.tenant_id,
-                    Message.conversation_id
-                    == self.tenant_a.conversation_id,
+                    Message.conversation_id == self.tenant_a.conversation_id,
                 )
             )
             self.assertIsNotNone(marker)
@@ -999,9 +975,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             },
         )
         self.assertEqual(login.status_code, 200, login.text)
-        second_headers = {
-            "Authorization": f"Bearer {login.json()['access_token']}"
-        }
+        second_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
 
         transferred = self.client.post(
             f"/api/v1/conversations/{self.tenant_a.conversation_id}/assign",
@@ -1101,9 +1075,7 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
             ],
             ["transfer", "takeover"],
         )
-        self.assertTrue(
-            all(log.user_id == self.tenant_a.user_id for log in assignment_logs)
-        )
+        self.assertTrue(all(log.user_id == self.tenant_a.user_id for log in assignment_logs))
         self.assertEqual(
             [log.action for log in assignment_logs],
             [

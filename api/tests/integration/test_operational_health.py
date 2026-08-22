@@ -164,9 +164,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         payload = response.json()
         self.assertEqual(payload["status"], "critical")
         self.assertFalse(payload["delivery_worker_online"])
-        self.assertTrue(
-            any("Worker de entregas offline" in issue for issue in payload["issues"])
-        )
+        self.assertTrue(any("Worker de entregas offline" in issue for issue in payload["issues"]))
 
     def test_health_surfaces_pending_webhooks_tenant_scoped(self) -> None:
         now = datetime.now(UTC)
@@ -210,12 +208,15 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             )
             db.commit()
 
-        with patch(
-            "app.operations.router._worker_health",
-            return_value=(True, True, True, True),
-        ), patch(
-            "app.operations.router.get_webhook_reconcile_runtime",
-            return_value=WebhookReconcileRuntime(active=True, heartbeat_at=now),
+        with (
+            patch(
+                "app.operations.router._worker_health",
+                return_value=(True, True, True, True),
+            ),
+            patch(
+                "app.operations.router.get_webhook_reconcile_runtime",
+                return_value=WebhookReconcileRuntime(active=True, heartbeat_at=now),
+            ),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -231,9 +232,7 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             any("webhook aguardando reconciliação" in issue for issue in payload["issues"])
         )
         channel = next(
-            item
-            for item in payload["channels"]
-            if item["id"] == str(self.tenant_a.channel_id)
+            item for item in payload["channels"] if item["id"] == str(self.tenant_a.channel_id)
         )
         self.assertEqual(channel["pending_events"], 1)
         self.assertEqual(channel["failed_events"], 1)
@@ -256,12 +255,15 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             )
             db.commit()
 
-        with patch(
-            "app.operations.router._worker_health",
-            return_value=(True, True, True, True),
-        ), patch(
-            "app.operations.router.get_webhook_reconcile_runtime",
-            return_value=WebhookReconcileRuntime(active=False),
+        with (
+            patch(
+                "app.operations.router._worker_health",
+                return_value=(True, True, True, True),
+            ),
+            patch(
+                "app.operations.router.get_webhook_reconcile_runtime",
+                return_value=WebhookReconcileRuntime(active=False),
+            ),
         ):
             response = self.client.get(
                 "/api/v1/operations/health",
@@ -271,37 +273,39 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         payload = response.json()
         self.assertEqual(payload["status"], "critical")
-        self.assertTrue(
-            any("sem heartbeat recente" in issue for issue in payload["issues"])
-        )
+        self.assertTrue(any("sem heartbeat recente" in issue for issue in payload["issues"]))
 
     def test_health_surfaces_webhook_reconcile_runtime(self) -> None:
         now = datetime.now(UTC)
-        with patch(
-            "app.operations.router._worker_health",
-            return_value=(True, True, True, True),
-        ), patch(
-            "app.operations.router.get_webhook_reconcile_runtime",
-            return_value=WebhookReconcileRuntime(
-                active=True,
-                heartbeat_at=now,
-                last_started_at=now,
-                last_finished_at=now,
-                last_scanned_channels=2,
-                last_checked_events=10,
-                last_resolved_events=7,
+        with (
+            patch(
+                "app.operations.router._worker_health",
+                return_value=(True, True, True, True),
             ),
-        ), patch(
-            "app.operations.router.get_history_reconcile_runtime",
-            return_value=HistoryReconcileRuntime(
-                active=True,
-                heartbeat_at=now,
-                last_started_at=now,
-                last_finished_at=now,
-                last_scanned_channels=1,
-                last_checked_threads=4,
-                last_requested_threads=3,
-                last_failed_threads=1,
+            patch(
+                "app.operations.router.get_webhook_reconcile_runtime",
+                return_value=WebhookReconcileRuntime(
+                    active=True,
+                    heartbeat_at=now,
+                    last_started_at=now,
+                    last_finished_at=now,
+                    last_scanned_channels=2,
+                    last_checked_events=10,
+                    last_resolved_events=7,
+                ),
+            ),
+            patch(
+                "app.operations.router.get_history_reconcile_runtime",
+                return_value=HistoryReconcileRuntime(
+                    active=True,
+                    heartbeat_at=now,
+                    last_started_at=now,
+                    last_finished_at=now,
+                    last_scanned_channels=1,
+                    last_checked_threads=4,
+                    last_requested_threads=3,
+                    last_failed_threads=1,
+                ),
             ),
         ):
             response = self.client.get(
@@ -371,11 +375,14 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             event_b_id = event_b.id
 
         provider = EvolutionGoProvider(api_key="test-token")
-        with patch(
-            "app.providers.reconcile.claim_evolution_credential",
-        ), patch(
-            "app.providers.reconcile.get_provider",
-            return_value=provider,
+        with (
+            patch(
+                "app.providers.reconcile.claim_evolution_credential",
+            ),
+            patch(
+                "app.providers.reconcile.get_provider",
+                return_value=provider,
+            ),
         ):
             response = self.client.post(
                 "/api/v1/operations/webhooks/reconcile",

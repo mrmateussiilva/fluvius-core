@@ -98,4 +98,3 @@ class RealtimeManagerTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(admin.closed_with, 1008)
             self.assertEqual(agent_b.closed_with, 1008)
             self.assertNotIn(tenant_id, manager._connections)
-

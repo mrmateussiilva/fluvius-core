@@ -146,13 +146,15 @@ const quickReplyQuery = computed(() =>
     ? quickReplyTrigger.value?.query || ''
     : '',
 )
-const filteredQuickReplies = computed(() =>
-  filterQuickReplies(quickReplies.value, quickReplyQuery.value),
-)
+const filteredQuickReplies = computed(() => {
+  if (!showReplies.value) return []
+  return filterQuickReplies(quickReplies.value, quickReplyQuery.value)
+})
 const mentionQuery = computed(() => mentionTrigger.value?.query || '')
-const mentionCandidates = computed(() =>
-  combinedMentionCandidates(mentionQuery.value),
-)
+const mentionCandidates = computed(() => {
+  if (!showMentions.value) return []
+  return combinedMentionCandidates(mentionQuery.value)
+})
 function attachmentKind(file: File): AttachmentKind {
   const extension = `.${file.name.toLowerCase().split('.').pop() || ''}`
   if (file.type === 'image/webp' || extension === '.webp') {
@@ -191,6 +193,8 @@ function attachmentKindLabel(kind: AttachmentKind) {
   }[kind]
 }
 let loadingDraft = false
+let draftSaveTimer: number | null = null
+let activeDraftKey: string | null = null
 let mediaRecorder: MediaRecorder | null = null
 let recordingStream: MediaStream | null = null
 let recordingChunks: Blob[] = []
@@ -199,9 +203,25 @@ let recordingTimer: number | null = null
 let discardRecording = false
 let recordingTooLarge = false
 
+function persistDraft(key: string | null, value: string) {
+  if (!key) return
+  try {
+    if (value) localStorage.setItem(key, value)
+    else localStorage.removeItem(key)
+  } catch {
+    // Storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
 watch(
   () => props.draftKey,
-  (draftKey) => {
+  (draftKey, previousDraftKey) => {
+    if (draftSaveTimer !== null && previousDraftKey) {
+      window.clearTimeout(draftSaveTimer)
+      draftSaveTimer = null
+      persistDraft(previousDraftKey, text.value)
+    }
+    activeDraftKey = draftKey
     loadingDraft = true
     try {
       text.value = draftKey
@@ -231,14 +251,14 @@ watch(
   text,
   (value) => {
     if (loadingDraft || !props.draftKey) return
-    try {
-      if (value) localStorage.setItem(props.draftKey, value)
-      else localStorage.removeItem(props.draftKey)
-    } catch {
-      // Storage can be unavailable in private or restricted browser contexts.
+    if (draftSaveTimer !== null) {
+      window.clearTimeout(draftSaveTimer)
     }
+    draftSaveTimer = window.setTimeout(() => {
+      draftSaveTimer = null
+      persistDraft(activeDraftKey || props.draftKey, value)
+    }, 250)
   },
-  { flush: 'sync' },
 )
 
 watch(filteredQuickReplies, (replies) => {
@@ -266,6 +286,11 @@ watch([mentionQuery, showMentions], ([query, visible]) => {
 })
 
 onBeforeUnmount(() => {
+  if (draftSaveTimer !== null) {
+    window.clearTimeout(draftSaveTimer)
+    draftSaveTimer = null
+    persistDraft(activeDraftKey || props.draftKey, text.value)
+  }
   cancelRecording()
   revokeAttachmentPreviews(selectedAttachments.value)
 })

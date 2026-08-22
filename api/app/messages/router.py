@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -467,20 +467,25 @@ def ensure_delivery(
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
 def list_messages(
     conversation_id: UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    before: datetime | None = Query(default=None),
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> list[MessageResponse]:
     get_accessible_conversation(db, context, conversation_id)
+    query = select(Message).where(
+        Message.tenant_id == context.tenant_id,
+        Message.conversation_id == conversation_id,
+    )
+    if before is not None:
+        query = query.where(Message.created_at < before)
+
     messages = list(
         db.scalars(
-            select(Message)
-            .where(
-                Message.tenant_id == context.tenant_id,
-                Message.conversation_id == conversation_id,
-            )
-            .order_by(Message.created_at)
+            query.order_by(Message.created_at.desc()).limit(limit)
         )
     )
+    messages.reverse()
     return message_list_response(db, context.tenant_id, messages)
 
 

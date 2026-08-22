@@ -1,8 +1,17 @@
 import { http } from './http'
 import type { Message } from './types'
 
-export const listMessages = (conversationId: string) =>
-  http<Message[]>(`/api/v1/conversations/${conversationId}/messages`)
+export const listMessages = (
+  conversationId: string,
+  limit = 100,
+  before: string | null = null,
+) => {
+  const params = new URLSearchParams()
+  if (limit) params.set('limit', String(limit))
+  if (before) params.set('before', before)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return http<Message[]>(`/api/v1/conversations/${conversationId}/messages${qs}`)
+}
 export const sendMessage = (
   conversationId: string,
   text: string,

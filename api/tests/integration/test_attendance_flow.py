@@ -151,9 +151,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             {
                 "protocolMessage": {
                     "key": {"ID": target_message_id},
-                    "editedMessage": {
-                        "extendedTextMessage": {"text": body}
-                    },
+                    "editedMessage": {"extendedTextMessage": {"text": body}},
                 }
             }
             if body is not None
@@ -183,10 +181,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         }
 
     def test_complete_attendance_lifecycle_is_idempotent_and_traceable(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         first_payload = self.incoming_payload("incoming-integration-1", "Olá")
         first_payload["tenant_id"] = str(self.tenant_b.tenant_id)
 
@@ -194,9 +189,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(incoming.status_code, 202, incoming.text)
         self.assertEqual(incoming.json()["status"], "accepted")
 
-        conversations = self.client.get(
-            "/api/v1/conversations", headers=self.headers_a
-        )
+        conversations = self.client.get("/api/v1/conversations", headers=self.headers_a)
         self.assertEqual(conversations.status_code, 200)
         created = next(
             conversation
@@ -348,9 +341,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             headers=self.headers_a,
         )
         confirmed = next(
-            message
-            for message in messages.json()
-            if message["id"] == outgoing_message["id"]
+            message for message in messages.json() if message["id"] == outgoing_message["id"]
         )
         self.assertEqual(confirmed["status"], "read")
         self.assertIsNotNone(confirmed["delivered_at"])
@@ -410,10 +401,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(incoming_count, 2)
 
     def test_parallel_messages_create_one_thread_without_losing_messages(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         group_number = "5527999381129-1552477393"
         payloads = []
         for message_id, body in (
@@ -522,10 +510,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(processed_event_count, 2)
 
     def test_history_sync_event_is_split_into_durable_inbox_messages(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         history_payload = {
             "event": "HistorySync",
             "instanceId": "integration-instance",
@@ -544,9 +529,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                                             "fromMe": False,
                                             "id": "history-message-1",
                                         },
-                                        "message": {
-                                            "conversation": "Mensagem recuperada"
-                                        },
+                                        "message": {"conversation": "Mensagem recuperada"},
                                         "messageTimestamp": 1785322800,
                                         "pushName": "Cliente Histórico",
                                     }
@@ -590,10 +573,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(message.body, "Mensagem recuperada")
 
     def test_history_reconcile_requests_recent_conversation_history(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         response = self.post_webhook(
             webhook_url,
             self.incoming_payload("history-anchor-1", "Âncora"),
@@ -644,10 +624,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(anchor_call["chat_address"], self.customer_phone)
 
     def test_media_is_durable_before_acceptance_and_survives_queue_failure(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         provider_message_id = "durable-incoming-image-1"
         content = b"\x89PNG\r\n\x1a\nfluvius-durable-inbox"
         payload = self.incoming_payload(provider_message_id, "Imagem recebida")
@@ -673,8 +650,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             event = db.scalar(
                 select(ProviderEvent).where(
                     ProviderEvent.tenant_id == self.tenant_a.tenant_id,
-                    ProviderEvent.provider_event_id
-                    == f"message:{provider_message_id}",
+                    ProviderEvent.provider_event_id == f"message:{provider_message_id}",
                 )
             )
             inbox = db.scalar(
@@ -729,10 +705,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(attachment.content_sha256, sha256(content).hexdigest())
 
     def test_interrupted_inbox_processing_is_retried_idempotently(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         provider_message_id = "durable-incoming-retry-1"
         response = self.post_webhook(
             webhook_url,
@@ -750,8 +723,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                 )
                 .where(
                     ProviderEventInbox.tenant_id == self.tenant_a.tenant_id,
-                    ProviderEvent.provider_event_id
-                    == f"message:{provider_message_id}",
+                    ProviderEvent.provider_event_id == f"message:{provider_message_id}",
                 )
             )
 
@@ -797,10 +769,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(completed.attempt_count, 2)
 
     def test_media_webhook_is_not_accepted_when_staging_fails(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         provider_message_id = "durable-incoming-storage-failure"
         payload = self.incoming_payload(provider_message_id, "Imagem")
         payload["data"]["Info"]["Type"] = "image"
@@ -823,17 +792,13 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             event_count = db.scalar(
                 select(func.count(ProviderEvent.id)).where(
                     ProviderEvent.tenant_id == self.tenant_a.tenant_id,
-                    ProviderEvent.provider_event_id
-                    == f"message:{provider_message_id}",
+                    ProviderEvent.provider_event_id == f"message:{provider_message_id}",
                 )
             )
         self.assertEqual(event_count, 0)
 
     def test_admin_reconcile_retries_a_failed_inbox_event(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         provider_message_id = "durable-incoming-manual-retry"
         accepted = self.post_webhook(
             webhook_url,
@@ -845,8 +810,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
             event = db.scalar(
                 select(ProviderEvent).where(
                     ProviderEvent.tenant_id == self.tenant_a.tenant_id,
-                    ProviderEvent.provider_event_id
-                    == f"message:{provider_message_id}",
+                    ProviderEvent.provider_event_id == f"message:{provider_message_id}",
                 )
             )
             inbox = db.scalar(
@@ -1008,8 +972,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         )
 
         response = self.post_webhook(
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}",
+            f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}",
             payload,
         )
 
@@ -1251,10 +1214,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(save.await_count, 1)
 
     def test_edits_update_the_original_message_and_reactions_are_ignored(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         original_id = "incoming-edit-original"
         created = self.post_webhook(
             webhook_url,
@@ -1337,10 +1297,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertEqual(revision_count, 2)
 
     def test_edit_is_reconciled_when_it_arrives_before_the_message(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         target_id = "incoming-after-edit"
         pending = self.post_webhook(
             webhook_url,
@@ -1372,10 +1329,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
         self.assertFalse(message.edit_content_unavailable)
 
     def test_edit_target_cannot_cross_tenant_or_channel(self) -> None:
-        webhook_url = (
-            "/api/v1/webhooks/whatsapp/evolution_go/"
-            f"{self.tenant_a.channel_id}"
-        )
+        webhook_url = f"/api/v1/webhooks/whatsapp/evolution_go/{self.tenant_a.channel_id}"
         pending = self.post_webhook(
             webhook_url,
             self.edit_payload(
@@ -1424,7 +1378,7 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                         "provider_jid": "964169518424559641@lid",
                         "name": "Participante LID",
                         "is_admin": True,
-                    }
+                    },
                 ],
             )
             db.add(group)
