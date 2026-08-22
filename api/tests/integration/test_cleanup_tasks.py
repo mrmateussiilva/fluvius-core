@@ -56,7 +56,8 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
                 provider_event_id=old_event.id,
                 status="completed",
                 completed_at=old_time,
-                payload={},
+                normalized_kind="message",
+                normalized_payload={},
             )
             db.add(old_inbox)
 
@@ -67,7 +68,8 @@ class CleanupTasksTest(PostgresIntegrationTestCase):
                 provider_event_id=recent_event.id,
                 status="completed",
                 completed_at=recent_time,
-                payload={},
+                normalized_kind="message",
+                normalized_payload={},
             )
             db.add(recent_inbox)
             db.commit()
