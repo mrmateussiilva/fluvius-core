@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0">
+  <div class="flex h-full w-full min-h-0 flex-1 overflow-hidden">
     <ConversationList
       :class="store.selectedId ? 'hidden md:flex' : 'flex'"
       :conversations="store.conversations"

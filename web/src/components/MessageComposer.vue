@@ -1252,7 +1252,7 @@ function handleDrop(event: DragEvent) {
 
 <template>
   <div
-    class="relative border-t border-line bg-panel-muted px-3 py-2.5 sm:px-4"
+    class="relative shrink-0 border-t border-line bg-panel-muted px-3 py-2.5 sm:px-4 pb-[max(0.625rem,env(safe-area-inset-bottom))]"
     @dragenter.prevent="handleDragEnter"
     @dragover.prevent
     @dragleave.prevent="handleDragLeave"

@@ -75,10 +75,13 @@
   body,
   #app {
     height: 100%;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
   }
 
   body {
-    @apply m-0 bg-canvas text-ink antialiased;
+    @apply m-0 bg-canvas text-ink antialiased overflow-hidden;
   }
 
   button,

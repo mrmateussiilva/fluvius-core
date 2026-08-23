@@ -579,9 +579,9 @@ function previewMedia(
 </script>
 
 <template>
-  <div v-if="conversation" class="relative flex min-w-0 flex-1">
-    <section class="flex min-w-0 flex-1 flex-col bg-chat">
-      <header class="z-10 flex min-h-[64px] items-center justify-between border-b border-line bg-panel-muted px-4 py-2 shadow-sm shadow-black/[0.04]">
+  <div v-if="conversation" class="relative flex h-full w-full min-h-0 min-w-0 flex-1 overflow-hidden">
+    <section class="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-chat">
+      <header class="z-10 flex min-h-[56px] shrink-0 items-center justify-between border-b border-line bg-panel-muted px-3 py-2 shadow-sm shadow-black/[0.04] sm:min-h-[64px] sm:px-4">
         <div class="flex min-w-0 items-center">
           <button
             class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 md:hidden"
@@ -703,7 +703,7 @@ function previewMedia(
       >
         {{ operationError }}
       </p>
-      <div class="relative min-h-0 flex-1">
+      <div class="relative min-h-0 flex-1 overflow-hidden">
         <div
           ref="messageList"
           class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8"

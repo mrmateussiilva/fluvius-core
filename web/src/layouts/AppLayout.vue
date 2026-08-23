@@ -312,7 +312,7 @@ function navigateFromMobile(path: string) {
 
       <!-- Router View Container -->
       <div
-        class="min-h-0 flex-1 overflow-hidden"
+        class="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
         :class="{ 'pb-16 md:pb-0': !isChatActiveOnMobile }"
       >
         <RouterView />
