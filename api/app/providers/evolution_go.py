@@ -439,7 +439,8 @@ class EvolutionGoProvider(WhatsAppProvider):
 
         key = self._dict_value(data, "key", "Key")
         info = self._dict_value(data, "info", "Info")
-        message = self._dict_value(data, "message", "Message")
+        raw_message = self._dict_value(data, "message", "Message")
+        message = self._unwrap_message(raw_message)
         event_type = str(payload.get("event") or payload.get("type") or "").lower()
         is_from_me = self._optional_bool(info.get("IsFromMe", info.get("isFromMe"))) is True
         chat_jid = str(info.get("Chat") or info.get("chat") or "")
@@ -493,16 +494,16 @@ class EvolutionGoProvider(WhatsAppProvider):
                 raw_payload=payload,
             )
 
-        text = self._message_text(message, data)
+        text = self._message_text(raw_message, data)
         (
             media_type,
             media_url,
             media_base64,
             media_content_type,
             media_file_name,
-        ) = self._media(message, data)
-        shared_contacts = self._shared_contacts(message)
-        context_info = self._message_context(message)
+        ) = self._media(raw_message, data)
+        shared_contacts = self._shared_contacts(raw_message)
+        context_info = self._message_context(raw_message)
         reply_to_provider_message_id = (
             context_info.get("stanzaID")
             or context_info.get("StanzaID")
@@ -1427,24 +1428,106 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
 
     @classmethod
+    def _unwrap_message(cls, message: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(message, dict):
+            return {}
+        current = message
+        for _ in range(5):
+            unwrapped = False
+            for key in (
+                "ephemeralMessage",
+                "EphemeralMessage",
+                "viewOnceMessage",
+                "ViewOnceMessage",
+                "viewOnceMessageV2",
+                "ViewOnceMessageV2",
+                "viewOnceMessageV2Extension",
+                "ViewOnceMessageV2Extension",
+                "documentWithCaptionMessage",
+                "DocumentWithCaptionMessage",
+            ):
+                nested = current.get(key)
+                if isinstance(nested, dict):
+                    inner = nested.get("message") or nested.get("Message")
+                    if isinstance(inner, dict):
+                        current = inner
+                        unwrapped = True
+                        break
+            if not unwrapped:
+                break
+        return current
+
+    @classmethod
     def _message_text(
         cls, message: dict[str, Any], data: dict[str, Any] | None = None
     ) -> str | None:
         data = data or {}
-        document_wrapper = cls._dict_value(
-            message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
+        unwrapped = cls._unwrap_message(message)
+
+        buttons_resp = cls._dict_value(
+            unwrapped, "buttonsResponseMessage", "ButtonsResponseMessage"
         )
-        wrapped_message = cls._dict_value(document_wrapper, "message", "Message")
-        wrapped_document = cls._dict_value(wrapped_message, "documentMessage", "DocumentMessage")
+        if buttons_resp:
+            btn_text = buttons_resp.get("selectedDisplayText") or buttons_resp.get(
+                "selectedButtonId"
+            )
+            if btn_text:
+                return str(btn_text)
+
+        list_resp = cls._dict_value(
+            unwrapped, "listResponseMessage", "ListResponseMessage"
+        )
+        if list_resp:
+            title = list_resp.get("title") or ""
+            desc = list_resp.get("description") or ""
+            row_id = (
+                cls._dict_value(list_resp, "singleSelectReply", "SingleSelectReply").get(
+                    "selectedRowId"
+                )
+                or ""
+            )
+            text_val = title or desc or row_id
+            if text_val:
+                return str(text_val)
+
+        template_btn = cls._dict_value(
+            unwrapped, "templateButtonReplyMessage", "TemplateButtonReplyMessage"
+        )
+        if template_btn:
+            btn_text = template_btn.get("selectedDisplayText") or template_btn.get(
+                "selectedId"
+            )
+            if btn_text:
+                return str(btn_text)
+
+        interactive = cls._dict_value(
+            unwrapped, "interactiveResponseMessage", "InteractiveResponseMessage"
+        )
+        if interactive:
+            body = cls._dict_value(interactive, "body", "Body").get("text")
+            if body:
+                return str(body)
+
+        location = cls._dict_value(unwrapped, "locationMessage", "LocationMessage")
+        if location:
+            loc_name = (
+                location.get("name")
+                or location.get("address")
+                or f"Lat: {location.get('degreesLatitude')}, Lng: {location.get('degreesLongitude')}"
+            )
+            return f"📍 Localização: {loc_name}"
+
         value = (
-            message.get("conversation")
-            or message.get("Conversation")
-            or cls._dict_value(message, "extendedTextMessage", "ExtendedTextMessage").get("text")
-            or cls._dict_value(message, "imageMessage", "ImageMessage").get("caption")
-            or cls._dict_value(message, "documentMessage", "DocumentMessage").get("caption")
-            or wrapped_document.get("caption")
-            or wrapped_document.get("Caption")
-            or cls._dict_value(message, "videoMessage", "VideoMessage").get("caption")
+            unwrapped.get("conversation")
+            or unwrapped.get("Conversation")
+            or cls._dict_value(unwrapped, "extendedTextMessage", "ExtendedTextMessage").get(
+                "text"
+            )
+            or cls._dict_value(unwrapped, "imageMessage", "ImageMessage").get("caption")
+            or cls._dict_value(unwrapped, "documentMessage", "DocumentMessage").get(
+                "caption"
+            )
+            or cls._dict_value(unwrapped, "videoMessage", "VideoMessage").get("caption")
             or data.get("text")
         )
         return str(value) if value is not None else None
@@ -1456,8 +1539,9 @@ class EvolutionGoProvider(WhatsAppProvider):
         info: dict[str, Any],
         data: dict[str, Any],
     ) -> tuple[str | None, str | None]:
-        protocol = cls._dict_value(message, "protocolMessage", "ProtocolMessage")
-        secret = cls._dict_value(message, "secretEncryptedMessage", "SecretEncryptedMessage")
+        unwrapped = cls._unwrap_message(message)
+        protocol = cls._dict_value(unwrapped, "protocolMessage", "ProtocolMessage")
+        secret = cls._dict_value(unwrapped, "secretEncryptedMessage", "SecretEncryptedMessage")
         bot_info = cls._dict_value(info, "MsgBotInfo", "msgBotInfo")
         meta_info = cls._dict_value(info, "MsgMetaInfo", "msgMetaInfo")
         protocol_key = cls._dict_value(protocol, "key", "Key")
@@ -1483,16 +1567,17 @@ class EvolutionGoProvider(WhatsAppProvider):
 
         edited_message = cls._dict_value(protocol, "editedMessage", "EditedMessage")
         if not edited_message:
-            edited_message = cls._dict_value(message, "editedMessage", "EditedMessage")
+            edited_message = cls._dict_value(unwrapped, "editedMessage", "EditedMessage")
         body = cls._message_text(edited_message) if edited_message else None
         if body is None and not secret:
-            body = cls._message_text(message, data)
+            body = cls._message_text(unwrapped, data)
         return str(target), body
 
     @staticmethod
     def _media(
         message: dict[str, Any], data: dict[str, Any]
     ) -> tuple[MessageType | None, str | None, str | None, str | None, str | None]:
+        unwrapped = EvolutionGoProvider._unwrap_message(message)
         mapping = (
             (("imageMessage", "ImageMessage"), MessageType.IMAGE),
             (("documentMessage", "DocumentMessage"), MessageType.DOCUMENT),
@@ -1501,23 +1586,17 @@ class EvolutionGoProvider(WhatsAppProvider):
             (("stickerMessage", "StickerMessage"), MessageType.STICKER),
         )
         for keys, message_type in mapping:
-            media = EvolutionGoProvider._dict_value(message, *keys)
+            media = EvolutionGoProvider._dict_value(unwrapped, *keys)
             if media:
-                return EvolutionGoProvider._media_values(message, data, media, message_type)
-        document_wrapper = EvolutionGoProvider._dict_value(
-            message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
-        )
-        wrapped_message = EvolutionGoProvider._dict_value(document_wrapper, "message", "Message")
-        document = EvolutionGoProvider._dict_value(
-            wrapped_message, "documentMessage", "DocumentMessage"
-        )
-        if document:
-            return EvolutionGoProvider._media_values(message, data, document, MessageType.DOCUMENT)
+                return EvolutionGoProvider._media_values(
+                    unwrapped, message, data, media, message_type
+                )
         return None, None, None, None, None
 
     @staticmethod
     def _media_values(
         message: dict[str, Any],
+        raw_message: dict[str, Any],
         data: dict[str, Any],
         media: dict[str, Any],
         message_type: MessageType,
@@ -1528,12 +1607,16 @@ class EvolutionGoProvider(WhatsAppProvider):
             or media.get("URL")
             or message.get("mediaUrl")
             or message.get("mediaURL")
+            or raw_message.get("mediaUrl")
+            or raw_message.get("mediaURL")
             or data.get("mediaUrl")
             or data.get("mediaURL"),
             media.get("base64")
             or media.get("Base64")
             or message.get("base64")
             or message.get("Base64")
+            or raw_message.get("base64")
+            or raw_message.get("Base64")
             or data.get("base64")
             or data.get("Base64"),
             media.get("mimetype") or media.get("Mimetype") or media.get("mimeType"),
@@ -1545,12 +1628,13 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     @classmethod
     def _shared_contacts(cls, message: dict[str, Any]) -> list[SharedContact]:
+        unwrapped = cls._unwrap_message(message)
         payloads: list[dict[str, Any]] = []
-        single = cls._dict_value(message, "contactMessage", "ContactMessage")
+        single = cls._dict_value(unwrapped, "contactMessage", "ContactMessage")
         if single:
             payloads.append(single)
         multiple = cls._dict_value(
-            message,
+            unwrapped,
             "contactsArrayMessage",
             "ContactsArrayMessage",
         )
@@ -1619,6 +1703,7 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     @classmethod
     def _message_context(cls, message: dict[str, Any]) -> dict[str, Any]:
+        unwrapped = cls._unwrap_message(message)
         message_keys = (
             ("extendedTextMessage", "ExtendedTextMessage"),
             ("imageMessage", "ImageMessage"),
@@ -1630,16 +1715,11 @@ class EvolutionGoProvider(WhatsAppProvider):
             ("contactsArrayMessage", "ContactsArrayMessage"),
         )
         for keys in message_keys:
-            content = cls._dict_value(message, *keys)
+            content = cls._dict_value(unwrapped, *keys)
             context = cls._dict_value(content, "contextInfo", "ContextInfo")
             if context:
                 return context
-        document_wrapper = cls._dict_value(
-            message, "documentWithCaptionMessage", "DocumentWithCaptionMessage"
-        )
-        wrapped_message = cls._dict_value(document_wrapper, "message", "Message")
-        document = cls._dict_value(wrapped_message, "documentMessage", "DocumentMessage")
-        return cls._dict_value(document, "contextInfo", "ContextInfo")
+        return {}
 
     @staticmethod
     def _dict_value(data: dict[str, Any], *keys: str) -> dict[str, Any]:
@@ -1672,6 +1752,11 @@ class EvolutionGoProvider(WhatsAppProvider):
         sender_alt = str(info.get("SenderAlt") or info.get("senderAlt") or "")
         if "@lid" in sender and "@s.whatsapp.net" in sender_alt:
             sender = sender_alt
+        elif not sender and "@s.whatsapp.net" in sender_alt:
+            sender = sender_alt
+        remote_alt = str(key.get("remoteJidAlt") or key.get("RemoteJidAlt") or "")
+        if "@s.whatsapp.net" in remote_alt and ("@lid" in sender or not sender):
+            sender = remote_alt
         return str(
             sender
             or key.get("remoteJid")
@@ -1692,13 +1777,22 @@ class EvolutionGoProvider(WhatsAppProvider):
         is_from_me: bool,
     ) -> str:
         if is_from_me:
-            return str(
-                info.get("SenderAlt")
-                or info.get("senderAlt")
-                or info.get("Sender")
-                or info.get("sender")
-                or ""
-            )
+            candidates = [
+                info.get("SenderAlt"),
+                info.get("senderAlt"),
+                info.get("Sender"),
+                info.get("sender"),
+            ]
+            for candidate in candidates:
+                if candidate:
+                    cand_str = str(candidate).strip()
+                    if "@s.whatsapp.net" in cand_str:
+                        return cand_str
+            for candidate in candidates:
+                if candidate:
+                    cand_str = str(candidate).strip()
+                    if cand_str:
+                        return cand_str
         return cls._contact_jid(key, info, data, is_from_me=False)
 
     @classmethod

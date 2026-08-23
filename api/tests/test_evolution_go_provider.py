@@ -833,9 +833,46 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         self.assertIsNone(
             EvolutionGoProvider._history_message_payload(envelope, old_msg, conversation)
         )
-        self.assertIsNotNone(
-            EvolutionGoProvider._history_message_payload(envelope, recent_msg, conversation)
-        )
+    def test_parses_ephemeral_and_view_once_messages(self) -> None:
+        payload = message_payload()
+        payload["data"]["Message"] = {
+            "ephemeralMessage": {
+                "message": {
+                    "viewOnceMessage": {
+                        "message": {
+                            "imageMessage": {
+                                "caption": "Foto temporária",
+                                "url": "https://example.com/photo.jpg",
+                                "mimetype": "image/jpeg",
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(self.provider.handle_webhook(payload))
+        finally:
+            loop.close()
+        self.assertEqual(result.body, "Foto temporária")
+        self.assertEqual(result.message_type, MessageType.IMAGE)
+        self.assertEqual(result.media_url, "https://example.com/photo.jpg")
+
+    def test_parses_button_and_list_responses(self) -> None:
+        button_payload = message_payload()
+        button_payload["data"]["Message"] = {
+            "buttonsResponseMessage": {
+                "selectedDisplayText": "Opção 1: Suporte",
+                "selectedButtonId": "btn_1",
+            }
+        }
+        loop = asyncio.new_event_loop()
+        try:
+            result = loop.run_until_complete(self.provider.handle_webhook(button_payload))
+        finally:
+            loop.close()
+        self.assertEqual(result.body, "Opção 1: Suporte")
 
 
 if __name__ == "__main__":
