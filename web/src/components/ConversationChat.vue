@@ -779,6 +779,7 @@ function previewMedia(
         :sending="sending"
         :send-error="sendError"
         @cancel-reply="replyingTo = null"
+        @focus="scrollToBottom('smooth')"
         @send="sendMessage"
         @send-attachment="sendAttachment"
         @send-contact="sendContact"

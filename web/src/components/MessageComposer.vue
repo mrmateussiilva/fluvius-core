@@ -67,6 +67,7 @@ const emit = defineEmits<{
     done: (accepted: boolean) => void,
   ]
   cancelReply: []
+  focus: []
 }>()
 
 type MentionCandidate = {
@@ -1134,6 +1135,11 @@ function handleTextInput() {
   updateMentionTrigger()
 }
 
+function handleTextareaFocus(event: FocusEvent) {
+  emit('focus')
+  handleTextareaNavigation(event)
+}
+
 function handleTextareaNavigation(event?: Event) {
   if (
     event instanceof KeyboardEvent &&
@@ -1659,7 +1665,7 @@ function handleDrop(event: DragEvent) {
           placeholder="Digite uma mensagem..."
           :disabled="isDisabled"
           @click="handleTextareaNavigation"
-          @focus="handleTextareaNavigation"
+          @focus="handleTextareaFocus"
           @input="handleTextInput"
           @keydown="handleTextareaKeydown"
           @keyup="handleTextareaNavigation"

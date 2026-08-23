@@ -82,6 +82,8 @@
 
   body {
     @apply m-0 bg-canvas text-ink antialiased overflow-hidden;
+    overscroll-behavior-y: none;
+    touch-action: pan-y;
   }
 
   button,
@@ -118,11 +120,13 @@
       radial-gradient(circle at 12px 12px, rgb(22 133 106 / 0.1) 1.2px, transparent 1.5px),
       radial-gradient(circle at 36px 36px, rgb(22 133 106 / 0.06) 1px, transparent 1.4px);
     background-size: auto, 48px 48px, 48px 48px;
+    overscroll-behavior: contain;
   }
 
   .soft-scrollbar {
     scrollbar-color: rgb(var(--scrollbar-thumb) / 0.36) transparent;
     scrollbar-width: thin;
+    overscroll-behavior: contain;
   }
 
   .soft-scrollbar::-webkit-scrollbar {
