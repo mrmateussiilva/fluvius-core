@@ -3,6 +3,7 @@ import { getMe } from '../api/auth'
 import { ApiError } from '../api/http'
 import { useAuthStore } from './authStore'
 import { useConversationStore } from './conversationStore'
+import { playIncomingMessageSound } from '../utils/sound'
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ||
@@ -77,6 +78,14 @@ export const useRealtimeStore = defineStore('realtime', {
           typeof realtimeEvent.data?.conversation_id === 'string'
             ? realtimeEvent.data.conversation_id
             : null
+
+        if (
+          realtimeEvent.event === 'message.created' &&
+          realtimeEvent.data?.direction === 'incoming'
+        ) {
+          playIncomingMessageSound()
+        }
+
         this.scheduleReconciliation(
           Boolean(
             realtimeEvent.event.startsWith('message.') &&

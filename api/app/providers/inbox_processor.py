@@ -112,9 +112,7 @@ async def _process_message(
     incoming: IncomingMessageResult,
 ) -> bool:
     thread_number = (
-        incoming.chat_id
-        if incoming.is_group and incoming.chat_id
-        else incoming.from_number
+        incoming.chat_id if incoming.is_group and incoming.chat_id else incoming.from_number
     )
     lock_provider_thread(
         db,
@@ -149,9 +147,8 @@ async def _process_message(
     )
     sender_name = usable_contact_name(incoming.sender_name, thread_number)
     if contact is None:
-        group_label = (
-            incoming.chat_name
-            or (f"Grupo {thread_number[-6:]}" if incoming.is_group else None)
+        group_label = incoming.chat_name or (
+            f"Grupo {thread_number[-6:]}" if incoming.is_group else None
         )
         contact = Contact(
             tenant_id=channel.tenant_id,
@@ -211,9 +208,7 @@ async def _process_message(
             )
         )
     participant_name = (
-        incoming.participant_name or incoming.sender_name
-        if incoming.is_group
-        else None
+        incoming.participant_name or incoming.sender_name if incoming.is_group else None
     )
     message = Message(
         tenant_id=channel.tenant_id,
@@ -238,9 +233,7 @@ async def _process_message(
         provider_message_id=incoming.provider_message_id,
         attempt_count=1 if incoming.direction == MessageDirection.OUTGOING else 0,
         last_attempt_at=(
-            incoming.timestamp
-            if incoming.direction == MessageDirection.OUTGOING
-            else None
+            incoming.timestamp if incoming.direction == MessageDirection.OUTGOING else None
         ),
         sent_at=incoming.timestamp,
     )
@@ -336,6 +329,7 @@ async def _process_message(
             "id": str(message.id),
             "conversation_id": str(conversation.id),
             "channel_id": str(channel.id),
+            "direction": message.direction.value,
         },
     )
     for reconciled in reconciled_edits:
@@ -368,9 +362,7 @@ def _reconcile_pending_edits(
     ).all()
     reconciled_edits: list[Message] = []
     for pending_event, pending_inbox in rows:
-        edit = IncomingMessageEditResult.model_validate(
-            pending_inbox.normalized_payload
-        )
+        edit = IncomingMessageEditResult.model_validate(pending_inbox.normalized_payload)
         if edit.target_provider_message_id != message.provider_message_id:
             continue
         reconciled = apply_message_edit(

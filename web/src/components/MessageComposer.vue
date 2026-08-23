@@ -1210,6 +1210,21 @@ function handleTextareaKeydown(event: KeyboardEvent) {
     }
   }
 
+  if (event.key === 'Escape') {
+    if (props.replyTo) {
+      event.preventDefault()
+      emit('cancelReply')
+      return
+    }
+    if (showEmojis.value || showAttachments.value || showContactSharePicker.value) {
+      event.preventDefault()
+      showEmojis.value = false
+      showAttachments.value = false
+      showContactSharePicker.value = false
+      return
+    }
+  }
+
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     submit()

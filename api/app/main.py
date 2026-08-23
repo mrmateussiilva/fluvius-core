@@ -20,6 +20,7 @@ from app.delivery.dispatcher import delivery_dispatcher_loop
 from app.messages.router import router as messages_router
 from app.operations.router import router as operations_router
 from app.platform.router import router as platform_router
+from app.providers.cleanup_tasks import cleanup_scheduler_loop
 from app.providers.history_reconcile import history_reconcile_loop
 from app.providers.inbox_dispatcher import provider_inbox_dispatcher_loop
 from app.providers.reconcile import webhook_reconcile_loop
@@ -44,6 +45,7 @@ async def lifespan(_: FastAPI):
             asyncio.create_task(webhook_reconcile_loop(stop_event)),
             asyncio.create_task(history_reconcile_loop(stop_event)),
             asyncio.create_task(consume_realtime_events(stop_event)),
+            asyncio.create_task(cleanup_scheduler_loop(stop_event)),
         ]
     try:
         yield
