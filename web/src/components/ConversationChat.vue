@@ -759,15 +759,33 @@ function previewMedia(
             </div>
           </div>
         </div>
-        <button
-          v-if="newMessagesBelow > 0"
-          type="button"
-          class="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-fluvius-700 px-4 py-2 text-xs font-semibold text-white shadow-lg transition hover:bg-fluvius-800"
-          @click="scrollToBottom('smooth')"
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0 scale-90 translate-y-2"
+          enter-to-class="opacity-100 scale-100 translate-y-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="opacity-100 scale-100 translate-y-0"
+          leave-to-class="opacity-0 scale-90 translate-y-2"
         >
-          <ArrowDown class="h-4 w-4" />
-          {{ newMessagesBelow === 1 ? '1 nova mensagem' : `${newMessagesBelow} novas mensagens` }}
-        </button>
+          <button
+            v-if="newMessagesBelow > 0"
+            type="button"
+            class="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-fluvius-700 px-4 py-2 text-xs font-semibold text-white shadow-lg transition hover:bg-fluvius-800 active:scale-95"
+            @click="scrollToBottom('smooth')"
+          >
+            <ArrowDown class="h-4 w-4" />
+            {{ newMessagesBelow === 1 ? '1 nova mensagem' : `${newMessagesBelow} novas mensagens` }}
+          </button>
+          <button
+            v-else-if="!isNearBottom"
+            type="button"
+            class="absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-panel/90 text-ink-secondary shadow-md ring-1 ring-black/10 backdrop-blur-sm transition hover:bg-panel hover:text-ink active:scale-95"
+            title="Rolar para as mensagens mais recentes"
+            @click="scrollToBottom('smooth')"
+          >
+            <ArrowDown class="h-4 w-4" />
+          </button>
+        </Transition>
       </div>
       <MessageComposer
         :draft-key="draftStorageKey"

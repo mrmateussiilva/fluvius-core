@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  RefreshCw,
   Settings,
   UserRoundCog,
   X,
@@ -297,7 +298,25 @@ function navigateFromMobile(path: string) {
     </nav>
 
     <!-- Main Content Area -->
-    <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <main class="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+      <!-- Realtime Reconnecting Pill -->
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 -translate-y-2"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition duration-150 ease-in"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 -translate-y-2"
+      >
+        <div
+          v-if="!realtime.connected && auth.user && !realtime.manualDisconnect"
+          class="pointer-events-none fixed left-1/2 top-2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-amber-500/95 px-3.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-sm dark:bg-amber-600/95"
+        >
+          <RefreshCw class="h-3 w-3 animate-spin" />
+          <span>Reconectando ao servidor...</span>
+        </div>
+      </Transition>
+
       <!-- Top Operational Alert Banner (if any) -->
       <RouterLink
         v-if="auth.user?.role === 'admin' && operationalAlert"

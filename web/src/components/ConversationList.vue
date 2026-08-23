@@ -242,7 +242,7 @@ function timeLabel(value: string | null) {
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="group flex w-full gap-3 px-3 py-2.5 text-left transition hover:bg-canvas"
+        class="conversation-item group flex w-full gap-3 px-3 py-2.5 text-left transition hover:bg-canvas active:bg-panel-muted/60"
         :class="selectedId === conversation.id ? 'bg-canvas hover:bg-canvas' : ''"
         @click="emit('select', conversation.id)"
       >

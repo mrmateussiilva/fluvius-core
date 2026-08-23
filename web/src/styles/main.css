@@ -143,6 +143,11 @@
     contain-intrinsic-size: auto none auto 56px;
   }
 
+  .conversation-item {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 68px;
+  }
+
   .message-tail-in,
   .message-tail-out {
     position: relative;
