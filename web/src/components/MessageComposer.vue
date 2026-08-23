@@ -1529,7 +1529,7 @@ function handleDrop(event: DragEvent) {
         />
         <div
           v-if="showAttachments"
-          class="absolute bottom-14 left-0 z-30 w-60 overflow-hidden rounded-lg bg-panel py-2 text-ink shadow-2xl ring-1 ring-black/5"
+          class="absolute bottom-14 left-0 z-30 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-panel py-2 text-ink shadow-2xl ring-1 ring-black/5"
         >
           <p class="px-4 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
             Enviar anexo
@@ -1545,6 +1545,19 @@ function handleDrop(event: DragEvent) {
             <span>
               <span class="block font-medium">Fotos e vídeos</span>
               <span class="block text-[10px] text-ink-faint">JPG, PNG, GIF, MP4, MOV e WebM</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
+            @click="openStickerPicker"
+          >
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-emerald-500 text-white">
+              <Sticker class="h-5 w-5" />
+            </span>
+            <span>
+              <span class="block font-medium">Figurinha</span>
+              <span class="block text-[10px] text-ink-faint">PNG, JPG ou WebP 512x512</span>
             </span>
           </button>
           <button
@@ -1610,7 +1623,7 @@ function handleDrop(event: DragEvent) {
       </div>
       <button
         type="button"
-        class="grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-success disabled:opacity-40"
+        class="hidden h-11 w-11 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-success disabled:opacity-40 sm:grid"
         :disabled="isDisabled || sending || preparingSticker"
         :title="preparingSticker ? 'Preparando figurinha...' : 'Enviar figurinha'"
         @click="openStickerPicker"
