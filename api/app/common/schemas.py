@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 
 class ORMModel(BaseModel):
@@ -66,4 +67,5 @@ class MessageResponse(ORMModel):
     read_at: datetime | None
     edited_at: datetime | None
     edit_content_unavailable: bool
+    is_bot: Annotated[bool, BeforeValidator(lambda v: bool(v))] = False
     created_at: datetime

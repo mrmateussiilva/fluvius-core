@@ -75,6 +75,9 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     edit_content_unavailable: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    is_bot: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
 
 class MessageRevision(UUIDPrimaryKeyMixin, TimestampMixin, Base):

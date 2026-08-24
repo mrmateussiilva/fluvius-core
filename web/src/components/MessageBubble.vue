@@ -248,12 +248,12 @@ function showDetails() {
         </button>
       </div>
 
-      <p
+      <div
         v-if="
           message.sender_name &&
           (message.direction === 'outgoing' || message.participant_name || message.participant_phone)
         "
-        class="px-0.5 text-[11px] font-semibold"
+        class="flex items-center gap-1.5 px-0.5 text-[11px] font-semibold"
         :class="
           isNativeSticker
             ? 'absolute left-1 top-1 z-[1] rounded-full bg-black/55 px-2 py-0.5 text-white shadow-sm'
@@ -262,8 +262,15 @@ function showDetails() {
               : 'mb-0.5 pr-7 text-info-strong'
         "
       >
-        {{ message.participant_name || message.sender_name }}
-      </p>
+        <span
+          v-if="message.is_bot"
+          class="inline-flex items-center gap-0.5 rounded bg-emerald-600/15 px-1 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200"
+          title="Mensagem gerada automaticamente pelo Agente de IA"
+        >
+          🤖 IA
+        </span>
+        <span>{{ message.participant_name || message.sender_name }}</span>
+      </div>
 
       <button
         v-if="message.reply_to"

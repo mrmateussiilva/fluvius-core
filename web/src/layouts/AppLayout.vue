@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   AlertTriangle,
+  Bot,
   Building2,
   Check,
   ChevronRight,
@@ -229,6 +230,15 @@ function navigateFromMobile(path: string) {
         title="Canais"
       >
         <Settings class="h-5 w-5" />
+      </RouterLink>
+      <RouterLink
+        v-if="auth.user?.role === 'admin'"
+        class="mt-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
+        active-class="bg-white/15 text-white shadow-sm"
+        to="/app/settings/ai"
+        title="Agente de IA"
+      >
+        <Bot class="h-5 w-5" />
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
@@ -506,6 +516,22 @@ function navigateFromMobile(path: string) {
                 <div>
                   <p class="text-sm font-medium text-ink">Canais WhatsApp</p>
                   <p class="text-xs text-ink-muted">Conexões e instâncias</p>
+                </div>
+              </div>
+              <ChevronRight class="h-4 w-4 text-ink-faint" />
+            </button>
+
+            <button
+              class="flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-panel-muted"
+              @click="navigateFromMobile('/app/settings/ai')"
+            >
+              <div class="flex items-center gap-3">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-purple-600/10 text-purple-600">
+                  <Bot class="h-5 w-5" />
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-ink">Agente de IA</p>
+                  <p class="text-xs text-ink-muted">Pré-atendimento e handoff</p>
                 </div>
               </div>
               <ChevronRight class="h-4 w-4 text-ink-faint" />

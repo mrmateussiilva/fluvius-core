@@ -204,6 +204,9 @@ export interface Conversation {
   last_message_type: Message['message_type'] | null
   last_message_direction: Message['direction'] | null
   unread_count: number
+  is_bot_active: boolean
+  bot_handoff_at: string | null
+  bot_handoff_reason: string | null
 }
 
 export interface GroupMemberResponse {
@@ -314,6 +317,7 @@ export interface Message {
   read_at: string | null
   edited_at: string | null
   edit_content_unavailable: boolean
+  is_bot: boolean
   created_at: string
 }
 
@@ -331,3 +335,47 @@ export interface QuickReply {
   title: string
   content: string
 }
+
+export interface AiConfigRead {
+  id: string
+  channel_id: string
+  is_enabled: boolean
+  provider: string
+  model_name: string
+  has_api_key: boolean
+  system_prompt: string
+  bot_name: string
+  handoff_prompt: string
+  temperature: number
+  max_tokens: number
+}
+
+export interface AiConfigUpdate {
+  is_enabled?: boolean
+  provider?: string
+  model_name?: string
+  api_key?: string
+  system_prompt?: string
+  bot_name?: string
+  handoff_prompt?: string
+  temperature?: number
+  max_tokens?: number
+}
+
+export interface SimulationMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface AiSimulateRequest {
+  messages: SimulationMessage[]
+  system_prompt?: string
+  handoff_prompt?: string
+}
+
+export interface AiSimulateResponse {
+  reply: string
+  handoff_triggered: boolean
+  handoff_reason: string | null
+}
+

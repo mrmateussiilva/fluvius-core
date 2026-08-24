@@ -9,6 +9,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.ai.router import router as ai_router
 from app.attachments.router import router as attachments_router
 from app.auth.router import router as auth_router
 from app.channels.router import router as channels_router
@@ -105,6 +106,7 @@ def readiness() -> dict[str, str]:
 
 
 app.include_router(auth_router, prefix=settings.api_v1_prefix)
+app.include_router(ai_router, prefix=settings.api_v1_prefix)
 app.include_router(attachments_router, prefix=settings.api_v1_prefix)
 app.include_router(channels_router, prefix=settings.api_v1_prefix)
 app.include_router(contacts_router, prefix=settings.api_v1_prefix)

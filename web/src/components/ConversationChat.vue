@@ -8,8 +8,10 @@ import {
   watch,
 } from 'vue'
 import {
+  AlertCircle,
   ArrowDown,
   ArrowLeft,
+  Bot,
   CheckCircle2,
   LockKeyhole,
   MessageCircle,
@@ -697,6 +699,35 @@ function previewMedia(
           {{ assignmentActionLabel }}
         </button>
       </div>
+
+      <!-- AI Bot Active Banner -->
+      <div
+        v-if="conversation.is_bot_active"
+        class="z-10 flex items-center justify-between border-b border-purple-500/20 bg-purple-50/90 px-3 py-2 text-xs text-purple-950 shadow-sm backdrop-blur-sm dark:bg-purple-950/40 dark:text-purple-200 sm:px-4"
+      >
+        <div class="flex items-center gap-2 font-medium">
+          <Bot class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+          <span>Agente de IA em pré-atendimento</span>
+        </div>
+        <button
+          v-if="canClaim"
+          class="flex items-center gap-1.5 rounded-md bg-purple-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 active:scale-95"
+          @click="emit('assign')"
+        >
+          <UserPlus class="h-3.5 w-3.5" />
+          Assumir agora
+        </button>
+      </div>
+
+      <!-- AI Handoff Transbordo Info Banner -->
+      <div
+        v-if="conversation.bot_handoff_reason && !conversation.is_bot_active && conversation.status !== 'closed'"
+        class="z-10 flex items-center gap-2 border-b border-amber-500/20 bg-amber-50/90 px-3 py-1.5 text-[11px] text-amber-950 shadow-sm backdrop-blur-sm dark:bg-amber-950/30 dark:text-amber-200 sm:px-4"
+      >
+        <AlertCircle class="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <span class="truncate"><strong>Transbordo da IA:</strong> {{ conversation.bot_handoff_reason }}</span>
+      </div>
+
       <p
         v-if="operationError"
         class="border-b border-danger/20 bg-danger-soft px-4 py-2 text-center text-xs text-danger-strong"

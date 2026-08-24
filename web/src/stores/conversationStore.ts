@@ -243,6 +243,7 @@ export const useConversationStore = defineStore('conversations', {
         read_at: null,
         edited_at: null,
         edit_content_unavailable: false,
+        is_bot: false,
         created_at: createdAt,
       }
       this.sendingConversationIds.push(conversationId)
@@ -367,6 +368,7 @@ export const useConversationStore = defineStore('conversations', {
             read_at: null,
             edited_at: null,
             edit_content_unavailable: false,
+            is_bot: false,
             created_at: createdAt,
           }
           this.upsertMessage(conversationId, optimisticMessage)
@@ -481,6 +483,7 @@ export const useConversationStore = defineStore('conversations', {
         read_at: null,
         edited_at: null,
         edit_content_unavailable: false,
+        is_bot: false,
         created_at: createdAt,
       }
       this.sendingConversationIds.push(conversationId)

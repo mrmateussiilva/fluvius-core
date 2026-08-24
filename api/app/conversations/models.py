@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, UniqueConstraint, Uuid, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.common.enums import ConversationStatus
@@ -41,6 +41,15 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=ConversationStatus.NEW,
         nullable=False,
         index=True,
+    )
+    is_bot_active: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    bot_handoff_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    bot_handoff_reason: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
     )
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 

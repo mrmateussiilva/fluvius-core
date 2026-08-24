@@ -128,6 +128,9 @@ def as_response(row) -> ConversationResponse:
         last_message_type=last_message_type,
         last_message_direction=last_message_direction,
         unread_count=unread_count or 0,
+        is_bot_active=conversation.is_bot_active,
+        bot_handoff_at=conversation.bot_handoff_at,
+        bot_handoff_reason=conversation.bot_handoff_reason,
     )
 
 

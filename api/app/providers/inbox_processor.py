@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 from uuid import UUID
+import asyncio
 
 from sqlalchemy import select
 
+from app.ai.models import ChannelAiConfig
+from app.ai.service import execute_ai_turn
 from app.attachments.service import (
     IncomingAttachmentStorageError,
     StagedIncomingAttachment,
@@ -184,18 +187,33 @@ async def _process_message(
     )
     created_conversation = conversation is None
     reopened_conversation = False
+    ai_cfg = db.scalar(
+        select(ChannelAiConfig).where(
+            ChannelAiConfig.tenant_id == channel.tenant_id,
+            ChannelAiConfig.channel_id == channel.id,
+        )
+    )
+    should_activate_bot = bool(ai_cfg and ai_cfg.is_enabled and not incoming.is_group)
+
     if conversation is None:
         conversation = Conversation(
             tenant_id=channel.tenant_id,
             channel_id=channel.id,
             contact_id=contact.id,
             status=ConversationStatus.NEW,
+            is_bot_active=should_activate_bot,
             last_message_at=incoming.timestamp,
         )
         db.add(conversation)
         db.flush()
     else:
         reopened_conversation = reopen_from_provider(conversation)
+        if (
+            reopened_conversation
+            and conversation.assigned_user_id is None
+            and should_activate_bot
+        ):
+            conversation.is_bot_active = True
         conversation.last_message_at = incoming.timestamp
 
     reply_to = None
@@ -334,6 +352,22 @@ async def _process_message(
     )
     for reconciled in reconciled_edits:
         await _broadcast_message_updated(channel, reconciled)
+
+    if (
+        conversation.is_bot_active
+        and incoming.direction == MessageDirection.INCOMING
+        and not incoming.is_group
+        and conversation.assigned_user_id is None
+        and conversation.status == ConversationStatus.NEW
+    ):
+        asyncio.create_task(
+            execute_ai_turn(
+                db=SessionLocal(),
+                tenant_id=channel.tenant_id,
+                conversation_id=conversation.id,
+            )
+        )
+
     return True
 
 

@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppLayout from './layouts/AppLayout.vue'
 import AdminSyncPage from './pages/AdminSyncPage.vue'
+import AiAgentPage from './pages/AiAgentPage.vue'
 import ChannelsPage from './pages/ChannelsPage.vue'
 import ContactsPage from './pages/ContactsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
@@ -37,6 +38,11 @@ export const router = createRouter({
         {
           path: 'settings/channels',
           component: ChannelsPage,
+          meta: { admin: true },
+        },
+        {
+          path: 'settings/ai',
+          component: AiAgentPage,
           meta: { admin: true },
         },
         {

@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
 
 from app.common.enums import (
     ChannelStatus,
@@ -28,6 +29,9 @@ class ConversationResponse(BaseModel):
     last_message_type: MessageType | None = None
     last_message_direction: MessageDirection | None = None
     unread_count: int = 0
+    is_bot_active: Annotated[bool, BeforeValidator(lambda v: bool(v))] = False
+    bot_handoff_at: datetime | None = None
+    bot_handoff_reason: str | None = None
 
 
 class AssignRequest(BaseModel):
