@@ -13,12 +13,17 @@ import {
   ArrowLeft,
   Bot,
   CheckCircle2,
+  Copy,
+  LoaderCircle,
   LockKeyhole,
   MessageCircle,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
   UserPlus,
+  X,
 } from 'lucide-vue-next'
+import { summarizeConversation } from '../api/ai'
 import type {
   ContactDetail,
   ContactSearchResult,
@@ -29,6 +34,7 @@ import type {
   TenantUser,
   UserRole,
 } from '../api/types'
+import { useConversationStore } from '../stores/conversationStore'
 import ChannelStatusBadge from './ChannelStatusBadge.vue'
 import ContactDetailsPanel from './ContactDetailsPanel.vue'
 import MediaLightbox from './MediaLightbox.vue'
@@ -62,6 +68,7 @@ const emit = defineEmits<{
     mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
+    isInternal?: boolean,
   ]
   sendAttachment: [
     files: File[],
@@ -480,12 +487,54 @@ function toggleContactPanel() {
   if (contactPanelOpen.value) emit('showContact')
 }
 
+const summarizing = ref(false)
+const summarizeError = ref<string | null>(null)
+const aiSummary = ref<string | null>(null)
+const copiedSummary = ref(false)
+const store = useConversationStore()
+
+async function handleSummarize() {
+  if (!props.conversation?.id || summarizing.value) return
+  summarizing.value = true
+  summarizeError.value = null
+  try {
+    const res = await summarizeConversation(props.conversation.id)
+    aiSummary.value = res.summary
+  } catch (err: any) {
+    summarizeError.value =
+      err?.message || 'Não foi possível gerar o resumo com IA.'
+  } finally {
+    summarizing.value = false
+  }
+}
+
+async function copySummary() {
+  if (!aiSummary.value) return
+  try {
+    await navigator.clipboard.writeText(aiSummary.value)
+    copiedSummary.value = true
+    setTimeout(() => {
+      copiedSummary.value = false
+    }, 2500)
+  } catch {
+    // fallback
+  }
+}
+
+async function saveSummaryAsInternalNote() {
+  if (!aiSummary.value || !props.conversation?.id) return
+  const noteText = `🤖 Resumo do Atendimento:\n\n${aiSummary.value}`
+  await store.send(noteText, null, [], [], [], true)
+  aiSummary.value = null
+}
+
 function sendMessage(
   text: string,
   mentionedPhones: string[],
   mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
+  isInternal: boolean = false,
 ) {
   const conversationId = props.conversation?.id
   const reply = replyingTo.value
@@ -507,6 +556,7 @@ function sendMessage(
       }
       done(accepted)
     },
+    isInternal,
   )
 }
 
@@ -630,6 +680,17 @@ function previewMedia(
         </div>
         <div class="flex items-center gap-2">
           <ChannelStatusBadge class="hidden xl:inline-flex" :status="conversation.channel_status" />
+          <button
+            type="button"
+            class="flex h-9 items-center gap-1.5 rounded-lg border border-purple-300/80 bg-purple-50 px-2.5 text-xs font-semibold text-purple-700 shadow-sm transition hover:bg-purple-100 dark:border-purple-800/60 dark:bg-purple-950/40 dark:text-purple-300 sm:px-3"
+            :disabled="summarizing"
+            title="Gerar resumo inteligente do atendimento com IA"
+            @click="handleSummarize"
+          >
+            <LoaderCircle v-if="summarizing" class="h-4 w-4 animate-spin text-purple-600" />
+            <Sparkles v-else class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            <span class="hidden md:inline">{{ summarizing ? 'Resumindo...' : 'Resumo IA' }}</span>
+          </button>
           <button
             v-if="canClaim"
             class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-canvas sm:px-3"

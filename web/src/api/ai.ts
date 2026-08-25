@@ -46,3 +46,14 @@ export async function toggleConversationBot(
     },
   )
 }
+
+export async function summarizeConversation(
+  conversationId: string,
+): Promise<{ summary: string; generated_at: string }> {
+  return http<{ summary: string; generated_at: string }>(
+    `/api/v1/conversations/${conversationId}/summarize`,
+    {
+      method: 'POST',
+    },
+  )
+}

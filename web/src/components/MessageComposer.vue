@@ -6,6 +6,7 @@ import {
   FileText,
   Film,
   Image as ImageIcon,
+  LockKeyhole,
   Mic,
   Music,
   Paperclip,
@@ -53,6 +54,7 @@ const emit = defineEmits<{
     mentionedJids: string[],
     referencedContactIds: string[],
     done: (accepted: boolean) => void,
+    isInternal?: boolean,
   ]
   sendAttachment: [
     files: File[],
@@ -95,6 +97,7 @@ const MAX_ATTACHMENT_COUNT = 10
 const MAX_RECORDING_SECONDS = 10 * 60
 
 const text = ref('')
+const isInternalMode = ref(false)
 const showReplies = ref(false)
 const showMentions = ref(false)
 const quickReplies = ref<QuickReply[]>([])
@@ -673,6 +676,7 @@ function submit() {
           textarea.value?.focus()
         })
       },
+      isInternalMode.value,
     )
   }
 }
@@ -1456,6 +1460,36 @@ function handleDrop(event: DragEvent) {
       :src="selectedAttachments[0].previewUrl || ''"
       :file-name="selectedAttachments[0].file.name || 'Áudio selecionado'"
     />
+    <!-- Mode Switcher: WhatsApp Message vs Internal Note -->
+    <div class="mx-auto mb-2 flex max-w-5xl items-center gap-1.5 px-0.5">
+      <button
+        type="button"
+        class="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition"
+        :class="
+          !isInternalMode
+            ? 'bg-fluvius-600/15 text-fluvius-800 ring-1 ring-fluvius-600/30 dark:bg-emerald-500/20 dark:text-emerald-300'
+            : 'text-ink-muted hover:bg-black/5 hover:text-ink'
+        "
+        @click="isInternalMode = false"
+      >
+        <Send class="h-3 w-3" />
+        Mensagem WhatsApp
+      </button>
+      <button
+        type="button"
+        class="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition"
+        :class="
+          isInternalMode
+            ? 'bg-amber-500/20 text-amber-800 ring-1 ring-amber-500/40 shadow-sm dark:bg-amber-500/30 dark:text-amber-300'
+            : 'text-ink-muted hover:bg-black/5 hover:text-ink'
+        "
+        @click="isInternalMode = true"
+      >
+        <LockKeyhole class="h-3 w-3 text-amber-600" />
+        Nota Interna (🔒 Equipe)
+      </button>
+    </div>
+
     <form class="mx-auto flex max-w-5xl items-end gap-2" @submit.prevent="submit">
       <div class="relative">
         <button
@@ -1484,12 +1518,13 @@ function handleDrop(event: DragEvent) {
           :class="{ 'bg-black/5 text-fluvius-700': showReplies }"
           :disabled="isDisabled"
           title="Respostas rápidas"
+          :aria-expanded="showReplies"
           @click="toggleReplies"
         >
           <Zap class="h-5 w-5" />
         </button>
         <div
-          v-if="showReplies"
+          v-if="showReplies && quickReplyMode === 'button'"
           class="fixed inset-0 z-20"
           aria-hidden="true"
           @click="closeQuickReplies"
@@ -1517,8 +1552,8 @@ function handleDrop(event: DragEvent) {
         <button
           type="button"
           class="grid h-11 w-11 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40"
-          :disabled="isDisabled || sending"
-          title="Escolher tipo de anexo"
+          :disabled="isDisabled || sending || isInternalMode"
+          :title="isInternalMode ? 'Notas internas aceitam apenas texto' : 'Escolher tipo de anexo'"
           :aria-expanded="showAttachments"
           @click="toggleAttachmentMenu"
         >
@@ -1628,6 +1663,7 @@ function handleDrop(event: DragEvent) {
         />
       </div>
       <button
+        v-if="!isInternalMode"
         type="button"
         class="hidden h-11 w-11 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-success disabled:opacity-40 sm:grid"
         :disabled="isDisabled || sending || preparingSticker"
@@ -1661,8 +1697,13 @@ function handleDrop(event: DragEvent) {
           ref="textarea"
           v-model="text"
           rows="1"
-          class="soft-scrollbar min-h-11 w-full resize-none rounded-lg border-0 bg-panel px-4 py-3 text-[13.5px] leading-5 text-ink shadow-sm outline-none placeholder:text-ink-muted focus:ring-1 focus:ring-fluvius-500/30 disabled:bg-panel-muted"
-          placeholder="Digite uma mensagem..."
+          class="soft-scrollbar min-h-11 w-full resize-none rounded-lg border-0 px-4 py-3 text-[13.5px] leading-5 text-ink shadow-sm outline-none transition disabled:bg-panel-muted"
+          :class="
+            isInternalMode
+              ? 'bg-amber-500/10 ring-1 ring-amber-400 placeholder:text-amber-700/60 focus:ring-amber-500 dark:bg-amber-950/30 dark:ring-amber-600/50 dark:placeholder:text-amber-400/50'
+              : 'bg-panel placeholder:text-ink-muted focus:ring-1 focus:ring-fluvius-500/30'
+          "
+          :placeholder="isInternalMode ? 'Escreva uma nota interna (visível apenas para a equipe)...' : 'Digite uma mensagem...'"
           :disabled="isDisabled"
           @click="handleTextareaNavigation"
           @focus="handleTextareaFocus"
@@ -1674,7 +1715,12 @@ function handleDrop(event: DragEvent) {
       </div>
       <button
         :type="hasSendContent ? 'submit' : 'button'"
-        class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-fluvius-600 text-white shadow-sm transition hover:bg-fluvius-700 disabled:cursor-not-allowed disabled:bg-disabled disabled:shadow-none"
+        class="grid h-11 w-11 shrink-0 place-items-center rounded-full text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-disabled disabled:shadow-none"
+        :class="
+          isInternalMode
+            ? 'bg-amber-600 hover:bg-amber-700'
+            : 'bg-fluvius-600 hover:bg-fluvius-700'
+        "
         :disabled="
           isDisabled ||
           sending ||
@@ -1685,17 +1731,20 @@ function handleDrop(event: DragEvent) {
           preparingSticker
             ? 'Preparando figurinha...'
             : sending
-              ? 'Enviando...'
-              : hasSendContent
-                ? 'Enviar'
-                : 'Gravar áudio'
+              ? 'Salvando...'
+              : isInternalMode
+                ? 'Salvar nota interna 🔒'
+                : hasSendContent
+                  ? 'Enviar'
+                  : 'Gravar áudio'
         "
-        @click="!hasSendContent && startRecording()"
+        @click="!hasSendContent && !isInternalMode && startRecording()"
       >
         <span
           v-if="sending || preparingSticker"
           class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
         />
+        <LockKeyhole v-else-if="isInternalMode" class="h-5 w-5" />
         <Send v-else-if="hasSendContent" class="h-5 w-5" />
         <Mic v-else class="h-5 w-5" />
       </button>

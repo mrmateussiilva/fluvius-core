@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -77,6 +78,9 @@ class Message(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     is_bot: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
+    )
+    is_internal: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
     )
 
 

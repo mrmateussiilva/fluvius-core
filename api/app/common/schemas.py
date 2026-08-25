@@ -68,4 +68,5 @@ class MessageResponse(ORMModel):
     edited_at: datetime | None
     edit_content_unavailable: bool
     is_bot: Annotated[bool, BeforeValidator(lambda v: bool(v))] = False
+    is_internal: Annotated[bool, BeforeValidator(lambda v: bool(v))] = False
     created_at: datetime

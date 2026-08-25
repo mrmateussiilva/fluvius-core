@@ -10,6 +10,7 @@ class MessageCreate(BaseModel):
     mentioned_jids: list[str] = Field(default_factory=list, max_length=50)
     referenced_contact_ids: list[UUID] = Field(default_factory=list, max_length=50)
     client_message_id: UUID = Field(default_factory=uuid4)
+    is_internal: bool = False
 
 
 class ContactMessageCreate(BaseModel):

@@ -318,6 +318,7 @@ export interface Message {
   edited_at: string | null
   edit_content_unavailable: boolean
   is_bot: boolean
+  is_internal: boolean
   created_at: string
 }
 
@@ -378,4 +379,10 @@ export interface AiSimulateResponse {
   handoff_triggered: boolean
   handoff_reason: string | null
 }
+
+export interface AiSummaryResponse {
+  summary: string
+  generated_at: string
+}
+
 

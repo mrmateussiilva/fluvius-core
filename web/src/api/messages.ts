@@ -20,6 +20,7 @@ export const sendMessage = (
   mentionedPhones: string[] = [],
   mentionedJids: string[] = [],
   referencedContactIds: string[] = [],
+  isInternal: boolean = false,
 ) =>
   http<Message>(`/api/v1/conversations/${conversationId}/messages`, {
     method: 'POST',
@@ -30,6 +31,7 @@ export const sendMessage = (
       mentioned_jids: mentionedJids,
       referenced_contact_ids: referencedContactIds,
       client_message_id: clientMessageId,
+      is_internal: isInternal,
     }),
   })
 

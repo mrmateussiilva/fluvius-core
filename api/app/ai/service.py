@@ -410,3 +410,98 @@ async def execute_ai_turn(
             "last_message_direction": ai_message.direction.value,
         },
     )
+
+
+async def summarize_conversation_history(
+    db: Session,
+    tenant_id: UUID,
+    conversation_id: UUID,
+    max_messages: int = 30,
+) -> str:
+    """Generates an executive structured summary of a conversation using the channel's LLM."""
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == tenant_id,
+        )
+    )
+    if conversation is None:
+        raise ValueError("Conversa não encontrada.")
+
+    # Find an AI config with an API key
+    config = db.scalar(
+        select(ChannelAiConfig).where(
+            ChannelAiConfig.tenant_id == tenant_id,
+            ChannelAiConfig.channel_id == conversation.channel_id,
+        )
+    )
+    if config is None or not config.api_key_encrypted:
+        # Fallback: check if any channel in tenant has AI key configured
+        config = db.scalar(
+            select(ChannelAiConfig).where(
+                ChannelAiConfig.tenant_id == tenant_id,
+                ChannelAiConfig.api_key_encrypted.is_not(None),
+            )
+        )
+
+    if config is None or not config.api_key_encrypted:
+        raise ValueError("Configure a Chave de API de IA no menu 'Agente de IA' antes de gerar resumos.")
+
+    api_key = decrypt_secret(config.api_key_encrypted)
+
+    # Load messages
+    messages = list(
+        db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.tenant_id == tenant_id,
+            )
+            .order_by(Message.created_at.desc())
+            .limit(max_messages)
+        )
+    )
+    messages.reverse()
+
+    if not messages:
+        return "Nenhuma mensagem encontrada nesta conversa para gerar resumo."
+
+    formatted_lines = []
+    for m in messages:
+        if m.is_internal:
+            author = f"Nota Interna ({m.sender_name or 'Equipe'})"
+        elif m.direction == MessageDirection.OUTGOING:
+            author = f"Atendente ({m.sender_name or 'Equipe'})" if not m.is_bot else f"IA ({config.bot_name or 'Robô'})"
+        else:
+            author = f"Cliente ({m.participant_name or m.sender_name or 'Cliente'})"
+
+        content = m.body or f"[{m.message_type.value}]"
+        formatted_lines.append(f"{author}: {content}")
+
+    chat_history_text = "\n".join(formatted_lines)
+
+    summary_system_prompt = (
+        "Você é um assistente de suporte e atendimento ao cliente. "
+        "Sua tarefa é analisar o histórico da conversa e gerar um resumo executivo, objetivo e claro em português.\n\n"
+        "Formate sua resposta EXATAMENTE com a seguinte estrutura em Markdown:\n"
+        "🎯 **Motivo do Contato**: (1 a 2 frases explicando o objetivo principal do cliente)\n"
+        "📋 **Pontos Tratados**:\n"
+        "- (Tópico 1)\n"
+        "- (Tópico 2)\n"
+        "⏳ **Próximo Passo / Status**: (1 frase indicando o que precisa ser feito ou se está resolvido)"
+    )
+
+    user_prompt = f"Histórico do atendimento:\n\n{chat_history_text}\n\nPor favor, gere o resumo conforme a estrutura."
+
+    summary_text, _, _ = await call_llm(
+        provider=config.provider,
+        model_name=config.model_name,
+        api_key=api_key,
+        system_prompt=summary_system_prompt,
+        conversation_messages=[{"role": "user", "content": user_prompt}],
+        temperature=0.2,
+        max_tokens=600,
+    )
+
+    return summary_text
+

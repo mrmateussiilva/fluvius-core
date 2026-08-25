@@ -43,6 +43,7 @@ async function sendMessage(
   mentionedJids: string[],
   referencedContactIds: string[],
   done: (accepted: boolean) => void,
+  isInternal: boolean = false,
 ) {
   done(
     await store.send(
@@ -51,6 +52,7 @@ async function sendMessage(
       mentionedPhones,
       mentionedJids,
       referencedContactIds,
+      isInternal,
     ),
   )
 }

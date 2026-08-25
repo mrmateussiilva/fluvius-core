@@ -11,6 +11,7 @@ import {
   Expand,
   FileText,
   Info,
+  LockKeyhole,
   Phone,
   Reply,
   RotateCcw,
@@ -76,6 +77,11 @@ const statusLabel = computed(
 )
 const bubbleClass = computed(() => {
   const outgoing = props.message.direction === 'outgoing'
+  if (props.message.is_internal) {
+    return [
+      '!bg-amber-50/95 dark:!bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 shadow-sm rounded-xl',
+    ]
+  }
   if (isNativeSticker.value) {
     return ['!max-w-none', '!bg-transparent', '!p-0', '!shadow-none']
   }
@@ -263,7 +269,15 @@ function showDetails() {
         "
       >
         <span
-          v-if="message.is_bot"
+          v-if="message.is_internal"
+          class="inline-flex items-center gap-1 rounded bg-amber-500/25 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200"
+          title="Nota interna visível apenas para a equipe"
+        >
+          <LockKeyhole class="h-3 w-3 text-amber-700 dark:text-amber-300" />
+          Nota Interna
+        </span>
+        <span
+          v-else-if="message.is_bot"
           class="inline-flex items-center gap-0.5 rounded bg-emerald-600/15 px-1 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200"
           title="Mensagem gerada automaticamente pelo Agente de IA"
         >
@@ -433,7 +447,10 @@ function showDetails() {
         <span v-if="copied" class="mr-1 text-fluvius-700">Copiada</span>
         <span v-if="message.edited_at" class="mr-0.5">editada</span>
         <time :datetime="message.sent_at || message.created_at">{{ timeLabel }}</time>
-        <span v-if="message.direction === 'outgoing'" class="flex items-center" :title="statusLabel">
+        <span v-if="message.is_internal" class="flex items-center text-amber-700 dark:text-amber-300" title="Nota interna não enviada ao WhatsApp">
+          <LockKeyhole class="h-3 w-3" />
+        </span>
+        <span v-else-if="message.direction === 'outgoing'" class="flex items-center" :title="statusLabel">
           <Clock3 v-if="message.status === 'pending'" class="h-3 w-3" :aria-label="statusLabel" />
           <Check v-else-if="message.status === 'sent'" class="h-3 w-3" :aria-label="statusLabel" />
           <CheckCheck

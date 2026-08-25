@@ -123,3 +123,55 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
         with patch("app.ai.service.call_llm") as mock_llm:
             await execute_ai_turn(mock_db, self.tenant_id, self.conversation_id)
             mock_llm.assert_not_called()
+
+    async def test_summarize_conversation_history(self) -> None:
+        """Validates that summarize_conversation_history correctly gathers chat history and calls LLM."""
+        from app.ai.service import summarize_conversation_history
+
+        conv = Conversation(
+            id=self.conversation_id,
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            contact_id=self.contact_id,
+            status=ConversationStatus.OPEN,
+        )
+        ai_config = ChannelAiConfig(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            provider="openai",
+            model_name="gpt-4o-mini",
+            api_key_encrypted=encrypt_secret("sk-test-123"),
+        )
+        msg1 = Message(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation_id,
+            direction=MessageDirection.INCOMING,
+            message_type=MessageType.TEXT,
+            body="Olá, gostaria de saber o valor do plano Pro.",
+            created_at=None,
+        )
+        msg2 = Message(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation_id,
+            direction=MessageDirection.OUTGOING,
+            message_type=MessageType.TEXT,
+            body="O plano Pro custa R$ 199/mês.",
+            sender_name="Carlos",
+            created_at=None,
+        )
+
+        mock_db = MagicMock()
+        mock_db.scalar.side_effect = [conv, ai_config]
+        mock_db.scalars.return_value = [msg1, msg2]
+
+        with patch("app.ai.service.call_llm") as mock_llm:
+            mock_llm.return_value = ("🎯 **Motivo**: Preço do plano Pro\n📋 **Pontos**: Valor informado R$ 199\n⏳ **Status**: Aguardando cliente", False, None)
+            summary = await summarize_conversation_history(mock_db, self.tenant_id, self.conversation_id)
+
+            self.assertIn("Motivo", summary)
+            self.assertIn("Preço do plano Pro", summary)
+            mock_llm.assert_called_once()
+

@@ -52,3 +52,9 @@ class AiSimulateResponse(BaseModel):
 class BotToggleRequest(BaseModel):
     is_bot_active: bool
     reason: str | None = None
+
+
+class AiSummaryResponse(BaseModel):
+    summary: str
+    generated_at: str
+

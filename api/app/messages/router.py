@@ -72,6 +72,7 @@ def conversation_delivery_context(
     db: Session,
     context: AuthContext,
     conversation_id: UUID,
+    allow_offline: bool = False,
 ) -> tuple[Conversation, WhatsAppChannel, Contact]:
     conversation = get_accessible_conversation(
         db,
@@ -94,16 +95,17 @@ def conversation_delivery_context(
     )
     if channel is None or contact is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Conversa inconsistente")
-    if channel.status != ChannelStatus.CONNECTED:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OFFLINE_MESSAGE)
-    if channel.provider == ChannelProvider.EVOLUTION_GO:
-        try:
-            claim_evolution_credential(db, channel)
-        except ProviderConfigurationError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(exc),
-            ) from exc
+    if not allow_offline:
+        if channel.status != ChannelStatus.CONNECTED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=OFFLINE_MESSAGE)
+        if channel.provider == ChannelProvider.EVOLUTION_GO:
+            try:
+                claim_evolution_credential(db, channel)
+            except ProviderConfigurationError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
     return conversation, channel, contact
 
 
@@ -500,10 +502,12 @@ async def send_message(
     context: AuthContext = Depends(get_auth_context),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
+    is_internal = bool(payload.is_internal)
     conversation, _, contact = conversation_delivery_context(
         db,
         context,
         conversation_id,
+        allow_offline=is_internal,
     )
     mentioned_phones, mentioned_jids = validate_message_mentions(
         contact,
@@ -533,8 +537,9 @@ async def send_message(
             and (existing.mentioned_phones or []) == mentioned_phones
             and (existing.mentioned_jids or []) == mentioned_jids
             and (existing.referenced_contacts or []) == referenced_contacts
+            and bool(existing.is_internal) == is_internal
         ):
-            if existing.status == MessageStatus.PENDING:
+            if existing.status == MessageStatus.PENDING and not is_internal:
                 delivery = ensure_delivery(db, existing)
                 db.commit()
                 await asyncio.to_thread(
@@ -555,7 +560,7 @@ async def send_message(
             conversation_id,
             payload.reply_to_message_id,
         )
-        if not reply_to.provider_message_id:
+        if not reply_to.provider_message_id and not reply_to.is_internal:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
@@ -571,7 +576,9 @@ async def send_message(
         reply_to_provider_message_id=reply_to.provider_message_id if reply_to else None,
         direction=MessageDirection.OUTGOING,
         message_type=MessageType.TEXT,
-        status=MessageStatus.PENDING,
+        status=MessageStatus.SENT if is_internal else MessageStatus.PENDING,
+        sent_at=created_at if is_internal else None,
+        is_internal=is_internal,
         body=payload.text,
         mentioned_phones=mentioned_phones,
         mentioned_jids=mentioned_jids,
@@ -581,31 +588,48 @@ async def send_message(
     db.add(message)
     conversation.last_message_at = created_at
     db.flush()
-    delivery = create_delivery(
-        tenant_id=context.tenant_id,
-        message_id=message.id,
-        now=created_at,
-    )
-    db.add(delivery)
-    db.commit()
-    db.refresh(message)
-    await realtime_manager.broadcast(
-        context.tenant_id,
-        "message.created",
-        {
-            **message_response(
-                db,
-                context.tenant_id,
-                message,
-            ).model_dump(mode="json"),
-            "channel_id": str(conversation.channel_id),
-        },
-    )
-    await asyncio.to_thread(
-        dispatch_delivery,
-        delivery.id,
-        context.tenant_id,
-    )
+
+    if not is_internal:
+        delivery = create_delivery(
+            tenant_id=context.tenant_id,
+            message_id=message.id,
+            now=created_at,
+        )
+        db.add(delivery)
+        db.commit()
+        db.refresh(message)
+        await realtime_manager.broadcast(
+            context.tenant_id,
+            "message.created",
+            {
+                **message_response(
+                    db,
+                    context.tenant_id,
+                    message,
+                ).model_dump(mode="json"),
+                "channel_id": str(conversation.channel_id),
+            },
+        )
+        await asyncio.to_thread(
+            dispatch_delivery,
+            delivery.id,
+            context.tenant_id,
+        )
+    else:
+        db.commit()
+        db.refresh(message)
+        await realtime_manager.broadcast(
+            context.tenant_id,
+            "message.created",
+            {
+                **message_response(
+                    db,
+                    context.tenant_id,
+                    message,
+                ).model_dump(mode="json"),
+                "channel_id": str(conversation.channel_id),
+            },
+        )
     return message_response(db, context.tenant_id, message, reply_to)
 
 

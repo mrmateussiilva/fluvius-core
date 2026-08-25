@@ -11,11 +11,13 @@ from app.ai.schemas import (
     AiConfigUpdate,
     AiSimulateRequest,
     AiSimulateResponse,
+    AiSummaryResponse,
     BotToggleRequest,
 )
 from app.ai.service import (
     get_or_create_ai_config,
     simulate_ai,
+    summarize_conversation_history,
     update_ai_config,
 )
 from app.auth.dependencies import AuthContext, get_auth_context
@@ -203,3 +205,41 @@ async def toggle_conversation_bot(
         "bot_handoff_at": conversation.bot_handoff_at,
         "bot_handoff_reason": conversation.bot_handoff_reason,
     }
+
+
+@router.post(
+    "/conversations/{conversation_id}/summarize",
+    response_model=AiSummaryResponse,
+)
+async def summarize_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    context: AuthContext = Depends(get_auth_context),
+) -> AiSummaryResponse:
+    get_accessible_conversation(
+        db,
+        context,
+        conversation_id,
+    )
+
+    try:
+        summary = await summarize_conversation_history(
+            db,
+            context.tenant_id,
+            conversation_id,
+        )
+        return AiSummaryResponse(
+            summary=summary,
+            generated_at=datetime.now(UTC).isoformat(),
+        )
+    except ValueError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        )
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Falha ao gerar resumo com IA: {err}",
+        )
+

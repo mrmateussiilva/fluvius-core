@@ -192,6 +192,7 @@ export const useConversationStore = defineStore('conversations', {
       mentionedPhones: string[] = [],
       mentionedJids: string[] = [],
       referencedContactIds: string[] = [],
+      isInternal: boolean = false,
     ): Promise<boolean> {
       if (
         !this.selectedId ||
@@ -212,7 +213,7 @@ export const useConversationStore = defineStore('conversations', {
         conversation_id: conversationId,
         direction: 'outgoing',
         message_type: 'text',
-        status: 'pending',
+        status: isInternal ? 'sent' : 'pending',
         body: text,
         mentioned_phones: mentionedPhones,
         mentioned_jids: mentionedJids,
@@ -238,12 +239,13 @@ export const useConversationStore = defineStore('conversations', {
         error: null,
         attempt_count: 1,
         last_attempt_at: createdAt,
-        sent_at: null,
+        sent_at: isInternal ? createdAt : null,
         delivered_at: null,
         read_at: null,
         edited_at: null,
         edit_content_unavailable: false,
         is_bot: false,
+        is_internal: isInternal,
         created_at: createdAt,
       }
       this.sendingConversationIds.push(conversationId)
@@ -258,6 +260,7 @@ export const useConversationStore = defineStore('conversations', {
           mentionedPhones,
           mentionedJids,
           referencedContactIds,
+          isInternal,
         )
         this.upsertMessage(conversationId, message)
         this.updateConversationPreview(conversationId, message)
@@ -369,6 +372,7 @@ export const useConversationStore = defineStore('conversations', {
             edited_at: null,
             edit_content_unavailable: false,
             is_bot: false,
+            is_internal: false,
             created_at: createdAt,
           }
           this.upsertMessage(conversationId, optimisticMessage)
@@ -484,6 +488,7 @@ export const useConversationStore = defineStore('conversations', {
         edited_at: null,
         edit_content_unavailable: false,
         is_bot: false,
+        is_internal: false,
         created_at: createdAt,
       }
       this.sendingConversationIds.push(conversationId)
