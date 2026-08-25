@@ -276,14 +276,15 @@ def operational_health(
             oldest_pending_event_at is not None
             and oldest_pending_event_at < now - DELAYED_PROVIDER_EVENT_AFTER
         )
-        issues.append(
-            f"{pending_provider_events} evento(s) de webhook aguardando reconciliação."
-        )
-        if delayed_pending and redis_available and not webhook_reconcile.active:
-            critical = True
+        if delayed_pending:
             issues.append(
-                "Reconciliador automático de webhooks sem heartbeat recente."
+                f"{pending_provider_events} evento(s) de webhook aguardando reconciliação há mais de {int(DELAYED_PROVIDER_EVENT_AFTER.total_seconds() // 60)} minutos."
             )
+            if redis_available and not webhook_reconcile.active:
+                critical = True
+                issues.append(
+                    "Reconciliador automático de webhooks sem heartbeat recente."
+                )
     if failed_provider_events:
         issues.append(
             f"{failed_provider_events} evento(s) de webhook com erro de processamento."
