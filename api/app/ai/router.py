@@ -45,7 +45,7 @@ def _as_ai_config_read(config: ChannelAiConfig) -> AiConfigRead:
 
 
 @router.get(
-    "/api/v1/channels/{channel_id}/ai-config",
+    "/channels/{channel_id}/ai-config",
     response_model=AiConfigRead,
 )
 def get_channel_ai_config(
@@ -76,7 +76,7 @@ def get_channel_ai_config(
 
 
 @router.put(
-    "/api/v1/channels/{channel_id}/ai-config",
+    "/channels/{channel_id}/ai-config",
     response_model=AiConfigRead,
 )
 def update_channel_ai_config(
@@ -108,7 +108,7 @@ def update_channel_ai_config(
 
 
 @router.post(
-    "/api/v1/channels/{channel_id}/ai-simulator",
+    "/channels/{channel_id}/ai-simulator",
     response_model=AiSimulateResponse,
 )
 async def simulate_channel_ai(
@@ -147,7 +147,7 @@ async def simulate_channel_ai(
 
 
 @router.post(
-    "/api/v1/conversations/{conversation_id}/toggle-bot",
+    "/conversations/{conversation_id}/toggle-bot",
     response_model=dict,
 )
 async def toggle_conversation_bot(
