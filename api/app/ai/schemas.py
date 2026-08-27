@@ -7,15 +7,15 @@ from pydantic import BaseModel, Field
 class AiConfigRead(BaseModel):
     id: uuid.UUID
     channel_id: uuid.UUID
-    is_enabled: bool
-    provider: str
-    model_name: str
-    has_api_key: bool
-    system_prompt: str
-    bot_name: str
-    handoff_prompt: str
-    temperature: float
-    max_tokens: int
+    is_enabled: bool = False
+    provider: str = "openai"
+    model_name: str = "gpt-4o-mini"
+    has_api_key: bool = False
+    system_prompt: str = ""
+    bot_name: str = "IA Assistente"
+    handoff_prompt: str = ""
+    temperature: float = 0.3
+    max_tokens: int = 500
 
     model_config = {"from_attributes": True}
 

@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy import desc, select
@@ -65,27 +65,39 @@ def get_or_create_ai_config(
         )
     )
     if config is None:
-        config = ChannelAiConfig(
-            tenant_id=tenant_id,
-            channel_id=channel_id,
-            is_enabled=False,
-            provider="openai",
-            model_name="gpt-4o-mini",
-            bot_name="IA Assistente",
-            system_prompt=(
-                "Você é o assistente virtual de atendimento da empresa. "
-                "Responda às dúvidas dos clientes de forma educada, precisa e profissional."
-            ),
-            handoff_prompt=(
-                "Se o cliente solicitar falar com um atendente humano ou se você não tiver certeza "
-                "da resposta, use a ferramenta 'solicitar_atendente_humano' para transferi-lo."
-            ),
-            temperature=0.3,
-            max_tokens=500,
-        )
-        db.add(config)
-        db.commit()
-        db.refresh(config)
+        try:
+            config = ChannelAiConfig(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                channel_id=channel_id,
+                is_enabled=False,
+                provider="openai",
+                model_name="gpt-4o-mini",
+                bot_name="IA Assistente",
+                system_prompt=(
+                    "Você é o assistente virtual de atendimento da empresa. "
+                    "Responda às dúvidas dos clientes de forma educada, precisa e profissional."
+                ),
+                handoff_prompt=(
+                    "Se o cliente solicitar falar com um atendente humano ou se você não tiver certeza "
+                    "da resposta, use a ferramenta 'solicitar_atendente_humano' para transferi-lo."
+                ),
+                temperature=0.3,
+                max_tokens=500,
+            )
+            db.add(config)
+            db.commit()
+            db.refresh(config)
+        except Exception:
+            db.rollback()
+            config = db.scalar(
+                select(ChannelAiConfig).where(
+                    ChannelAiConfig.tenant_id == tenant_id,
+                    ChannelAiConfig.channel_id == channel_id,
+                )
+            )
+            if config is None:
+                raise
     return config
 
 

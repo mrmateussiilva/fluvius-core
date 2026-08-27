@@ -34,15 +34,17 @@ def _as_ai_config_read(config: ChannelAiConfig) -> AiConfigRead:
     return AiConfigRead(
         id=config.id,
         channel_id=config.channel_id,
-        is_enabled=config.is_enabled,
-        provider=config.provider,
-        model_name=config.model_name,
+        is_enabled=bool(config.is_enabled),
+        provider=config.provider or "openai",
+        model_name=config.model_name or "gpt-4o-mini",
         has_api_key=bool(config.api_key_encrypted),
-        system_prompt=config.system_prompt,
-        bot_name=config.bot_name,
-        handoff_prompt=config.handoff_prompt,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
+        system_prompt=config.system_prompt
+        or "Você é o assistente virtual de atendimento da empresa. Responda com cordialidade, clareza e precisão.",
+        bot_name=config.bot_name or "IA Assistente",
+        handoff_prompt=config.handoff_prompt
+        or "Transfira para um atendente humano se o cliente solicitar ou se a dúvida estiver fora do escopo.",
+        temperature=float(config.temperature) if config.temperature is not None else 0.3,
+        max_tokens=int(config.max_tokens) if config.max_tokens is not None else 500,
     )
 
 
