@@ -1291,7 +1291,14 @@ function handleDrop(event: DragEvent) {
       <Reply class="h-4 w-4 shrink-0 text-fluvius-600" />
       <div class="min-w-0 flex-1">
         <p class="text-xs font-semibold text-fluvius-700">
-          Respondendo a {{ replyTo.direction === 'incoming' ? 'Cliente' : 'Você' }}
+          Respondendo a
+          {{
+            replyTo.is_internal
+              ? 'Nota Interna'
+              : replyTo.direction === 'incoming'
+                ? replyTo.participant_name || replyTo.sender_name || 'Cliente'
+                : replyTo.sender_name || 'Você'
+          }}
         </p>
         <p class="mt-0.5 truncate text-xs text-ink-muted">
           {{ replyTo.body || `[${replyTo.message_type}]` }}

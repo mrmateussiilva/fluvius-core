@@ -113,11 +113,11 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload["mentionedJid"] = mention_targets
             if idempotency_key:
                 request_payload["id"] = idempotency_key
-            if reply_to_provider_message_id and reply_to_participant:
-                request_payload["quoted"] = {
-                    "messageId": reply_to_provider_message_id,
-                    "participant": self._as_jid(reply_to_participant),
-                }
+            if reply_to_provider_message_id:
+                quoted_payload: dict[str, Any] = {"messageId": reply_to_provider_message_id}
+                if reply_to_participant:
+                    quoted_payload["participant"] = self._as_jid(reply_to_participant)
+                request_payload["quoted"] = quoted_payload
             response = await self._request(
                 "POST",
                 "/send/text",
@@ -173,11 +173,11 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload["mentionedJid"] = mention_targets
             if idempotency_key:
                 request_payload["id"] = idempotency_key
-            if reply_to_provider_message_id and reply_to_participant:
-                request_payload["quoted"] = {
-                    "messageId": reply_to_provider_message_id,
-                    "participant": self._as_jid(reply_to_participant),
-                }
+            if reply_to_provider_message_id:
+                quoted_payload = {"messageId": reply_to_provider_message_id}
+                if reply_to_participant:
+                    quoted_payload["participant"] = self._as_jid(reply_to_participant)
+                request_payload["quoted"] = quoted_payload
             response = await self._request(
                 "POST",
                 path,
@@ -222,11 +222,11 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload["vcard"]["organization"] = contact.organization
             if idempotency_key:
                 request_payload["id"] = idempotency_key
-            if reply_to_provider_message_id and reply_to_participant:
-                request_payload["quoted"] = {
-                    "messageId": reply_to_provider_message_id,
-                    "participant": self._as_jid(reply_to_participant),
-                }
+            if reply_to_provider_message_id:
+                quoted_payload = {"messageId": reply_to_provider_message_id}
+                if reply_to_participant:
+                    quoted_payload["participant"] = self._as_jid(reply_to_participant)
+                request_payload["quoted"] = quoted_payload
             response = await self._request(
                 "POST",
                 "/send/contact",

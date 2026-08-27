@@ -82,6 +82,7 @@ async def call_provider(
     contact: Contact,
 ) -> SendResult:
     reply_to = None
+    participant = None
     if message.reply_to_message_id:
         reply_to = db.scalar(
             select(Message).where(
@@ -90,35 +91,25 @@ async def call_provider(
                 Message.conversation_id == message.conversation_id,
             )
         )
-        if reply_to is None or not reply_to.provider_message_id:
-            return SendResult(
-                success=False,
-                error="A mensagem citada não está disponível para envio.",
+        if reply_to and reply_to.provider_message_id:
+            participant = quote_participant(
+                channel=channel,
+                contact=contact,
+                reply_to=reply_to,
             )
 
     provider = get_provider(channel.provider, channel, db)
     target = delivery_target(contact)
-    participant = None
-    if reply_to:
-        participant = quote_participant(
-            channel=channel,
-            contact=contact,
-            reply_to=reply_to,
-        )
-        if reply_to.provider_message_id and not participant:
-            return SendResult(
-                success=False,
-                error="Não foi possível identificar o autor da mensagem citada no grupo.",
-            )
+    reply_to_provider_id = (
+        reply_to.provider_message_id if reply_to and reply_to.provider_message_id else None
+    )
 
     if message.message_type == MessageType.TEXT:
         return await provider.send_text(
             channel,
             target,
             format_outgoing_content(message.sender_name, message.body) or "",
-            reply_to_provider_message_id=(
-                reply_to.provider_message_id if reply_to else None
-            ),
+            reply_to_provider_message_id=reply_to_provider_id,
             reply_to_participant=participant,
             mentioned_phones=message.mentioned_phones,
             mentioned_jids=message.mentioned_jids,
@@ -147,9 +138,7 @@ async def call_provider(
                 phone_number=shared_contact.phone_number,
                 organization=shared_contact.organization,
             ),
-            reply_to_provider_message_id=(
-                reply_to.provider_message_id if reply_to else None
-            ),
+            reply_to_provider_message_id=reply_to_provider_id,
             reply_to_participant=participant,
             idempotency_key=str(message.id),
         )
@@ -174,9 +163,7 @@ async def call_provider(
             if message.message_type == MessageType.STICKER
             else format_outgoing_content(message.sender_name, message.body)
         ),
-        reply_to_provider_message_id=(
-            reply_to.provider_message_id if reply_to else None
-        ),
+        reply_to_provider_message_id=reply_to_provider_id,
         reply_to_participant=participant,
         mentioned_phones=message.mentioned_phones,
         mentioned_jids=message.mentioned_jids,

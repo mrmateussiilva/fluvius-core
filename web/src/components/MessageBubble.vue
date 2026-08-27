@@ -55,7 +55,7 @@ const detailsOpen = ref(false)
 const copied = ref(false)
 const sentAt = computed(() => new Date(props.message.sent_at || props.message.created_at))
 const canReply = computed(
-  () => Boolean(props.message.provider_message_id) && props.message.status !== 'failed',
+  () => props.message.status !== 'failed',
 )
 const canCopy = computed(() => Boolean(props.message.body?.trim()))
 const isNativeSticker = computed(

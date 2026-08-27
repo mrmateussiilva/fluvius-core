@@ -560,11 +560,6 @@ async def send_message(
             conversation_id,
             payload.reply_to_message_id,
         )
-        if not reply_to.provider_message_id and not reply_to.is_internal:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
-            )
     created_at = datetime.now(UTC)
     message = Message(
         id=payload.client_message_id,
@@ -758,11 +753,6 @@ async def send_contact_message(
             conversation_id,
             payload.reply_to_message_id,
         )
-        if not reply_to.provider_message_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
-            )
     created_at = datetime.now(UTC)
     message = Message(
         id=payload.client_message_id,
@@ -859,11 +849,6 @@ async def send_attachment(
             conversation_id,
             reply_to_message_id,
         )
-        if not reply_to.provider_message_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A mensagem citada ainda não foi confirmada pelo WhatsApp",
-            )
     content = await file.read(MAX_MEDIA_BYTES + 1)
     if not content or len(content) > MAX_MEDIA_BYTES:
         raise HTTPException(
