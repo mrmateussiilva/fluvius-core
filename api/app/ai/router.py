@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -28,6 +29,7 @@ from app.database import get_db
 from app.realtime.manager import realtime_manager
 
 router = APIRouter(tags=["ai"])
+logger = logging.getLogger(__name__)
 
 
 def _as_ai_config_read(config: ChannelAiConfig) -> AiConfigRead:
@@ -75,7 +77,14 @@ def get_channel_ai_config(
             detail="Canal não encontrado.",
         )
 
-    config = get_or_create_ai_config(db, context.tenant_id, channel.id)
+    try:
+        config = get_or_create_ai_config(db, context.tenant_id, channel.id)
+    except Exception as exc:
+        logger.exception("Failed to get/create AI config for channel %s: %s", channel_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro interno ao carregar configuração de IA: {exc}",
+        )
     return _as_ai_config_read(config)
 
 

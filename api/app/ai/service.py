@@ -65,6 +65,7 @@ def get_or_create_ai_config(
         )
     )
     if config is None:
+        _original_exc: Exception | None = None
         try:
             config = ChannelAiConfig(
                 id=uuid4(),
@@ -88,7 +89,8 @@ def get_or_create_ai_config(
             db.add(config)
             db.commit()
             db.refresh(config)
-        except Exception:
+        except Exception as exc:
+            _original_exc = exc
             db.rollback()
             config = db.scalar(
                 select(ChannelAiConfig).where(
@@ -97,7 +99,9 @@ def get_or_create_ai_config(
                 )
             )
             if config is None:
-                raise
+                raise RuntimeError(
+                    f"Não foi possível criar a configuração de IA para o canal: {_original_exc}"
+                ) from _original_exc
     return config
 
 
