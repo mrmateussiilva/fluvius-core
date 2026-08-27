@@ -79,13 +79,20 @@ def get_channel_ai_config(
 
     try:
         config = get_or_create_ai_config(db, context.tenant_id, channel.id)
+        return _as_ai_config_read(config)
+    except HTTPException:
+        raise
     except Exception as exc:
-        logger.exception("Failed to get/create AI config for channel %s: %s", channel_id, exc)
+        logger.exception(
+            "Failed to get/create AI config for channel %s (tenant %s): %s",
+            channel_id,
+            context.tenant_id,
+            exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Erro interno ao carregar configuração de IA: {exc}",
+            detail=f"Erro interno ao carregar configuração de IA: {type(exc).__name__}: {exc}",
         )
-    return _as_ai_config_read(config)
 
 
 @router.put(
