@@ -530,7 +530,9 @@ class AttendanceFlowTest(PostgresIntegrationTestCase):
                                             "id": "history-message-1",
                                         },
                                         "message": {"conversation": "Mensagem recuperada"},
-                                        "messageTimestamp": 1785322800,
+                                        "messageTimestamp": int(
+                                            (datetime.now(UTC) - timedelta(days=2)).timestamp()
+                                        ),
                                         "pushName": "Cliente Histórico",
                                     }
                                 }
