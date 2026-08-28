@@ -3,6 +3,33 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.56] — 2026-08-28
+
+Foco: **integração confiável do Agente de IA com a outbox de mensagens**.
+
+### Fixed
+
+- Respostas automáticas da IA agora criam `Message(pending)` e
+  `MessageDelivery(queued)` com `tenant_id` antes de serem enviadas ao worker
+  de entrega.
+- O dispatcher recebe o tenant explicitamente e o worker continua responsável
+  por resolver o canal/provider e confirmar o ID externo antes de marcar a
+  mensagem como `sent`.
+- Eventos realtime da IA usam os contratos existentes (`message.created` e
+  `conversation.updated`) e incluem `channel_id`, permitindo atualização dos
+  sockets com escopo de canal.
+- O turno assíncrono da IA fecha sua sessão SQLAlchemy após o processamento,
+  evitando esgotamento do pool de conexões.
+- Teste de regressão cobre outbox tenant-scoped, dispatcher e eventos realtime.
+
+### Notes
+
+- O Agente de IA é um módulo opcional pós-MVP e permanece desativado por
+  padrão. Sua configuração é por canal; somente administradores podem
+  configurar/testar o agente, e a chave do provedor fica cifrada no backend.
+- Mensagens de grupos não ativam o bot. Solicitações de atendimento humano
+  desativam o bot na conversa e preservam o motivo do transbordo.
+
 ## [0.0.4] — 2026-07-30
 
 Foco: **confiabilidade da Evolution Go / webhooks** e capacidade da API em produção.

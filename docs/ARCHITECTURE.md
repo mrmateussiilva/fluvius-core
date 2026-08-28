@@ -58,6 +58,40 @@ Se Redis estiver indisponível depois do commit, a entrega permanece `queued` no
 PostgreSQL e o dispatcher tenta novamente. Um job RQ duplicado é inofensivo
 porque somente uma transição bloqueada da outbox pode chegar ao provider.
 
+## Agente de IA e transbordo humano
+
+O Agente de IA é um módulo opcional pós-MVP, desativado por padrão, cuja
+configuração é isolada por `(tenant_id, channel_id)` em
+`channel_ai_configs`. Somente administradores podem consultar ou alterar essa
+configuração e usar o simulador. A chave do provedor é cifrada no backend e
+nunca é devolvida ao frontend.
+
+Quando habilitado, o worker de inbox agenda um turno somente para mensagens
+diretas recebidas em canal conectado, em conversa `new`, sem atendente
+atribuído e com `is_bot_active=true`. Grupos nunca ativam o bot. Antes de
+persistir a resposta, o serviço confirma novamente o tenant, a conversa, o
+canal, a atribuição e o estado do bot, para descartar uma resposta caso um
+atendente tenha assumido o atendimento durante a chamada ao LLM.
+
+Após uma resposta válida, a API persiste na mesma transação a mensagem
+outgoing como `pending` e sua `MessageDelivery` como `queued`, sempre com
+`tenant_id`. Em seguida, envia somente `delivery_id` e `tenant_id` ao
+dispatcher; o delivery worker resolve o provider pelo canal persistido e
+aplica as mesmas regras de confirmação, idempotência e falha do envio manual.
+Assim, a IA não marca mensagens como `sent` diretamente.
+
+O agente dispõe da ferramenta de transbordo humano. Quando acionada, a
+conversa registra `bot_handoff_at` e `bot_handoff_reason`, desativa
+`is_bot_active` e envia a mensagem de aviso pela mesma outbox. Ativar ou
+desativar o bot manualmente usa
+`POST /api/v1/conversations/{conversation_id}/toggle-bot`.
+
+As atualizações são publicadas pelos eventos realtime existentes
+`message.created` e `conversation.updated`, sempre incluindo `channel_id`
+para respeitar sockets restritos a canais. O turno assíncrono abre e fecha sua
+própria sessão SQLAlchemy; falhas do provedor não são tratadas como sucesso e
+interrompem o turno sem criar uma mensagem falsa como `sent`.
+
 ## Fluxo de recebimento
 
 1. O gateway chama `/api/v1/webhooks/whatsapp/{provider}/{channel_id}`.

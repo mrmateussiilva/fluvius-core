@@ -81,6 +81,12 @@ WhatsApp**, sem editar o `.env` por número ou acessar o Manager.
 `EVOLUTION_GO_API_KEY` e `EVOLUTION_GO_INSTANCE_TOKENS` permanecem apenas para
 canais legados.
 
+O módulo opcional **Agente de IA** está disponível a partir da release
+`v0.0.56`. Ele fica desativado por padrão, é configurado por canal por um
+administrador e usa a mesma outbox de mensagens do atendimento humano. O fluxo
+completo, incluindo transbordo e limites de segurança, está em
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Comandos principais
 
 ```bash
@@ -144,6 +150,9 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
 - A mensagem outgoing e sua outbox são persistidas juntas antes da chamada externa. A API responde `202/pending`, e um delivery worker exclusivo processa a fila sem concorrer com sincronizações administrativas.
 - Em texto e anexo, o navegador cria o UUID exibido na bolha otimista e a API reutiliza esse UUID como chave idempotente. Anexos também validam a assinatura real do arquivo e guardam seu SHA-256.
 - O provider precisa confirmar um ID para a mensagem virar `sent`; falhas viram `failed`.
+- O Agente de IA, quando habilitado, também cria mensagens `pending` na outbox;
+  não envia diretamente ao provider, não opera em grupos e desativa o bot ao
+  solicitar transbordo humano.
 - Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, atribuem os canais permitidos, redefinem senha e desativam memberships sem atravessar tenants. Conversas e quadro podem ser filtrados por canal; a visão consolidada é exclusiva de administradores.
 - O administrador da plataforma usa **Administração Fluvius** para criar,
   inspecionar, ativar ou suspender empresas. Cada empresa recebe um link
