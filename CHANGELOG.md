@@ -3,6 +3,17 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.58] — 2026-08-28
+
+Foco: **correção do gate de testes da release do Agente de IA**.
+
+### Fixed
+
+- O teste de HistorySync usa uma data relativa segura e não falha quando o
+  relógio do CI ultrapassa o limite exato de 30 dias.
+- A funcionalidade de triagem e o reconhecimento do nome do agente da release
+  `v0.0.57` ficam preservados nesta release corrigida.
+
 ## [0.0.57] — 2026-08-28
 
 Foco: **triagem do Agente de IA e identidade configurável do bot**.
