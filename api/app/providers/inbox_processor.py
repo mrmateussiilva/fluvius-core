@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 from uuid import UUID
-import asyncio
 
 from sqlalchemy import select
 
@@ -373,11 +372,9 @@ async def _process_message(
         and conversation.assigned_user_id is None
         and conversation.status == ConversationStatus.NEW
     ):
-        asyncio.create_task(
-            _execute_ai_turn_task(
-                tenant_id=channel.tenant_id,
-                conversation_id=conversation.id,
-            )
+        await _execute_ai_turn_task(
+            tenant_id=channel.tenant_id,
+            conversation_id=conversation.id,
         )
 
     return True

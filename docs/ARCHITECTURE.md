@@ -105,8 +105,10 @@ desativar o bot manualmente usa
 As atualizações são publicadas pelos eventos realtime existentes
 `message.created` e `conversation.updated`, sempre incluindo `channel_id`
 para respeitar sockets restritos a canais. O turno assíncrono abre e fecha sua
-própria sessão SQLAlchemy; falhas do provedor não são tratadas como sucesso e
-interrompem o turno sem criar uma mensagem falsa como `sent`.
+própria sessão SQLAlchemy e é aguardado pelo worker que processa o webhook;
+assim, ele não é cancelado junto com o `asyncio.run()` do job. Falhas do
+provedor não são tratadas como sucesso e interrompem o turno sem criar uma
+mensagem falsa como `sent`.
 
 ## Fluxo de recebimento
 
