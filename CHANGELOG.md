@@ -3,6 +3,21 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.57] — 2026-08-28
+
+Foco: **triagem do Agente de IA e identidade configurável do bot**.
+
+### Added
+
+- O nome configurado do agente passa a ser incluído na identidade enviada ao
+  LLM. O cliente pode chamar o bot pelo nome sem que isso seja obrigatório
+  para receber uma resposta.
+- Triagem determinística para pedidos explícitos de atendente e sinais
+  objetivos de reclamação, com transbordo sem chamar o LLM.
+- Política de triagem no contexto do LLM para evitar respostas fora do escopo,
+  sem informação suficiente ou com baixa confiança.
+- Testes de reconhecimento do nome do agente e do transbordo determinístico.
+
 ## [0.0.56] — 2026-08-28
 
 Foco: **integração confiável do Agente de IA com a outbox de mensagens**.
