@@ -1,5 +1,6 @@
 import json
 import logging
+import unicodedata
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -52,6 +53,75 @@ DEFAULT_HANDOFF_MESSAGE = (
     "Entendido! Estou transferindo seu atendimento para a nossa equipe humana. "
     "Um de nossos atendentes irá te responder em instantes."
 )
+
+TRIAGE_POLICY = (
+    "Antes de responder, faça uma triagem da última mensagem do cliente. "
+    "Responda somente quando a solicitação estiver dentro do seu escopo e "
+    "houver informação suficiente para responder com segurança. Não invente "
+    "preços, prazos, políticas ou dados que não estejam no contexto. Se a "
+    "solicitação estiver fora do escopo, faltar informação relevante, houver "
+    "uma reclamação ou o cliente pedir uma pessoa, use a ferramenta "
+    "'solicitar_atendente_humano' em vez de chutar uma resposta."
+)
+
+_HUMAN_REQUEST_PHRASES = (
+    "falar com humano",
+    "falar com uma pessoa",
+    "falar com atendente",
+    "falar com o atendente",
+    "atendente humano",
+    "pessoa real",
+    "ser humano",
+    "falar com alguem",
+    "falar com suporte",
+    "falar com o suporte",
+    "quero um atendente",
+    "preciso de um atendente",
+    "me transfira",
+    "transferir para um atendente",
+)
+
+_COMPLAINT_TERMS = (
+    "reclamacao",
+    "reclamar",
+    "insatisfeito",
+    "insatisfeita",
+    "procon",
+    "advogado",
+    "processo judicial",
+    "denunciar",
+    "fraude",
+    "golpe",
+)
+
+
+def _normalize_triage_text(content: str) -> str:
+    normalized = unicodedata.normalize("NFKD", content.casefold())
+    return "".join(char for char in normalized if not unicodedata.combining(char))
+
+
+def detect_forced_handoff(content: str | None) -> str | None:
+    """Detects handoffs that must not depend on an LLM decision."""
+    if not content:
+        return None
+
+    text = _normalize_triage_text(content)
+    if any(phrase in text for phrase in _HUMAN_REQUEST_PHRASES):
+        return "Cliente solicitou atendimento humano"
+    if any(term in text for term in _COMPLAINT_TERMS):
+        return "Cliente registrou uma reclamação"
+    return None
+
+
+def _build_agent_system_prompt(system_prompt: str, bot_name: str | None) -> str:
+    """Adds the configured agent identity without changing automatic activation."""
+    normalized_name = " ".join((bot_name or "IA Assistente").split())
+    return (
+        f"{system_prompt}\n\n"
+        f"Identidade do agente: seu nome é {normalized_name}. Se o cliente chamar você "
+        "por esse nome, reconheça naturalmente que está sendo chamado e continue o "
+        "atendimento. A menção ao nome não é obrigatória para você responder."
+    )
 
 
 def get_or_create_ai_config(
@@ -174,6 +244,7 @@ async def call_llm(
     full_system = system_prompt
     if handoff_prompt:
         full_system += f"\n\nInstruções de Transbordo (Handoff):\n{handoff_prompt}"
+    full_system += f"\n\nPolítica de triagem obrigatória:\n{TRIAGE_POLICY}"
 
     messages_payload: list[dict] = [{"role": "system", "content": full_system}]
     for msg in conversation_messages:
@@ -224,22 +295,35 @@ async def simulate_ai(
     if not config.api_key_encrypted:
         raise ValueError("Chave de API não configurada para este canal.")
 
-    api_key = decrypt_secret(config.api_key_encrypted)
-    system_prompt = req.system_prompt or config.system_prompt
+    system_prompt = _build_agent_system_prompt(
+        req.system_prompt or config.system_prompt,
+        config.bot_name,
+    )
     handoff_prompt = req.handoff_prompt or config.handoff_prompt
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
 
-    reply, handoff_triggered, handoff_reason = await call_llm(
-        provider=config.provider,
-        model_name=config.model_name,
-        api_key=api_key,
-        system_prompt=system_prompt,
-        conversation_messages=messages,
-        handoff_prompt=handoff_prompt,
-        temperature=config.temperature,
-        max_tokens=config.max_tokens,
+    last_user_message = next(
+        (message["content"] for message in reversed(messages) if message["role"] == "user"),
+        None,
     )
+    forced_handoff_reason = detect_forced_handoff(last_user_message)
+    if forced_handoff_reason:
+        reply = DEFAULT_HANDOFF_MESSAGE
+        handoff_triggered = True
+        handoff_reason = forced_handoff_reason
+    else:
+        api_key = decrypt_secret(config.api_key_encrypted)
+        reply, handoff_triggered, handoff_reason = await call_llm(
+            provider=config.provider,
+            model_name=config.model_name,
+            api_key=api_key,
+            system_prompt=system_prompt,
+            conversation_messages=messages,
+            handoff_prompt=handoff_prompt,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
 
     return AiSimulateResponse(
         reply=reply,
@@ -289,7 +373,7 @@ async def execute_ai_turn(
             ChannelAiConfig.channel_id == channel.id,
         )
     )
-    if config is None or not config.is_enabled or not config.api_key_encrypted:
+    if config is None or not config.is_enabled:
         return
 
     contact = db.scalar(
@@ -329,22 +413,33 @@ async def execute_ai_turn(
         body = msg.body or f"[{msg.message_type.value}]"
         history_payload.append({"role": role, "content": body})
 
-    api_key = decrypt_secret(config.api_key_encrypted)
+    forced_handoff_reason = detect_forced_handoff(recent_msgs[-1].body)
+    if forced_handoff_reason:
+        reply_text = DEFAULT_HANDOFF_MESSAGE
+        handoff_triggered = True
+        handoff_reason = forced_handoff_reason
+    else:
+        if not config.api_key_encrypted:
+            return
+        api_key = decrypt_secret(config.api_key_encrypted)
 
-    try:
-        reply_text, handoff_triggered, handoff_reason = await call_llm(
-            provider=config.provider,
-            model_name=config.model_name,
-            api_key=api_key,
-            system_prompt=config.system_prompt,
-            conversation_messages=history_payload,
-            handoff_prompt=config.handoff_prompt,
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-        )
-    except Exception as exc:
-        logger.error("Failed to execute AI turn for conversation %s: %s", conversation_id, exc)
-        return
+        try:
+            reply_text, handoff_triggered, handoff_reason = await call_llm(
+                provider=config.provider,
+                model_name=config.model_name,
+                api_key=api_key,
+                system_prompt=_build_agent_system_prompt(
+                    config.system_prompt,
+                    config.bot_name,
+                ),
+                conversation_messages=history_payload,
+                handoff_prompt=config.handoff_prompt,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+            )
+        except Exception as exc:
+            logger.error("Failed to execute AI turn for conversation %s: %s", conversation_id, exc)
+            return
 
     # Re-verify conversation state under lock before persisting response
     conv_check = db.scalar(

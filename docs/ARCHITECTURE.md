@@ -73,6 +73,22 @@ persistir a resposta, o serviço confirma novamente o tenant, a conversa, o
 canal, a atribuição e o estado do bot, para descartar uma resposta caso um
 atendente tenha assumido o atendimento durante a chamada ao LLM.
 
+A decisão de responder passa por duas camadas. Primeiro, regras determinísticas
+interrompem o turno do LLM quando a mensagem pede explicitamente uma pessoa ou
+apresenta sinais objetivos de reclamação (por exemplo, Procon, fraude ou
+advogado). Nesses casos, o sistema envia o aviso padrão, registra o motivo e
+desativa o bot. Para as demais mensagens, a política de triagem é enviada ao
+LLM junto do contexto: ele só deve responder quando tiver escopo e informação
+suficiente; fora do escopo, com dúvida relevante ou baixa confiança, deve usar
+a ferramenta de transbordo humano. Assim a triagem não depende apenas de uma
+resposta textual livre do modelo.
+
+O `bot_name` configurado por canal também é incluído na identidade enviada ao
+LLM. Assim, se o cliente escrever “Sofia, preciso de ajuda”, por exemplo, o
+agente reconhece que está sendo chamado e responde normalmente. A menção ao
+nome é contextual e não obrigatória: o bot continua atendendo as mensagens
+elegíveis mesmo quando o cliente não usa o nome.
+
 Após uma resposta válida, a API persiste na mesma transação a mensagem
 outgoing como `pending` e sua `MessageDelivery` como `queued`, sempre com
 `tenant_id`. Em seguida, envia somente `delivery_id` e `tenant_id` ao

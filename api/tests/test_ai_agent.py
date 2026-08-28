@@ -8,6 +8,7 @@ import httpx
 from app.ai.models import ChannelAiConfig
 from app.ai.service import (
     call_llm,
+    detect_forced_handoff,
     execute_ai_turn,
 )
 from app.channels.models import WhatsAppChannel
@@ -66,6 +67,31 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply, "Olá! Como posso ajudar você hoje?")
             self.assertFalse(handoff_triggered)
             self.assertIsNone(reason)
+            system_message = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+            self.assertIn("Política de triagem obrigatória", system_message)
+            self.assertIn("ferramenta 'solicitar_atendente_humano'", system_message)
+
+    async def test_call_llm_receives_configured_agent_identity(self) -> None:
+        mock_response = {
+            "choices": [{"message": {"role": "assistant", "content": "Olá!"}}]
+        }
+
+        from app.ai.service import _build_agent_system_prompt
+
+        with patch("httpx.AsyncClient.post") as mock_post:
+            mock_post.return_value = httpx.Response(200, json=mock_response)
+
+            await call_llm(
+                provider="openai",
+                model_name="gpt-4o-mini",
+                api_key="sk-test",
+                system_prompt=_build_agent_system_prompt("Você atende clientes.", "Sofia"),
+                conversation_messages=[{"role": "user", "content": "Oi Sofia"}],
+            )
+
+            system_message = mock_post.call_args.kwargs["json"]["messages"][0]["content"]
+            self.assertIn("seu nome é Sofia", system_message)
+            self.assertIn("A menção ao nome não é obrigatória", system_message)
 
     async def test_call_llm_handoff_tool_call(self) -> None:
         mock_response = {
@@ -103,6 +129,89 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reply, "Transferindo para nossa equipe humana.")
             self.assertTrue(handoff_triggered)
             self.assertEqual(reason, "Cliente quer falar com atendente humano")
+
+    def test_detect_forced_handoff_normalizes_accents(self) -> None:
+        self.assertEqual(
+            detect_forced_handoff("Estou insatisfeito e quero falar com uma pessoa."),
+            "Cliente solicitou atendimento humano",
+        )
+        self.assertEqual(
+            detect_forced_handoff("Vou procurar o PROCON."),
+            "Cliente registrou uma reclamação",
+        )
+        self.assertIsNone(detect_forced_handoff("Olá, preciso consultar meu pedido."))
+
+    async def test_ai_turn_forced_handoff_skips_llm_and_deactivates_bot(self) -> None:
+        conv = Conversation(
+            id=self.conversation_id,
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            contact_id=self.contact_id,
+            status=ConversationStatus.NEW,
+            is_bot_active=True,
+        )
+        channel = WhatsAppChannel(
+            id=self.channel_id,
+            tenant_id=self.tenant_id,
+            name="Principal",
+            phone_number="5511999999999",
+            provider=ChannelProvider.EVOLUTION_GO,
+            status=ChannelStatus.CONNECTED,
+        )
+        config = ChannelAiConfig(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            is_enabled=True,
+            api_key_encrypted=encrypt_secret("sk-test-123"),
+            bot_name="IA Assistente",
+        )
+        contact = Contact(
+            id=self.contact_id,
+            tenant_id=self.tenant_id,
+            kind=ContactKind.DIRECT,
+            phone_number="5511888888888",
+        )
+        incoming = Message(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation_id,
+            direction=MessageDirection.INCOMING,
+            message_type=MessageType.TEXT,
+            body="Quero falar com um atendente humano, por favor.",
+        )
+        delivery = MessageDelivery(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            message_id=uuid4(),
+        )
+
+        mock_db = MagicMock()
+        mock_db.scalar.side_effect = [conv, channel, config, contact, conv]
+        mock_db.scalars.return_value = [incoming]
+        mock_db.refresh.side_effect = lambda item: setattr(item, "created_at", datetime.now(UTC))
+
+        with (
+            patch("app.ai.service.call_llm", new_callable=AsyncMock) as mock_llm,
+            patch("app.ai.service.create_delivery", return_value=delivery),
+            patch("app.ai.service.dispatch_delivery"),
+            patch("app.ai.service.realtime_manager.broadcast", new_callable=AsyncMock),
+        ):
+            await execute_ai_turn(mock_db, self.tenant_id, self.conversation_id)
+
+        mock_llm.assert_not_awaited()
+        self.assertFalse(conv.is_bot_active)
+        self.assertEqual(conv.bot_handoff_reason, "Cliente solicitou atendimento humano")
+        created_message = next(
+            item
+            for item in mock_db.add.call_args_list[0].args
+            if isinstance(item, Message)
+        )
+        self.assertEqual(
+            created_message.body,
+            "Entendido! Estou transferindo seu atendimento para a nossa equipe humana. "
+            "Um de nossos atendentes irá te responder em instantes.",
+        )
 
     async def test_ai_turn_skips_when_assigned_to_human(self) -> None:
         """Invariant: Bot never responds if conversation has an assigned human operator."""
