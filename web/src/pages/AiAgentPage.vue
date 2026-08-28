@@ -58,7 +58,7 @@ const selectedChannel = computed(() =>
 
 const providerPresets: Record<string, string[]> = {
   openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'],
-  gemini: ['gemini-1.5-flash', 'gemini-1.5-pro'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash', 'gemini-2.0-flash'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   deepseek: ['deepseek-chat', 'deepseek-coder'],
 }
