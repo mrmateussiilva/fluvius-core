@@ -1,28 +1,27 @@
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
 
 from app.ai.models import ChannelAiConfig
-from app.ai.schemas import AiConfigUpdate
 from app.ai.service import (
     call_llm,
     execute_ai_turn,
-    get_or_create_ai_config,
-    update_ai_config,
 )
+from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelProvider,
     ChannelStatus,
     ContactKind,
     ConversationStatus,
     MessageDirection,
-    MessageStatus,
     MessageType,
 )
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
+from app.delivery.models import MessageDelivery
 from app.messages.models import Message
 from app.security import decrypt_secret, encrypt_secret
 
@@ -123,6 +122,96 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
         with patch("app.ai.service.call_llm") as mock_llm:
             await execute_ai_turn(mock_db, self.tenant_id, self.conversation_id)
             mock_llm.assert_not_called()
+
+    async def test_ai_turn_creates_and_dispatches_tenant_scoped_delivery(self) -> None:
+        conv = Conversation(
+            id=self.conversation_id,
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            contact_id=self.contact_id,
+            status=ConversationStatus.NEW,
+            is_bot_active=True,
+        )
+        channel = WhatsAppChannel(
+            id=self.channel_id,
+            tenant_id=self.tenant_id,
+            name="Principal",
+            phone_number="5511999999999",
+            provider=ChannelProvider.EVOLUTION_GO,
+            status=ChannelStatus.CONNECTED,
+        )
+        config = ChannelAiConfig(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            is_enabled=True,
+            provider="openai",
+            model_name="gpt-4o-mini",
+            api_key_encrypted=encrypt_secret("sk-test-123"),
+            bot_name="IA Assistente",
+            system_prompt="Você é um assistente.",
+            handoff_prompt="Transfira quando necessário.",
+            temperature=0.3,
+            max_tokens=500,
+        )
+        contact = Contact(
+            id=self.contact_id,
+            tenant_id=self.tenant_id,
+            kind=ContactKind.DIRECT,
+            phone_number="5511888888888",
+        )
+        incoming = Message(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation_id,
+            direction=MessageDirection.INCOMING,
+            message_type=MessageType.TEXT,
+            body="Olá",
+        )
+        delivery = MessageDelivery(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            message_id=uuid4(),
+        )
+
+        mock_db = MagicMock()
+        mock_db.scalar.side_effect = [conv, channel, config, contact, conv]
+        mock_db.scalars.return_value = [incoming]
+        mock_db.refresh.side_effect = lambda item: setattr(item, "created_at", datetime.now(UTC))
+
+        with (
+            patch("app.ai.service.call_llm", return_value=("Olá!", False, None)),
+            patch("app.ai.service.create_delivery", return_value=delivery) as create_delivery_mock,
+            patch("app.ai.service.dispatch_delivery") as dispatch_delivery_mock,
+            patch(
+                "app.ai.service.realtime_manager.broadcast",
+                new_callable=AsyncMock,
+            ) as realtime_broadcast_mock,
+        ):
+            await execute_ai_turn(mock_db, self.tenant_id, self.conversation_id)
+
+        created_message = next(
+            item
+            for item in mock_db.add.call_args_list[0].args
+            if isinstance(item, Message)
+        )
+        create_delivery_mock.assert_called_once_with(
+            tenant_id=self.tenant_id,
+            message_id=created_message.id,
+            now=ANY,
+        )
+        mock_db.add.assert_any_call(delivery)
+        dispatch_delivery_mock.assert_called_once_with(delivery.id, self.tenant_id)
+        self.assertEqual(
+            [call.kwargs["event"] for call in realtime_broadcast_mock.await_args_list],
+            ["message.created", "conversation.updated"],
+        )
+        self.assertTrue(
+            all(
+                call.kwargs["data"]["channel_id"] == str(channel.id)
+                for call in realtime_broadcast_mock.await_args_list
+            )
+        )
 
     async def test_summarize_conversation_history(self) -> None:
         """Validates that summarize_conversation_history correctly gathers chat history and calls LLM."""
@@ -233,5 +322,3 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.channel_id, self.channel_id)
         self.assertEqual(result.provider, "openai")
         self.assertEqual(result.bot_name, "IA Assistente")
-
-

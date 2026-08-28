@@ -106,6 +106,19 @@ async def process_provider_event_inbox(
         )
 
 
+async def _execute_ai_turn_task(
+    *,
+    tenant_id: UUID,
+    conversation_id: UUID,
+) -> None:
+    with SessionLocal() as db:
+        await execute_ai_turn(
+            db=db,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+        )
+
+
 async def _process_message(
     *,
     db,
@@ -361,8 +374,7 @@ async def _process_message(
         and conversation.status == ConversationStatus.NEW
     ):
         asyncio.create_task(
-            execute_ai_turn(
-                db=SessionLocal(),
+            _execute_ai_turn_task(
                 tenant_id=channel.tenant_id,
                 conversation_id=conversation.id,
             )

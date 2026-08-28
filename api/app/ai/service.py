@@ -20,7 +20,6 @@ from app.common.enums import (
 from app.contacts.models import Contact
 from app.conversations.models import Conversation
 from app.delivery.dispatcher import create_delivery, dispatch_delivery
-from app.delivery.models import MessageDelivery
 from app.messages.models import Message
 from app.realtime.manager import realtime_manager
 from app.security import decrypt_secret, encrypt_secret
@@ -388,20 +387,26 @@ async def execute_ai_turn(
     conv_check.last_message_at = now
     db.flush()
 
-    delivery = create_delivery(db, ai_message, channel.provider)
+    delivery = create_delivery(
+        tenant_id=tenant_id,
+        message_id=ai_message.id,
+        now=now,
+    )
+    db.add(delivery)
     db.commit()
     db.refresh(ai_message)
 
     # Dispatch to gateway outbox
-    dispatch_delivery(delivery.id)
+    dispatch_delivery(delivery.id, tenant_id)
 
     # Broadcast to realtime subscribers
-    await realtime_manager.publish_tenant(
+    await realtime_manager.broadcast(
         tenant_id=tenant_id,
-        event="message:created",
+        event="message.created",
         data={
             "id": str(ai_message.id),
             "conversation_id": str(conversation_id),
+            "channel_id": str(channel.id),
             "direction": ai_message.direction.value,
             "message_type": ai_message.message_type.value,
             "status": ai_message.status.value,
@@ -411,11 +416,12 @@ async def execute_ai_turn(
             "created_at": ai_message.created_at.isoformat(),
         },
     )
-    await realtime_manager.publish_tenant(
+    await realtime_manager.broadcast(
         tenant_id=tenant_id,
-        event="conversation:updated",
+        event="conversation.updated",
         data={
             "id": str(conv_check.id),
+            "channel_id": str(channel.id),
             "status": conv_check.status.value,
             "is_bot_active": conv_check.is_bot_active,
             "bot_handoff_at": conv_check.bot_handoff_at.isoformat() if conv_check.bot_handoff_at else None,
@@ -520,4 +526,3 @@ async def summarize_conversation_history(
     )
 
     return summary_text
-

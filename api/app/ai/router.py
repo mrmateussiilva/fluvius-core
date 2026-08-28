@@ -23,7 +23,6 @@ from app.ai.service import (
 )
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
-from app.conversations.models import Conversation
 from app.conversations.router import get_accessible_conversation
 from app.database import get_db
 from app.realtime.manager import realtime_manager
@@ -196,11 +195,12 @@ async def toggle_conversation_bot(
     db.commit()
     db.refresh(conversation)
 
-    await realtime_manager.publish_tenant(
+    await realtime_manager.broadcast(
         tenant_id=context.tenant_id,
-        event="conversation:updated",
+        event="conversation.updated",
         data={
             "id": str(conversation.id),
+            "channel_id": str(conversation.channel_id),
             "status": conversation.status.value,
             "is_bot_active": conversation.is_bot_active,
             "bot_handoff_at": (
@@ -260,4 +260,3 @@ async def summarize_conversation(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Falha ao gerar resumo com IA: {err}",
         )
-
