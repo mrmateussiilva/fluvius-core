@@ -59,7 +59,7 @@ def get_channel_ai_config(
     db: Session = Depends(get_db),
     context: AuthContext = Depends(get_auth_context),
 ) -> AiConfigRead:
-    if context.user.role != "admin":
+    if context.membership.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas administradores podem visualizar as configurações do Agente de IA.",
@@ -105,7 +105,7 @@ def update_channel_ai_config(
     db: Session = Depends(get_db),
     context: AuthContext = Depends(get_auth_context),
 ) -> AiConfigRead:
-    if context.user.role != "admin":
+    if context.membership.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas administradores podem alterar as configurações do Agente de IA.",
@@ -137,7 +137,7 @@ async def simulate_channel_ai(
     db: Session = Depends(get_db),
     context: AuthContext = Depends(get_auth_context),
 ) -> AiSimulateResponse:
-    if context.user.role != "admin":
+    if context.membership.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas administradores podem testar o simulador de IA.",

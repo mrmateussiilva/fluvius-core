@@ -175,3 +175,63 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Preço do plano Pro", summary)
             mock_llm.assert_called_once()
 
+    def test_get_channel_ai_config_router_role_check(self) -> None:
+        """Validates that get_channel_ai_config correctly reads membership.role and returns config."""
+        from app.ai.router import get_channel_ai_config
+        from app.auth.dependencies import AuthContext
+        from app.channels.models import WhatsAppChannel
+        from app.users.models import TenantUser, User
+
+        user = User(
+            id=self.user_id,
+            email="admin@example.com",
+            name="Admin User",
+            password_hash="hash",
+            is_active=True,
+            is_platform_admin=False,
+        )
+        membership = TenantUser(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            user_id=self.user_id,
+            role="admin",
+            is_active=True,
+        )
+        context = AuthContext(user=user, membership=membership)
+
+        channel = WhatsAppChannel(
+            id=self.channel_id,
+            tenant_id=self.tenant_id,
+            name="Principal",
+            phone_number="5511999999999",
+            provider=ChannelProvider.EVOLUTION_GO,
+            status=ChannelStatus.CONNECTED,
+        )
+        ai_config = ChannelAiConfig(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            is_enabled=False,
+            provider="openai",
+            model_name="gpt-4o-mini",
+            bot_name="IA Assistente",
+            system_prompt="Prompt teste",
+            handoff_prompt="Handoff teste",
+            temperature=0.3,
+            max_tokens=500,
+        )
+
+        mock_db = MagicMock()
+        mock_db.scalar.side_effect = [channel, ai_config]
+
+        result = get_channel_ai_config(
+            channel_id=self.channel_id,
+            db=mock_db,
+            context=context,
+        )
+
+        self.assertEqual(result.channel_id, self.channel_id)
+        self.assertEqual(result.provider, "openai")
+        self.assertEqual(result.bot_name, "IA Assistente")
+
+
