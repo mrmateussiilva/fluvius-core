@@ -3,6 +3,17 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.59] — 2026-08-28
+
+Foco: **execução do Agente de IA nas conversas reais**.
+
+### Fixed
+
+- O worker de webhook agora aguarda o turno da IA antes de encerrar o
+  `asyncio.run()`, evitando que a tarefa seja cancelada antes de chamar o LLM
+  e criar a resposta pela outbox.
+- A documentação registra o ciclo de vida correto da sessão e do turno de IA.
+
 ## [0.0.58] — 2026-08-28
 
 Foco: **correção do gate de testes da release do Agente de IA**.
