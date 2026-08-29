@@ -491,12 +491,25 @@ const summarizing = ref(false)
 const summarizeError = ref<string | null>(null)
 const aiSummary = ref<string | null>(null)
 const copiedSummary = ref(false)
+const savingSummary = ref(false)
 const store = useConversationStore()
+
+watch(
+  () => props.conversation?.id,
+  () => {
+    aiSummary.value = null
+    summarizeError.value = null
+    copiedSummary.value = false
+    savingSummary.value = false
+  },
+)
 
 async function handleSummarize() {
   if (!props.conversation?.id || summarizing.value) return
   summarizing.value = true
   summarizeError.value = null
+  aiSummary.value = null
+  copiedSummary.value = false
   try {
     const res = await summarizeConversation(props.conversation.id)
     aiSummary.value = res.summary
@@ -522,10 +535,25 @@ async function copySummary() {
 }
 
 async function saveSummaryAsInternalNote() {
-  if (!aiSummary.value || !props.conversation?.id) return
+  if (!aiSummary.value || !props.conversation?.id || savingSummary.value) return
   const noteText = `🤖 Resumo do Atendimento:\n\n${aiSummary.value}`
-  await store.send(noteText, null, [], [], [], true)
+  savingSummary.value = true
+  try {
+    const accepted = await store.send(noteText, null, [], [], [], true)
+    if (accepted) {
+      aiSummary.value = null
+    } else {
+      summarizeError.value = 'Não foi possível salvar o resumo como nota interna.'
+    }
+  } finally {
+    savingSummary.value = false
+  }
+}
+
+function dismissSummary() {
   aiSummary.value = null
+  summarizeError.value = null
+  copiedSummary.value = false
 }
 
 function sendMessage(
@@ -796,6 +824,85 @@ function previewMedia(
         {{ operationError }}
       </p>
       <div class="relative min-h-0 flex-1 overflow-hidden">
+        <Transition
+          enter-active-class="transition duration-200 ease-out"
+          enter-from-class="opacity-0 translate-y-2"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition duration-150 ease-in"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 translate-y-2"
+        >
+          <section
+            v-if="summarizing || aiSummary || summarizeError"
+            class="absolute inset-x-3 top-3 z-20 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-purple-200/80 bg-panel/95 p-4 shadow-xl shadow-purple-950/10 backdrop-blur sm:inset-x-auto sm:right-4 sm:w-[min(30rem,calc(100%-2rem))]"
+            :aria-busy="summarizing"
+            aria-labelledby="conversation-summary-title"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex min-w-0 items-start gap-2.5">
+                <div class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">
+                  <Sparkles class="h-4 w-4" />
+                </div>
+                <div class="min-w-0">
+                  <h3 id="conversation-summary-title" class="text-sm font-semibold text-ink">
+                    Resumo da conversa
+                  </h3>
+                  <p class="mt-0.5 text-[11px] text-ink-muted">
+                    {{ summarizing ? 'Analisando as mensagens...' : 'Gerado com IA' }}
+                  </p>
+                </div>
+              </div>
+              <button
+                v-if="!summarizing"
+                type="button"
+                class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-95"
+                aria-label="Fechar resumo"
+                title="Fechar resumo"
+                @click="dismissSummary"
+              >
+                <X class="h-4 w-4" />
+              </button>
+            </div>
+
+            <div v-if="summarizing" class="mt-4 flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-3 text-xs text-purple-800 dark:bg-purple-500/10 dark:text-purple-200">
+              <LoaderCircle class="h-4 w-4 animate-spin" />
+              <span>Aguarde enquanto a IA prepara o resumo.</span>
+            </div>
+            <p
+              v-if="!summarizing && summarizeError"
+              role="alert"
+              class="mt-4 rounded-lg bg-danger-soft px-3 py-3 text-xs leading-5 text-danger-strong ring-1 ring-danger/15"
+            >
+              {{ summarizeError }}
+            </p>
+            <div
+              v-if="!summarizing && aiSummary"
+              class="mt-4 whitespace-pre-wrap text-sm leading-6 text-ink-secondary"
+            >
+              {{ aiSummary }}
+            </div>
+
+            <div v-if="aiSummary && !summarizing" class="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+              <button
+                type="button"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-xs font-medium text-ink-secondary transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98]"
+                @click="copySummary"
+              >
+                <Copy class="h-3.5 w-3.5" />
+                {{ copiedSummary ? 'Copiado' : 'Copiar' }}
+              </button>
+              <button
+                type="button"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-purple-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                :disabled="savingSummary"
+                @click="saveSummaryAsInternalNote"
+              >
+                <LoaderCircle v-if="savingSummary" class="h-3.5 w-3.5 animate-spin" />
+                <span>{{ savingSummary ? 'Salvando...' : 'Salvar como nota interna' }}</span>
+              </button>
+            </div>
+          </section>
+        </Transition>
         <div
           ref="messageList"
           class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
