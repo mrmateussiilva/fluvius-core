@@ -45,7 +45,7 @@ A instância é conectada com uma URL por canal e as assinaturas `MESSAGE`, `CON
 http://api:8000/api/v1/webhooks/whatsapp/evolution_go/{channel_id}
 ```
 
-Ao iniciar ou renovar o QR por `POST /api/v1/channels/{id}/connect`, o adapter reaplica essa configuração por meio de `/instance/connect`. A consulta periódica de status não reconfigura o webhook. Assim, uma instância apagada e recriada com o mesmo nome recupera webhook e assinaturas quando o operador abre novamente o assistente de conexão. A base interna é configurada por `EVOLUTION_GO_WEBHOOK_BASE_URL`; em Docker local, o padrão é `http://api:8000`.
+Ao iniciar ou renovar o QR por `POST /api/v1/channels/{id}/connect`, o adapter reaplica essa configuração por meio de `/instance/connect`. A consulta periódica de status não reconfigura o webhook. Assim, uma instância apagada e recriada com o mesmo nome recupera webhook e assinaturas quando o operador abre novamente o assistente de conexão. A base é configurada por `EVOLUTION_GO_WEBHOOK_BASE_URL`; em Docker local, o padrão é `http://api:8000`. Em produção, o deploy blue/green usa o domínio público para que o webhook acompanhe o slot ativo.
 
 ### DNS no ambiente local
 

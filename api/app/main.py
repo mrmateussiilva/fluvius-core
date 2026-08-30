@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as package_version
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +34,11 @@ from app.sync.router import router as sync_router
 from app.users.router import router as users_router
 
 load_all_models()
+
+try:
+    APP_VERSION = package_version("fluvius-core-api")
+except PackageNotFoundError:
+    APP_VERSION = "unknown"
 
 
 @asynccontextmanager
@@ -81,6 +87,15 @@ def health() -> dict[str, str]:
 @app.get("/health/live", tags=["health"])
 def liveness() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/version", tags=["health"])
+def version() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "slot": settings.deployment_slot,
+        "version": APP_VERSION,
+    }
 
 
 @app.get("/health/ready", tags=["health"])

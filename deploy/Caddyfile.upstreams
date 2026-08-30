@@ -1,0 +1,10 @@
+# This file is replaced atomically by production-deploy.sh during a slot switch.
+# Keep the legacy ports as the safe bootstrap target for existing installations.
+@backend path /api/* /health /health/* /ws
+handle @backend {
+	reverse_proxy 127.0.0.1:18000
+}
+
+handle {
+	reverse_proxy 127.0.0.1:18080
+}

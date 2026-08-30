@@ -126,6 +126,16 @@ jobs:
           -f docker-compose.prod.yml
           config --quiet
 
+      - name: Validate production Blue/Green Compose
+        run: >-
+          docker compose
+          --env-file .env.production.example
+          -f docker-compose.prod.slot.yml
+          config --quiet
+
+      - name: Validate deployment script
+        run: bash -n deploy/scripts/production-deploy.sh
+
   deploy-production:
     name: Deploy production
     needs:

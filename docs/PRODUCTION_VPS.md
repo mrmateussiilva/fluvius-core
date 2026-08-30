@@ -12,9 +12,10 @@ Este ambiente foi dimensionado para a primeira implantação em:
 
 ## Topologia
 
-Somente o serviço Caddy do Ubuntu publica `80/tcp`, `443/tcp` e `443/udp`. A
-API, o servidor estático e o Manager da Evolution são vinculados pelo Docker
-apenas em `127.0.0.1:18000`, `127.0.0.1:18080` e `127.0.0.1:18081`;
+Somente o serviço Caddy do Ubuntu publica `80/tcp`, `443/tcp` e `443/udp`. O
+stack legado usa `127.0.0.1:18000` e `127.0.0.1:18080`; os slots Blue e Green
+usam `18100/18180` e `18200/18280`. O Manager da Evolution continua em
+`127.0.0.1:18081`;
 nunca ficam acessíveis diretamente pela interface pública. O Caddy encaminha
 `evolution.finderbit.com.br` para a porta `18081` com HTTPS; o Manager exige a
 chave administrativa forte da instalação. PostgreSQL, Redis e workers
@@ -30,6 +31,10 @@ Os anexos são entregues por
 antes de usar `FileResponse`. A Evolution Go continua lendo `/storage` apenas
 pela rede interna, durante o envio da mídia.
 
+O fluxo de publicação usa blue/green na API e no frontend. A preparação do
+Caddy, os slots, a migração do stack legado, o rollback e os comandos de
+operação estão em [BLUE_GREEN_DEPLOY.md](BLUE_GREEN_DEPLOY.md).
+
 ## Primeira instalação
 
 Clone o repositório em uma localização estável, por exemplo
@@ -42,6 +47,9 @@ sudo ./deploy/scripts/install-ubuntu.sh
 ./deploy/scripts/generate-production-env.sh
 nano .env.production
 sudo cp deploy/Caddyfile.host /etc/caddy/fluvius.caddy
+sudo install -d -o deploy -g deploy -m 0755 .deploy-state
+sudo install -o deploy -g deploy -m 0644 \
+  deploy/Caddyfile.upstreams .deploy-state/active-upstreams.caddy
 # Adicione uma única vez ao /etc/caddy/Caddyfile:
 # import /etc/caddy/*.caddy
 sudo caddy validate --config /etc/caddy/Caddyfile
@@ -151,12 +159,12 @@ publicada ou quando uma execução manual informa uma tag anterior para rollback
 
 O deploy em si é feito em etapas pelo script
 `deploy/scripts/production-deploy.sh vX.Y.Z`: primeiro busca tags, valida que a
-tag existe, faz checkout detached no commit da tag, confirma o SHA e constrói as
-imagens. Só depois garante Postgres/Redis/Evolution Go, roda as migrations em um
-container temporário, troca a API já sem executar migration no boot, atualiza os
-workers e por último o frontend. Esse fluxo reduz a janela de 502 do Caddy
-durante publicação. Zero downtime completo exigirá blue/green com duas
-instâncias ativas ou troca atômica de upstream.
+tag existe, faz checkout detached no commit da tag e prepara o slot inativo.
+PostgreSQL, Redis e Evolution Go continuam compartilhados; API, frontend e
+workers são iniciados no segundo slot. Depois dos healthchecks, o script troca
+os upstreams do Caddy atomicamente, valida o domínio público, drena o slot antigo
+e grava o novo slot ativo. O primeiro deploy sem `.deploy-state/active-slot`
+considera o stack legado ativo e migra para Blue.
 
 A API de produção sobe com vários processos uvicorn (`UVICORN_WORKERS`, padrão
 4) para absorver webhooks paralelos da Evolution Go sem bloquear o accept TCP.
@@ -179,8 +187,8 @@ interrompidos. Para preservar o teto de memória da VPS, `worker` e
 `webhook-worker` usam 384 MB cada por padrão.
 
 Não troque esse script por `docker compose up -d --build` em produção. O fluxo
-genérico recria serviços em bloco, pode deixar o Caddy sem upstream por mais
-tempo e volta a acoplar migration ao boot da API.
+genérico recria serviços em bloco, ignora a troca atômica do Caddy e pode
+duplicar ou interromper workers.
 
 ```bash
 # Estado

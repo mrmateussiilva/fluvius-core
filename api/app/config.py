@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Fluvius Core"
+    deployment_slot: str = "legacy"
     environment: str = "development"
     api_v1_prefix: str = "/api/v1"
     secret_key: str = "change-me-in-development"

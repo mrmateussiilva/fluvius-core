@@ -141,6 +141,12 @@ genérico, porque ele preserva garantias operacionais:
 - grava a tag e o SHA publicados em `.deploy-state/` somente depois dos
   healthchecks passarem.
 
+O deploy usa blue/green para API, frontend e workers. PostgreSQL, Redis e
+Evolution Go permanecem compartilhados; a troca pública acontece por reload
+gracioso dos upstreams do Caddy. Consulte
+[BLUE_GREEN_DEPLOY.md](BLUE_GREEN_DEPLOY.md) para preparar a VPS e operar o
+primeiro corte do stack legado.
+
 Um erro de build interrompe o deploy antes da troca de API, workers e frontend.
 Migrations não sofrem rollback automático.
 

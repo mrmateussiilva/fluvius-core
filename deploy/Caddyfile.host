@@ -19,14 +19,7 @@ fluvius.finderbit.com.br {
 	@privateStorage path /storage/*
 	respond @privateStorage 404
 
-	@backend path /api/* /health /health/* /ws
-	handle @backend {
-		reverse_proxy 127.0.0.1:18000
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:18080
-	}
+	import /opt/apps/fluvius-core/.deploy-state/active-upstreams.caddy
 }
 
 evolution.finderbit.com.br {

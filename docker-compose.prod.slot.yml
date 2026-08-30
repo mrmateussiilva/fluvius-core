@@ -1,7 +1,6 @@
 x-api-environment: &api-environment
   ENVIRONMENT: production
   HOME: /home/fluvius
-  DEPLOYMENT_SLOT: ${DEPLOYMENT_SLOT:-legacy}
   DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?configure POSTGRES_DB}
   REDIS_URL: redis://:${REDIS_PASSWORD:?configure REDIS_PASSWORD}@redis:6379/0
   SECRET_KEY: ${SECRET_KEY:?configure SECRET_KEY}
@@ -28,69 +27,9 @@ x-service-defaults: &service-defaults
       max-file: "5"
 
 services:
-  postgres:
-    <<: *service-defaults
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:?configure POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER:?configure POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}
-    volumes:
-      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/postgres:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-evolution-databases.sql:ro
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-    shm_size: 256mb
-    mem_limit: 1792m
-    cpus: 2
-    pids_limit: 300
-    networks:
-      - backend
-
-  redis:
-    <<: *service-defaults
-    image: redis:7-alpine
-    command:
-      [
-        "redis-server",
-        "--appendonly",
-        "yes",
-        "--requirepass",
-        "${REDIS_PASSWORD:?configure REDIS_PASSWORD}",
-        "--maxmemory",
-        "768mb",
-        "--maxmemory-policy",
-        "noeviction",
-      ]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:?configure REDIS_PASSWORD}
-    volumes:
-      - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/redis:/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 10
-    mem_limit: 896m
-    cpus: 0.5
-    pids_limit: 100
-    networks:
-      - backend
-
   api:
     <<: *service-defaults
+    image: fluvius-core-api-${FLUVIUS_SLOT:-blue}
     build: ./api
     user: "10001:10001"
     command:
@@ -106,10 +45,11 @@ services:
     environment:
       <<: *api-environment
       UVICORN_WORKERS: ${UVICORN_WORKERS:-4}
+      DEPLOYMENT_SLOT: ${FLUVIUS_SLOT:-blue}
     volumes:
       - ${FLUVIUS_DATA_DIR:-/srv/fluvius}/media:/app/storage
     ports:
-      - "127.0.0.1:${FLUVIUS_API_PORT:-18000}:8000"
+      - "127.0.0.1:${FLUVIUS_SLOT_API_PORT:-18100}:8000"
     healthcheck:
       test:
         [
@@ -122,11 +62,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 40s
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     mem_limit: 2048m
     cpus: 3
     pids_limit: 400
@@ -136,6 +71,7 @@ services:
 
   worker:
     <<: *service-defaults
+    image: fluvius-core-api-${FLUVIUS_SLOT:-blue}
     build: ./api
     user: "10001:10001"
     command:
@@ -160,11 +96,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     mem_limit: 384m
     cpus: 0.75
     pids_limit: 200
@@ -173,6 +104,7 @@ services:
 
   delivery-worker:
     <<: *service-defaults
+    image: fluvius-core-api-${FLUVIUS_SLOT:-blue}
     build: ./api
     user: "10001:10001"
     command:
@@ -199,11 +131,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     mem_limit: 768m
     cpus: 1
     pids_limit: 200
@@ -212,6 +139,7 @@ services:
 
   webhook-worker:
     <<: *service-defaults
+    image: fluvius-core-api-${FLUVIUS_SLOT:-blue}
     build: ./api
     user: "10001:10001"
     command:
@@ -238,57 +166,20 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     mem_limit: 384m
     cpus: 0.75
     pids_limit: 200
     networks:
       - backend
 
-  evolution-go:
-    <<: *service-defaults
-    build:
-      context: .
-      dockerfile: api/app/providers/evolution_go_gateway/Dockerfile
-      args:
-        EVOLUTION_GO_SOURCE_REF: ${EVOLUTION_GO_SOURCE_REF:-9337afc47e10b86cc896a6f432240e40fee95dd1}
-    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-edit-media-fix.2}
-    environment:
-      SERVER_PORT: 8080
-      CLIENT_NAME: fluvius-core
-      GLOBAL_API_KEY: ${EVOLUTION_GO_GLOBAL_API_KEY:?configure EVOLUTION_GO_GLOBAL_API_KEY}
-      POSTGRES_AUTH_DB: postgresql://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/evogo_auth?sslmode=disable
-      POSTGRES_USERS_DB: postgresql://${POSTGRES_USER:?configure POSTGRES_USER}:${POSTGRES_PASSWORD:?configure POSTGRES_PASSWORD}@postgres:5432/evogo_users?sslmode=disable
-      DATABASE_SAVE_MESSAGES: "false"
-      CONNECT_ON_STARTUP: "true"
-      WEBHOOK_FILES: "true"
-      EVOLUTION_OPERATOR_EMAIL: ${EVOLUTION_OPERATOR_EMAIL:-}
-      WADEBUG: INFO
-      LOGTYPE: console
-    expose:
-      - "8080"
-    ports:
-      - "127.0.0.1:${EVOLUTION_GO_MANAGER_PORT:-18081}:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    mem_limit: 1792m
-    cpus: 2
-    pids_limit: 500
-    networks:
-      - backend
-
   web:
     <<: *service-defaults
+    image: fluvius-core-web-${FLUVIUS_SLOT:-blue}
     build:
       context: .
       dockerfile: web/Dockerfile.prod
     ports:
-      - "127.0.0.1:${FLUVIUS_WEB_PORT:-18080}:8080"
+      - "127.0.0.1:${FLUVIUS_SLOT_WEB_PORT:-18180}:8080"
     healthcheck:
       test:
         [
@@ -313,6 +204,8 @@ services:
 
 networks:
   frontend:
-    name: ${FLUVIUS_FRONTEND_NETWORK:-fluvius-core-prod_frontend}
+    external: true
+    name: ${FLUVIUS_FRONTEND_NETWORK:?configure FLUVIUS_FRONTEND_NETWORK}
   backend:
-    name: ${FLUVIUS_BACKEND_NETWORK:-fluvius-core-prod_backend}
+    external: true
+    name: ${FLUVIUS_BACKEND_NETWORK:?configure FLUVIUS_BACKEND_NETWORK}
