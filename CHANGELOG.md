@@ -3,6 +3,32 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.62] — 2026-08-31
+
+Foco: **personalização segura do posto de atendimento**.
+
+### Added
+
+- Nova área **Minha conta** para qualquer usuário alterar o próprio nome de
+  exibição e trocar a senha mediante confirmação da senha atual.
+- Preferências locais de tema e som de novas mensagens, com teste de áudio e
+  persistência somente no navegador.
+- Endpoint autenticado `PATCH /api/v1/auth/me`, com validação, hash da nova
+  senha e auditoria sem valores sensíveis.
+- Sistema visual reutilizável em `.interface-design/system.md`.
+
+### Changed
+
+- O avatar no desktop e o menu mobile passam a oferecer acesso direto às
+  configurações da conta.
+- O aviso de reconexão participa do fluxo no mobile e deixa de cobrir títulos
+  ou controles.
+
+### Validation
+
+- 180 testes de API e integração aprovados com PostgreSQL.
+- Build Vue/TypeScript, Alembic sem drift e configurações Compose aprovados.
+
 ## [0.0.59] — 2026-08-28
 
 Foco: **execução do Agente de IA nas conversas reais**.
