@@ -384,17 +384,19 @@ verify_networks
 
 slot_compose "$target_slot" build api web worker delivery-worker webhook-worker
 slot_compose "$target_slot" run --rm --no-deps api alembic upgrade head </dev/null
-slot_compose "$target_slot" up -d --no-deps --wait --wait-timeout 300 api web
-wait_for_slot "$target_slot" "$target_api_port"
-wait_for_url "http://127.0.0.1:$target_api_port/health/ready" "API do slot $target_slot"
-wait_for_url "http://127.0.0.1:$target_web_port/" "Frontend do slot $target_slot"
 
-# Pause the old background fleet before the one-off job. The durable queues keep
-# accepting work while this releases enough PostgreSQL connections for rollout.
+# Pause the old background fleet before booting the candidate API. The durable
+# queues keep accepting work while this releases PostgreSQL connections for the
+# overlapping API processes and the subsequent one-off job.
 if [[ "$old_app_available" == true ]]; then
   old_workers_stopped=true
   stop_slot_services "$active_slot" worker delivery-worker webhook-worker
 fi
+
+slot_compose "$target_slot" up -d --no-deps --wait --wait-timeout 300 api web
+wait_for_slot "$target_slot" "$target_api_port"
+wait_for_url "http://127.0.0.1:$target_api_port/health/ready" "API do slot $target_slot"
+wait_for_url "http://127.0.0.1:$target_web_port/" "Frontend do slot $target_slot"
 
 # Existing Evolution Go instances may still contain the legacy api:8000 URL.
 # Reapply the public URL before switching traffic so no channel loses webhooks.

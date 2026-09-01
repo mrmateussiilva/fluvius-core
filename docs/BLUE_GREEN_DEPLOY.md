@@ -69,9 +69,9 @@ todos os canais antes da troca de tráfego.
 3. garante PostgreSQL, Redis, Evolution Go e as redes compartilhadas;
 4. constrói somente o slot inativo;
 5. executa migrations compatíveis;
-6. sobe API e frontend do slot inativo;
-7. verifica `/health/ready`, `/health/version` e os serviços locais;
-8. pausa os workers antigos para liberar conexões de banco;
+6. pausa os workers antigos para liberar conexões de banco;
+7. sobe API e frontend do slot inativo;
+8. verifica `/health/ready`, `/health/version` e os serviços locais;
 9. reaplica webhooks do Evolution Go;
 10. atualiza os upstreams do Caddy e faz reload gracioso;
 11. valida o domínio público e a identidade do slot;
@@ -87,9 +87,10 @@ protegido por autenticação, pois é usado pelo deploy localmente e pelo Caddy.
 
 ## Workers e migrations
 
-Os workers antigos são pausados antes do job de reconfiguração para manter o uso
-de conexões dentro do limite do PostgreSQL. Nesse intervalo curto nenhuma frota
-processa as filas, mas inbox e outbox persistentes continuam aceitando trabalho.
+Os workers antigos são pausados antes de iniciar a API candidata para manter o
+uso de conexões dentro do limite do PostgreSQL durante a sobreposição dos slots
+e o job de reconfiguração. Nesse intervalo curto nenhuma frota processa as filas,
+mas inbox e outbox persistentes continuam aceitando trabalho.
 Se o rollout falhar, os workers antigos são reiniciados; se concluir, apenas a
 frota nova assume as filas. Os jobs continuam protegidos pelas garantias de
 idempotência do Fluvius.
