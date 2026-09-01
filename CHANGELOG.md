@@ -3,6 +3,23 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.63] — 2026-08-31
+
+Foco: **publicação corretiva da personalização do posto de atendimento**.
+
+### Fixed
+
+- O rollout blue/green limpa candidatos abandonados e pausa os workers antigos
+  antes do job de reconfiguração, mantendo o uso de conexões dentro do limite do
+  PostgreSQL.
+- Falhas antes ou depois da troca de tráfego restauram o slot e os workers
+  anteriores sem tratar uma implantação incompleta como sucesso.
+
+### Validation
+
+- Sintaxe do script de produção, compilação da API e configurações Compose de
+  desenvolvimento, produção e blue/green aprovadas.
+
 ## [0.0.62] — 2026-08-31
 
 Foco: **personalização segura do posto de atendimento**.
