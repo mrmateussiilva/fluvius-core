@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, SecretStr, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -35,6 +35,30 @@ class CurrentUserResponse(BaseModel):
     name: str
     role: str
     is_platform_admin: bool
+
+
+class CurrentUserUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    current_password: SecretStr | None = None
+    new_password: SecretStr | None = Field(default=None, min_length=8, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        if len(normalized) < 2:
+            raise ValueError("Nome deve ter ao menos 2 caracteres")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_change(self) -> "CurrentUserUpdate":
+        if self.name is None and self.new_password is None:
+            raise ValueError("Informe ao menos uma alteração")
+        if self.new_password is not None and self.current_password is None:
+            raise ValueError("Informe a senha atual para definir uma nova senha")
+        return self
 
 
 class TenantSwitchRequest(BaseModel):

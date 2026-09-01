@@ -1,3 +1,5 @@
+import { isMessageSoundEnabled } from '../composables/useInterfacePreferences'
+
 let audioCtx: AudioContext | null = null
 
 function getAudioContext(): AudioContext | null {
@@ -17,8 +19,9 @@ function getAudioContext(): AudioContext | null {
   return audioCtx
 }
 
-export function playIncomingMessageSound(): void {
+export function playIncomingMessageSound(force = false): void {
   try {
+    if (!force && !isMessageSoundEnabled()) return
     const ctx = getAudioContext()
     if (!ctx) return
 

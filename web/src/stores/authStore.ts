@@ -4,7 +4,9 @@ import {
   login,
   logout,
   switchTenant as switchTenantRequest,
+  updateMe,
 } from '../api/auth'
+import type { UpdateCurrentUserPayload } from '../api/auth'
 import type { CurrentUser } from '../api/types'
 
 export const useAuthStore = defineStore('auth', {
@@ -27,6 +29,10 @@ export const useAuthStore = defineStore('auth', {
     },
     async refresh() {
       this.user = await getMe()
+    },
+    async updateProfile(payload: UpdateCurrentUserPayload) {
+      this.user = await updateMe(payload)
+      return this.user
     },
     async switchTenant(tenantId: string) {
       await switchTenantRequest(tenantId)

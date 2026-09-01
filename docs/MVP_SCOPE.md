@@ -2,7 +2,7 @@
 
 ## Entra no MVP
 
-- Autenticação simples e gestão de administradores/atendentes associados a tenants. Administradores criam, atualizam senha, definem papel, atribuem canais e desativam usuários da própria empresa.
+- Autenticação simples e gestão de administradores/atendentes associados a tenants. Administradores criam, atualizam senha, definem papel, atribuem canais e desativam usuários da própria empresa; cada pessoa pode atualizar o próprio nome, senha e preferências locais de interface.
 - Administração global mínima da instalação: criar, listar, inspecionar,
   ativar/suspender empresas e entrar para suporte com auditoria, sem billing ou
   métricas comerciais. A criação entrega um link de login próprio da empresa e

@@ -6,6 +6,12 @@ export interface TenantLogin {
   slug: string
 }
 
+export interface UpdateCurrentUserPayload {
+  name?: string
+  current_password?: string
+  new_password?: string
+}
+
 export async function login(
   email: string,
   password: string,
@@ -25,6 +31,12 @@ export const getTenantLogin = (tenantSlug: string) =>
   http<TenantLogin>(`/api/v1/auth/tenant-login/${tenantSlug}`)
 
 export const getMe = () => http<CurrentUser>('/api/v1/auth/me')
+
+export const updateMe = (payload: UpdateCurrentUserPayload) =>
+  http<CurrentUser>('/api/v1/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
 
 export const listAvailableTenants = () =>
   http<AvailableTenant[]>('/api/v1/auth/tenants')

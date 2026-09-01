@@ -154,6 +154,7 @@ O navegador fala exclusivamente com o Fluvius Core; a API valida tenant, canal e
   não envia diretamente ao provider, não opera em grupos e desativa o bot ao
   solicitar transbordo humano.
 - Administradores gerenciam a equipe da própria empresa em **Usuários**: criam acessos individuais, definem administrador/atendente, atribuem os canais permitidos, redefinem senha e desativam memberships sem atravessar tenants. Conversas e quadro podem ser filtrados por canal; a visão consolidada é exclusiva de administradores.
+- Cada pessoa acessa **Minha conta** para atualizar o próprio nome de exibição e trocar a senha mediante confirmação da senha atual. Tema e som de novas mensagens ficam salvos somente no navegador usado.
 - O administrador da plataforma usa **Administração Fluvius** para criar,
   inspecionar, ativar ou suspender empresas. Cada empresa recebe um link
   `/login/{slug}` que restringe a autenticação àquela membership; na criação, o

@@ -20,10 +20,13 @@ export async function http<T>(path: string, options: RequestInit = {}): Promise<
   })
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
+    const isSessionRestore =
+      path === '/api/v1/auth/me' &&
+      (!options.method || options.method.toUpperCase() === 'GET')
     if (
       response.status === 401 &&
       path !== '/api/v1/auth/login' &&
-      path !== '/api/v1/auth/me'
+      !isSessionRestore
     ) {
       window.location.replace('/login?session=expired')
     }

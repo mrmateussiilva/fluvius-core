@@ -7,6 +7,7 @@ import ContactsPage from './pages/ContactsPage.vue'
 import ConversationsPage from './pages/ConversationsPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import OperationalHealthPage from './pages/OperationalHealthPage.vue'
+import AccountSettingsPage from './pages/AccountSettingsPage.vue'
 import PlatformTenantsPage from './pages/PlatformTenantsPage.vue'
 import QuickRepliesPage from './pages/QuickRepliesPage.vue'
 import TeamBoardPage from './pages/TeamBoardPage.vue'
@@ -28,6 +29,7 @@ export const router = createRouter({
       component: AppLayout,
       children: [
         { path: 'conversations', component: ConversationsPage },
+        { path: 'account', component: AccountSettingsPage },
         { path: 'contacts', component: ContactsPage },
         {
           path: 'team-board',

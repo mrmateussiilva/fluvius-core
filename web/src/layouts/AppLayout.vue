@@ -6,6 +6,7 @@ import {
   Building2,
   Check,
   ChevronRight,
+  CircleUserRound,
   Columns3,
   ContactRound,
   DatabaseBackup,
@@ -292,12 +293,14 @@ function navigateFromMobile(path: string) {
       >
         v{{ APP_VERSION }}
       </div>
-      <div
-        class="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10"
-        :title="auth.user?.name || 'Usuário'"
+      <RouterLink
+        class="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10 transition hover:bg-emerald-600 hover:ring-white/25"
+        active-class="ring-white/40"
+        to="/app/account"
+        :title="`Minha conta · ${auth.user?.name || 'Usuário'}`"
       >
         {{ userInitial }}
-      </div>
+      </RouterLink>
       <button
         class="mt-2 rounded-lg p-2.5 transition hover:bg-white/10 hover:text-white"
         title="Sair"
@@ -320,7 +323,7 @@ function navigateFromMobile(path: string) {
       >
         <div
           v-if="!realtime.connected && auth.user && !realtime.manualDisconnect"
-          class="pointer-events-none fixed left-1/2 top-2 z-50 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-amber-500/95 px-3.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-sm dark:bg-amber-600/95"
+          class="pointer-events-none relative z-50 mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-amber-500/95 px-3.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-sm dark:bg-amber-600/95 md:fixed md:left-1/2 md:top-2 md:mt-0 md:-translate-x-1/2"
         >
           <RefreshCw class="h-3 w-3 animate-spin" />
           <span>Reconectando ao servidor...</span>
@@ -469,6 +472,22 @@ function navigateFromMobile(path: string) {
               </button>
             </div>
           </div>
+
+          <button
+            class="flex w-full items-center justify-between rounded-xl p-3 text-left transition hover:bg-panel-muted"
+            @click="navigateFromMobile('/app/account')"
+          >
+            <div class="flex items-center gap-3">
+              <div class="grid h-9 w-9 place-items-center rounded-lg bg-fluvius-50 text-fluvius-700">
+                <CircleUserRound class="h-5 w-5" />
+              </div>
+              <div>
+                <p class="text-sm font-medium text-ink">Minha conta</p>
+                <p class="text-xs text-ink-muted">Perfil, senha e preferências</p>
+              </div>
+            </div>
+            <ChevronRight class="h-4 w-4 text-ink-faint" />
+          </button>
 
           <!-- Quick Replies (for admin / agent) -->
           <button
