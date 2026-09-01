@@ -165,7 +165,11 @@ def ensure_evolution_channel_credential(
 ) -> ProviderCredential | None:
     if channel.provider != ChannelProvider.EVOLUTION_GO:
         return None
-    credential = get_channel_credential(db, channel, for_update=True)
+    # Provider resolution happens on every webhook and must remain read-only when
+    # the credential is already persisted. Locking the row here serializes all
+    # webhooks for a channel and can deadlock an async request while another one
+    # is staging media outside the event loop.
+    credential = get_channel_credential(db, channel)
     if credential is not None:
         return credential
     legacy_secret = legacy_evolution_api_key(channel.provider_config)
