@@ -71,21 +71,28 @@ todos os canais antes da troca de tráfego.
 5. executa migrations compatíveis;
 6. sobe API e frontend do slot inativo;
 7. verifica `/health/ready`, `/health/version` e os serviços locais;
-8. reaplica webhooks do Evolution Go;
-9. atualiza os upstreams do Caddy e faz reload gracioso;
-10. valida o domínio público e a identidade do slot;
-11. sobe os workers novos, drena os antigos e registra o slot ativo.
+8. pausa os workers antigos para liberar conexões de banco;
+9. reaplica webhooks do Evolution Go;
+10. atualiza os upstreams do Caddy e faz reload gracioso;
+11. valida o domínio público e a identidade do slot;
+12. sobe os workers novos, drena API e frontend antigos e registra o slot ativo.
 
 Se a troca ou a validação pública falhar, o script tenta restaurar o upstream
-anterior. O slot antigo só é parado depois que o novo worker estiver saudável.
+anterior. Antes de preparar um candidato, ele também remove containers que uma
+tentativa anterior possa ter deixado no slot inativo. O slot antigo só perde API
+e frontend depois que os novos workers estiverem saudáveis.
 
 O endpoint `/health/version` retorna `slot` e `version` e nunca deve ser
 protegido por autenticação, pois é usado pelo deploy localmente e pelo Caddy.
 
 ## Workers e migrations
 
-Durante a troca, apenas a frota de workers do novo slot deve processar as filas.
-Os jobs continuam protegidos pelas garantias de idempotência do Fluvius.
+Os workers antigos são pausados antes do job de reconfiguração para manter o uso
+de conexões dentro do limite do PostgreSQL. Nesse intervalo curto nenhuma frota
+processa as filas, mas inbox e outbox persistentes continuam aceitando trabalho.
+Se o rollout falhar, os workers antigos são reiniciados; se concluir, apenas a
+frota nova assume as filas. Os jobs continuam protegidos pelas garantias de
+idempotência do Fluvius.
 
 Migrations devem seguir expand/contract: primeiro adicionar estrutura compatível
 com a versão antiga, depois publicar o código, e somente em release posterior

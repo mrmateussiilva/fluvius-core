@@ -351,6 +351,30 @@ if slot_has_running_app "$active_slot"; then
   old_app_available=true
 fi
 
+traffic_switched=false
+upstreams_updated=false
+old_workers_stopped=false
+
+rollback_on_error() {
+  local status=$?
+  trap - ERR
+  set +e
+  if [[ "$traffic_switched" == true || "$upstreams_updated" == true ]]; then
+    rollback_traffic "$active_slot" "$old_api_port" "$old_web_port"
+  else
+    stop_slot_services "$target_slot" api web worker delivery-worker webhook-worker || true
+    if [[ "$old_workers_stopped" == true && "$old_app_available" == true ]]; then
+      start_slot_app "$active_slot" || true
+    fi
+  fi
+  exit "$status"
+}
+
+# A failed rollout may leave the inactive slot consuming database connections.
+# Clean it before building the next candidate while the active slot keeps serving.
+stop_slot_services "$target_slot" api web worker delivery-worker webhook-worker || true
+trap rollback_on_error ERR
+
 ensure_caddy_ready
 "${LEGACY_COMPOSE[@]}" config --quiet
 slot_compose "$target_slot" config --quiet
@@ -365,25 +389,21 @@ wait_for_slot "$target_slot" "$target_api_port"
 wait_for_url "http://127.0.0.1:$target_api_port/health/ready" "API do slot $target_slot"
 wait_for_url "http://127.0.0.1:$target_web_port/" "Frontend do slot $target_slot"
 
+# Pause the old background fleet before the one-off job. The durable queues keep
+# accepting work while this releases enough PostgreSQL connections for rollout.
+if [[ "$old_app_available" == true ]]; then
+  old_workers_stopped=true
+  stop_slot_services "$active_slot" worker delivery-worker webhook-worker
+fi
+
 # Existing Evolution Go instances may still contain the legacy api:8000 URL.
 # Reapply the public URL before switching traffic so no channel loses webhooks.
 slot_compose "$target_slot" run --rm --no-deps api python -m app.jobs.reconfigure_webhooks </dev/null
 
 write_upstreams "$target_api_port" "$target_web_port"
-if ! reload_caddy; then
-  write_upstreams "$old_api_port" "$old_web_port"
-  exit 1
-fi
+upstreams_updated=true
+reload_caddy
 traffic_switched=true
-
-rollback_on_error() {
-  local status=$?
-  if [[ "$traffic_switched" == true ]]; then
-    rollback_traffic "$active_slot" "$old_api_port" "$old_web_port"
-  fi
-  exit "$status"
-}
-trap rollback_on_error ERR
 
 wait_for_slot "$target_slot" "$target_api_port"
 wait_for_url "https://$APP_DOMAIN/health/ready" "Domínio público após a troca"
@@ -397,15 +417,16 @@ slot_compose "$target_slot" up -d --no-deps --wait --wait-timeout 300 \
   worker delivery-worker webhook-worker
 verify_slot_services "$target_slot"
 
-# After the new workers are healthy, only the old application containers remain
-# during the short drain window so existing HTTP/WebSocket requests can finish.
+# The old workers are already stopped. Keep only the old HTTP/WebSocket services
+# during the short drain window so in-flight requests can finish.
 if [[ "$old_app_available" == true ]]; then
-  stop_slot_services "$active_slot" worker delivery-worker webhook-worker
   sleep "$DRAIN_SECONDS"
   stop_slot_services "$active_slot" api web
 fi
 
 traffic_switched=false
+upstreams_updated=false
+old_workers_stopped=false
 trap - ERR
 printf '%s\n' "$target_slot" > "$ACTIVE_SLOT_FILE"
 printf '%s\n' "$VERSION" > "$STATE_DIR/last-successful-tag"
