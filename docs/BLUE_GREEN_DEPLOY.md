@@ -70,9 +70,9 @@ todos os canais antes da troca de tráfego.
 4. constrói somente o slot inativo;
 5. executa migrations compatíveis;
 6. pausa os workers antigos para liberar conexões de banco;
-7. sobe API e frontend do slot inativo;
-8. verifica `/health/ready`, `/health/version` e os serviços locais;
-9. reaplica webhooks do Evolution Go;
+7. reaplica webhooks do Evolution Go antes da sobreposição das APIs;
+8. sobe API e frontend do slot inativo;
+9. verifica `/health/ready`, `/health/version` e os serviços locais;
 10. atualiza os upstreams do Caddy e faz reload gracioso;
 11. valida o domínio público e a identidade do slot;
 12. sobe os workers novos, drena API e frontend antigos e registra o slot ativo.

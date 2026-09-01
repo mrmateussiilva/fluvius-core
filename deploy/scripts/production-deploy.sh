@@ -385,22 +385,23 @@ verify_networks
 slot_compose "$target_slot" build api web worker delivery-worker webhook-worker
 slot_compose "$target_slot" run --rm --no-deps api alembic upgrade head </dev/null
 
-# Pause the old background fleet before booting the candidate API. The durable
-# queues keep accepting work while this releases PostgreSQL connections for the
-# overlapping API processes and the subsequent one-off job.
+# Pause the old background fleet before the one-off job and candidate API. The
+# durable queues keep accepting work while this releases PostgreSQL connections
+# for each stage without adding a third application pool during API overlap.
 if [[ "$old_app_available" == true ]]; then
   old_workers_stopped=true
   stop_slot_services "$active_slot" worker delivery-worker webhook-worker
 fi
 
+# Existing Evolution Go instances may still contain the legacy api:8000 URL.
+# Reapply the public URL before booting the overlapping candidate API so this
+# one-off process does not compete with both API connection pools.
+slot_compose "$target_slot" run --rm --no-deps api python -m app.jobs.reconfigure_webhooks </dev/null
+
 slot_compose "$target_slot" up -d --no-deps --wait --wait-timeout 300 api web
 wait_for_slot "$target_slot" "$target_api_port"
 wait_for_url "http://127.0.0.1:$target_api_port/health/ready" "API do slot $target_slot"
 wait_for_url "http://127.0.0.1:$target_web_port/" "Frontend do slot $target_slot"
-
-# Existing Evolution Go instances may still contain the legacy api:8000 URL.
-# Reapply the public URL before switching traffic so no channel loses webhooks.
-slot_compose "$target_slot" run --rm --no-deps api python -m app.jobs.reconfigure_webhooks </dev/null
 
 write_upstreams "$target_api_port" "$target_web_port"
 upstreams_updated=true
