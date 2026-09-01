@@ -3,6 +3,33 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.66] — 2026-09-01
+
+Foco: **recuperação e estabilidade da integração com Evolution Go**.
+
+### Added
+
+- Contrato executável das rotas Evolution Go 0.7.2, snapshot curado do
+  Swagger, certificador sanitizado e diagnóstico administrativo por canal.
+- Indicadores de versão do gateway, último envio confirmado e eventos fora do
+  contrato na saúde operacional tenant-scoped.
+
+### Fixed
+
+- Canais legados copiam a credencial resolvida para o cofre cifrado na primeira
+  operação autenticada, eliminando a dependência contínua da variável legada.
+- A imagem `0.7.2-connection-pool-fix.3` fecha o `sqlstore.Container`
+  substituído em reconexões, impedindo o acúmulo de conexões ociosas em
+  `evogo_auth` e a saturação do PostgreSQL.
+- Falhas HTTP, de rede e respostas inválidas na consulta de status retornam
+  erros seguros e nunca são tratadas como conexão bem-sucedida.
+
+### Validation
+
+- 188 testes de API e integração aprovados com PostgreSQL e Alembic sem drift.
+- Pacotes Go afetados, imagem Evolution Go completa, build Vue/TypeScript,
+  configurações Compose e scripts de deploy aprovados.
+
 ## [0.0.65] — 2026-08-31
 
 Foco: **conclusão segura do rollout blue/green**.
