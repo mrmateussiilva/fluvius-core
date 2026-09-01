@@ -3,6 +3,23 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.65] — 2026-08-31
+
+Foco: **conclusão segura do rollout blue/green**.
+
+### Fixed
+
+- O job de reconfiguração de webhooks agora roda após a pausa dos workers e
+  antes da API candidata, evitando disputar conexões com os pools dos dois
+  slots simultaneamente.
+- A API candidata permanece validada antes da troca de tráfego, preservando o
+  rollback automático e a continuidade do slot ativo.
+
+### Validation
+
+- Sintaxe Bash, compilação da API e configurações Compose aprovadas; a ordem foi
+  ajustada com base no log completo do rollout anterior.
+
 ## [0.0.64] — 2026-08-31
 
 Foco: **correção do boot do slot blue/green**.
