@@ -3,6 +3,23 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [0.0.64] — 2026-08-31
+
+Foco: **correção do boot do slot blue/green**.
+
+### Fixed
+
+- Os workers do slot ativo agora liberam conexões antes do início da API
+  candidata, evitando que a verificação de saúde expire durante a sobreposição
+  temporária das duas APIs.
+- Em caso de falha no boot, o candidato é parado e a frota anterior volta a
+  processar as filas persistentes.
+
+### Validation
+
+- Sintaxe Bash, compilação da API e configurações Compose aprovadas após o
+  ajuste da ordem operacional.
+
 ## [0.0.63] — 2026-08-31
 
 Foco: **publicação corretiva da personalização do posto de atendimento**.
