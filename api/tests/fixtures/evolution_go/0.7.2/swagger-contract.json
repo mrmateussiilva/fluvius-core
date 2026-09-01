@@ -1,0 +1,24 @@
+{
+  "source": "https://github.com/evolution-foundation/evolution-go/blob/9337afc47e10b86cc896a6f432240e40fee95dd1/docs/swagger.json",
+  "source_ref": "9337afc47e10b86cc896a6f432240e40fee95dd1",
+  "version": "0.7.2",
+  "routes": {
+    "DELETE /instance/delete/{instance_id}": [],
+    "GET /group/list": [],
+    "GET /group/myall": [],
+    "GET /instance/qr": [],
+    "GET /instance/status": [],
+    "GET /user/contacts": [],
+    "POST /chat/history-sync": ["count", "messageInfo"],
+    "POST /group/info": ["groupJid"],
+    "POST /instance/connect": ["subscribe", "webhookUrl"],
+    "POST /instance/create": ["instanceId", "name", "token"],
+    "POST /send/contact": ["number", "vcard"],
+    "POST /send/media": ["number", "type", "url"],
+    "POST /send/sticker": ["number", "sticker"],
+    "POST /send/text": ["number", "text"],
+    "POST /user/avatar": ["number"],
+    "POST /user/check": ["number"],
+    "POST /user/info": ["number"]
+  }
+}

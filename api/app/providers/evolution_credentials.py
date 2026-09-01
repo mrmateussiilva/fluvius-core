@@ -32,12 +32,8 @@ def _credential_cipher() -> Fernet:
     # existing installations operational without introducing per-channel env vars.
     master_key = settings.provider_credentials_key or settings.secret_key
     if not master_key:
-        raise ProviderConfigurationError(
-            "A chave de proteção das credenciais não está configurada"
-        )
-    derived_key = sha256(
-        f"fluvius-provider-credentials:v1:{master_key}".encode()
-    ).digest()
+        raise ProviderConfigurationError("A chave de proteção das credenciais não está configurada")
+    derived_key = sha256(f"fluvius-provider-credentials:v1:{master_key}".encode()).digest()
     return Fernet(base64.urlsafe_b64encode(derived_key))
 
 
@@ -76,6 +72,8 @@ def store_channel_credential(
     db: Session,
     channel: WhatsAppChannel,
     secret: str,
+    *,
+    provisioning_status: str = "pending",
 ) -> ProviderCredential:
     fingerprint = secret_fingerprint(secret)
     credential = ProviderCredential(
@@ -84,7 +82,7 @@ def store_channel_credential(
         provider=str(channel.provider),
         encrypted_secret=encrypt_provider_secret(secret),
         secret_fingerprint=fingerprint,
-        provisioning_status="pending",
+        provisioning_status=provisioning_status,
     )
     channel.credential_fingerprint = fingerprint
     db.add(credential)
@@ -120,7 +118,7 @@ def evolution_api_key(
     channel: WhatsAppChannel | None = None,
 ) -> str:
     if db is not None and channel is not None:
-        credential = get_channel_credential(db, channel)
+        credential = ensure_evolution_channel_credential(db, channel)
         if credential is not None:
             return decrypt_provider_secret(credential.encrypted_secret)
     return legacy_evolution_api_key(provider_config)
@@ -132,9 +130,7 @@ def evolution_credential_fingerprint(
     db: Session | None = None,
     channel: WhatsAppChannel | None = None,
 ) -> str:
-    return secret_fingerprint(
-        evolution_api_key(provider_config, db=db, channel=channel)
-    )
+    return secret_fingerprint(evolution_api_key(provider_config, db=db, channel=channel))
 
 
 def claim_evolution_credential(
@@ -143,10 +139,13 @@ def claim_evolution_credential(
 ) -> None:
     if channel.provider != ChannelProvider.EVOLUTION_GO:
         return
-    fingerprint = evolution_credential_fingerprint(
-        channel.provider_config,
-        db=db,
-        channel=channel,
+    credential = get_channel_credential(db, channel)
+    fingerprint = (
+        credential.secret_fingerprint
+        if credential is not None
+        else evolution_credential_fingerprint(
+            channel.provider_config,
+        )
     )
     if channel.credential_fingerprint == fingerprint:
         return
@@ -158,3 +157,21 @@ def claim_evolution_credential(
         raise ProviderConfigurationError(
             "Esta instância Evolution já está associada a outro canal"
         ) from exc
+
+
+def ensure_evolution_channel_credential(
+    db: Session,
+    channel: WhatsAppChannel,
+) -> ProviderCredential | None:
+    if channel.provider != ChannelProvider.EVOLUTION_GO:
+        return None
+    credential = get_channel_credential(db, channel, for_update=True)
+    if credential is not None:
+        return credential
+    legacy_secret = legacy_evolution_api_key(channel.provider_config)
+    return store_channel_credential(
+        db,
+        channel,
+        legacy_secret,
+        provisioning_status="active",
+    )

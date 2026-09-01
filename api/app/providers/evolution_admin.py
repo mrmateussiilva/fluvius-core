@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.config import settings
+from app.providers.evolution_contract import EvolutionRoute
 from app.providers.evolution_credentials import ProviderConfigurationError
 from app.providers.evolution_http import get_evolution_http_client
 
@@ -32,9 +33,7 @@ class EvolutionGoAdminClient:
     ) -> None:
         self.base_url = (base_url or settings.evolution_go_base_url).rstrip("/")
         self.global_api_key = (
-            global_api_key
-            if global_api_key is not None
-            else settings.evolution_go_global_api_key
+            global_api_key if global_api_key is not None else settings.evolution_go_global_api_key
         )
         self.transport = transport
 
@@ -54,7 +53,7 @@ class EvolutionGoAdminClient:
         client = get_evolution_http_client(self.base_url, self.transport)
         try:
             response = await client.post(
-                "/instance/create",
+                EvolutionRoute.INSTANCE_CREATE,
                 headers=self.headers,
                 timeout=httpx.Timeout(20.0),
                 json={
@@ -95,7 +94,7 @@ class EvolutionGoAdminClient:
         try:
             client = get_evolution_http_client(self.base_url, self.transport)
             response = await client.delete(
-                f"/instance/delete/{instance_id}",
+                EvolutionRoute.INSTANCE_DELETE.value.format(instance_id=instance_id),
                 headers=self.headers,
                 timeout=httpx.Timeout(20.0),
             )
@@ -103,5 +102,3 @@ class EvolutionGoAdminClient:
                 return
         except Exception:
             pass
-
-

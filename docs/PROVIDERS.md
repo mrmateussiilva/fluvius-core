@@ -23,11 +23,11 @@ Os DTOs normalizam confirmação de envio, status do canal, QR/pairing code e me
 
 A mesma credencial não pode ser associada a canais diferentes. O banco guarda o ciphertext autenticado e o fingerprint SHA-256, aplicando unicidade por provider. Toda leitura de `provider_credentials` exige `tenant_id` e `channel_id`. `ChannelResponse` filtra `provider_config` e devolve somente `instance_name`.
 
-`EVOLUTION_GO_INSTANCE_TOKENS` e `EVOLUTION_GO_API_KEY` permanecem como fallback compatível para canais antigos, sem obrigar uma migração imediata. Canais gerenciados não exigem novas variáveis de ambiente nem acesso ao Manager. A chave global continua sendo um segredo único da infraestrutura e deve ser entregue somente à API.
+`EVOLUTION_GO_INSTANCE_TOKENS` e `EVOLUTION_GO_API_KEY` permanecem como fallback compatível para canais antigos, sem obrigar uma migração imediata. Na primeira operação autenticada do canal legado, a API copia o token resolvido para `provider_credentials` com status `active`, eliminando a dependência contínua dessas variáveis para aquele canal. Se o ambiente já tiver perdido o token legado antes dessa cópia, restaure-o uma vez, execute um `/status`, `/connect` ou envio válido e só então remova o fallback. Canais gerenciados não exigem novas variáveis de ambiente nem acesso ao Manager. A chave global continua sendo um segredo único da infraestrutura e deve ser entregue somente à API.
 
 O cadastro recebe um `provisioning_key` gerado pelo navegador e é idempotente dentro do tenant. A instância usa o UUID persistido do canal; em timeout, conflito ou resposta ambígua, a API confirma sua existência com a credencial da instância antes de marcar o provisionamento como `active`. Sem confirmação positiva, o canal fica `failed`/`uncertain`, preservado para nova tentativa, e nunca é apagado automaticamente.
 
-A imagem local padrão é `fluvius/evolution-go:0.7.2-edit-media-fix.2`, compilada pelo Compose a partir do commit oficial 0.7.2 fixado em `EVOLUTION_GO_SOURCE_REF`. Os patches mantidos junto ao provider chamam `DecryptSecretEncryptedMessage` para edições `MESSAGE_EDIT` e fazem o download de documentos recebidos dentro de `DocumentWithCaptionMessage`, formato que o gateway original encaminhava sem `base64`. Isso disponibiliza o texto editado, o ID original e os bytes de documentos envelopados à API; se uma edição não puder ser decifrada ou uma mídia não puder ser baixada, o evento continua registrado com erro seguro. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e exige um registro inicial. Na VPS, o Manager fica vinculado somente ao loopback em `127.0.0.1:18081` e o Caddy o publica com HTTPS em `evolution.finderbit.com.br`; depois da ativação persistida no `evogo_auth`, ele não participa da criação cotidiana de canais.
+A imagem local padrão é `fluvius/evolution-go:0.7.2-connection-pool-fix.3`, compilada pelo Compose a partir do commit oficial 0.7.2 fixado em `EVOLUTION_GO_SOURCE_REF`. Os patches mantidos junto ao provider chamam `DecryptSecretEncryptedMessage` para edições `MESSAGE_EDIT`, fazem o download de documentos recebidos dentro de `DocumentWithCaptionMessage` e fecham o `sqlstore.Container` substituído durante reconexões. O último ajuste impede que tentativas repetidas de reconexão acumulem pools ociosos em `evogo_auth` até esgotar `max_connections` do PostgreSQL. Isso disponibiliza o texto editado, o ID original e os bytes de documentos envelopados à API; se uma edição não puder ser decifrada ou uma mídia não puder ser baixada, o evento continua registrado com erro seguro. O serviço usa os bancos locais `evogo_auth` e `evogo_users`. `EVOLUTION_GO_GLOBAL_API_KEY` é a chave administrativa do container; `EVOLUTION_GO_API_KEY` é o token da instância usado pelo adapter. A ativação/licença do gateway é externa ao Fluvius e exige um registro inicial. Na VPS, o Manager fica vinculado somente ao loopback em `127.0.0.1:18081` e o Caddy o publica com HTTPS em `evolution.finderbit.com.br`; depois da ativação persistida no `evogo_auth`, ele não participa da criação cotidiana de canais.
 
 ## Respostas confirmadas na versão 0.7.2
 
@@ -36,6 +36,20 @@ O status chega no envelope `{"message": "success", "data": {...}}`. Dentro de `d
 Em uma sessão já autenticada, `GET /instance/qr` responde HTTP 400 com `{"error": "session already logged in"}`. Essa resposta específica confirma que não há QR a exibir e preserva o canal como `connected`; qualquer outro HTTP 400 continua sendo tratado como falha.
 
 O token em `EVOLUTION_GO_API_KEY` deve ser o **Token da Instância** mostrado no Manager. Ele não é o nome `Pessoal` e também não é a chave administrativa `EVOLUTION_GO_GLOBAL_API_KEY`.
+
+### Contrato executável e certificação
+
+O contrato certificado da imagem fixada fica em `api/app/providers/evolution_contract.py`, com snapshot curado do Swagger em `api/tests/fixtures/evolution_go/0.7.2/swagger-contract.json`. A suite `api/tests/test_evolution_go_contract.py` valida que as rotas usadas pela API continuam alinhadas à imagem `0.7.2-connection-pool-fix.3` construída a partir do commit oficial `9337afc47e10b86cc896a6f432240e40fee95dd1`.
+
+Para validar um ambiente real sem expor segredos, use:
+
+```bash
+cd api
+.venv/bin/python -m app.providers.evolution_certification
+.venv/bin/python -m app.providers.evolution_certification --allow-send --to 5527999999999 --verify-idempotency --media-url https://exemplo.invalid/arquivo.png
+```
+
+Sem `--allow-send`, o comando faz somente a leitura segura de status. O relatório é sanitizado: não imprime token, número de destino nem payload bruto. O endpoint administrativo `POST /api/v1/operations/channels/{id}/provider-probe` expõe o mesmo tipo de diagnóstico para um canal persistido, incluindo `contract_version`, `image_version`, `source_ref`, latência e divergência entre status persistido e observado.
 
 ### Webhook Evolution Go 0.7.2
 
@@ -138,22 +152,16 @@ conversas nem atendimento sem mensagem recebida.
 
 ## TODO de compatibilidade Evolution Go
 
-A documentação pública e o Swagger da linha Evolution Go estão evoluindo. Antes do primeiro teste integrado/produção, confirmar contra o Swagger da imagem efetivamente fixada:
+O Swagger da linha fixada em 0.7.2 já está refletido no contrato executável do Fluvius. Ainda restam validações de ambiente real e de operação:
 
-- compatibilidade das rotas ao trocar a imagem (0.7.2 usa `/send/text` e `/send/media`);
 - validar rotação da chave mestra e exportação segura do cofre antes de produção;
-- schema exato de confirmação de `SendMedia`;
-- validade/cache das URLs de avatar e latência de `/user/info` em diferentes contas;
-- eventos de falha de entrega e os códigos de erro associados (os recibos `Delivered`/`Read` estão confirmados);
-- assinatura/autenticação nativa de webhook e estratégia de rotação;
-- política de retries e idempotência aceita pelo gateway;
-- exigência e ciclo de ativação da licença na versão implantada.
+- capturar confirmação real de `SendMedia` e a deduplicação do campo `id` em sessão ativa;
+- medir validade/cache das URLs de avatar e latência de `/user/info` em diferentes contas;
+- mapear eventos de falha de entrega e os códigos de erro associados;
+- revisar assinatura/autenticação nativa de webhook e estratégia de rotação;
+- confirmar exigência e ciclo de ativação da licença na versão implantada.
 
-As fixtures sanitizadas de status conectado, QR solicitado durante sessão
-autenticada, edição criptografada e remoção de reação ficam em
-`api/tests/fixtures/evolution_go/0.7.2`. Envio de texto/mídia e demais itens
-acima ainda dependem de captura real antes da liberação para produção. Falha de
-HTTP ou resposta de envio sem ID nunca é tratada como envio bem-sucedido.
+As fixtures sanitizadas de status conectado, QR solicitado durante sessão autenticada, edição criptografada e remoção de reação ficam em `api/tests/fixtures/evolution_go/0.7.2`. Quando o webhook Evolution entregar um evento técnico fora do contrato certificado, o Fluvius registra `Evento Evolution Go fora do contrato certificado` em `provider_events` e expõe essa deriva na saúde operacional do canal. Falha de HTTP ou resposta de envio sem ID nunca é tratada como envio bem-sucedido.
 
 ## MetaCloudProvider
 

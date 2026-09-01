@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.common.enums import ChannelStatus
+from app.common.enums import ChannelProvider, ChannelStatus
 
 OperationalStatus = Literal["healthy", "attention", "critical"]
 
@@ -13,8 +13,13 @@ class OperationalChannelHealth(BaseModel):
     id: UUID
     name: str
     phone_number: str | None
+    provider: ChannelProvider
     status: ChannelStatus
+    gateway_contract_version: str | None = None
+    gateway_image_version: str | None = None
     last_event_at: datetime | None
+    last_outbound_confirmed_at: datetime | None = None
+    contract_warnings: int = 0
     pending_events: int = 0
     failed_events: int = 0
     webhook_stale: bool = False
@@ -61,6 +66,7 @@ class OperationalHealthResponse(BaseModel):
     failed_inbox_events_24h: int = 0
     pending_provider_events: int = 0
     failed_provider_events: int = 0
+    provider_contract_warnings: int = 0
     oldest_pending_event_at: datetime | None = None
     webhook_reconcile: WebhookReconcileRuntimeResponse
     history_reconcile: HistoryReconcileRuntimeResponse
@@ -96,3 +102,18 @@ class HistoryReconcileResponse(BaseModel):
     checked_threads: int
     requested_threads: int
     failed_threads: int
+
+
+class ProviderProbeResponse(BaseModel):
+    channel_id: UUID
+    provider: ChannelProvider
+    persisted_status: ChannelStatus
+    observed_status: ChannelStatus
+    status_matches: bool
+    checked_at: datetime
+    latency_ms: int
+    raw_status: str | None = None
+    error: str | None = None
+    gateway_contract_version: str
+    gateway_image_version: str
+    gateway_source_ref: str

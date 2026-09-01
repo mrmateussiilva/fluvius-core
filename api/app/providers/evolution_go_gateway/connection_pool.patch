@@ -1,0 +1,97 @@
+diff --git a/pkg/whatsmeow/service/whatsmeow.go b/pkg/whatsmeow/service/whatsmeow.go
+index 366f0ed..a1ffd73 100644
+--- a/pkg/whatsmeow/service/whatsmeow.go
++++ b/pkg/whatsmeow/service/whatsmeow.go
+@@ -102,6 +102,8 @@ type whatsmeowService struct {
+ type MyClient struct {
+ 	service            WhatsmeowService
+ 	WAClient           *whatsmeow.Client
++	sqlStore           *sqlstore.Container
++	sqlStoreMu         sync.Mutex
+ 	eventHandlerID     uint32
+ 	userID             string
+ 	Instance           *instance_model.Instance
+@@ -132,6 +134,20 @@ type MyClient struct {
+ 	passkeyCeremony    *ceremony.Store
+ }
+ 
++func (mycli *MyClient) closeSQLStore() error {
++	if mycli == nil {
++		return nil
++	}
++	mycli.sqlStoreMu.Lock()
++	defer mycli.sqlStoreMu.Unlock()
++	if mycli.sqlStore == nil {
++		return nil
++	}
++	err := mycli.sqlStore.Close()
++	mycli.sqlStore = nil
++	return err
++}
++
+ func (mycli *MyClient) persistMessageAsync(message message_model.Message) {
+ 	if mycli == nil || mycli.messageRepository == nil {
+ 		return
+@@ -190,6 +206,9 @@ func (w whatsmeowService) ReconnectClient(instanceId string) error {
+ 				client.RemoveEventHandler(mycli.eventHandlerID)
+ 				w.loggerWrapper.GetLogger(instanceId).LogInfo("[%s] Event handler removed", instanceId)
+ 			}
++			if err := mycli.closeSQLStore(); err != nil {
++				w.loggerWrapper.GetLogger(instanceId).LogWarn("[%s] Failed to close SQL store: %v", instanceId, err)
++			}
+ 		}
+ 	}
+ 
+@@ -313,6 +332,11 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 			return
+ 		}
+ 	}
++	if existing := w.myClientPointer[cd.Instance.Id]; existing != nil {
++		if err := existing.closeSQLStore(); err != nil {
++			w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Failed to close previous SQL store: %v", cd.Instance.Id, err)
++		}
++	}
+ 
+ 	var container *sqlstore.Container
+ 
+@@ -337,6 +361,14 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogError("[%s] Failed to create container: %v", cd.Instance.Id, err)
+ 		return
+ 	}
++	containerTransferred := false
++	defer func() {
++		if !containerTransferred {
++			if err := container.Close(); err != nil {
++				w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Failed to close unused SQL store: %v", cd.Instance.Id, err)
++			}
++		}
++	}()
+ 
+ 	if cd.Instance.Jid != "" {
+ 		jid, _ := utils.ParseJID(cd.Instance.Jid)
+@@ -468,6 +500,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 		service:            &w,
+ 		Instance:           cd.Instance,
+ 		WAClient:           client,
++		sqlStore:           container,
+ 		eventHandlerID:     1,
+ 		userID:             cd.Instance.Id,
+ 		token:              cd.Instance.Token,
+@@ -501,6 +534,7 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 
+ 	// Armazena o MyClient no map para permitir atualizações posteriores
+ 	w.myClientPointer[cd.Instance.Id] = mycli
++	containerTransferred = true
+ 
+ 	if client.Store.ID != nil {
+ 		w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("[%s] Already logged in with JID: %s", cd.Instance.Id, client.Store.ID.String())
+@@ -577,6 +611,9 @@ func (w whatsmeowService) StartClient(cd *ClientData) {
+ 		case <-w.killChannel[cd.Instance.Id]:
+ 			w.loggerWrapper.GetLogger(cd.Instance.Id).LogInfo("Received kill signal for user '%s'", cd.Instance.Id)
+ 			client.Disconnect()
++			if err := mycli.closeSQLStore(); err != nil {
++				w.loggerWrapper.GetLogger(cd.Instance.Id).LogWarn("[%s] Failed to close SQL store: %v", cd.Instance.Id, err)
++			}
+ 
+ 			delete(w.clientPointer, cd.Instance.Id)
+ 			delete(w.myClientPointer, cd.Instance.Id)

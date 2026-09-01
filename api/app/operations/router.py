@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from redis.exceptions import RedisError
@@ -9,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import AuthContext, get_auth_context
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
-from app.common.enums import ChannelStatus, MessageStatus
+from app.common.enums import ChannelProvider, ChannelStatus, MessageDirection, MessageStatus
+from app.conversations.models import Conversation
 from app.database import get_db
 from app.delivery.models import MessageDelivery
 from app.jobs.queue import (
@@ -26,10 +28,23 @@ from app.operations.schemas import (
     OperationalChannelHealth,
     OperationalHealthResponse,
     OperationalStatus,
+    ProviderProbeResponse,
     WebhookReconcileRequest,
     WebhookReconcileResponse,
     WebhookReconcileRuntimeResponse,
 )
+from app.providers.evolution_contract import (
+    EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+    EVOLUTION_GO_IMAGE_VERSION,
+    EVOLUTION_GO_VERSION,
+)
+from app.providers.evolution_credentials import (
+    ProviderConfigurationError,
+    claim_evolution_credential,
+)
+from app.providers.evolution_diagnostics import probe_evolution_channel
+from app.providers.evolution_go import EvolutionGoProvider
+from app.providers.factory import get_provider
 from app.providers.history_reconcile import (
     get_history_reconcile_runtime,
     request_history_for_channel_report,
@@ -75,27 +90,33 @@ def operational_health(
         MessageDelivery.status.in_(ACTIVE_DELIVERY_STATUSES),
         Message.status == MessageStatus.PENDING,
     )
-    pending_deliveries = db.scalar(
-        select(func.count(MessageDelivery.id))
-        .join(
-            Message,
-            (Message.id == MessageDelivery.message_id)
-            & (Message.tenant_id == context.tenant_id),
+    pending_deliveries = (
+        db.scalar(
+            select(func.count(MessageDelivery.id))
+            .join(
+                Message,
+                (Message.id == MessageDelivery.message_id)
+                & (Message.tenant_id == context.tenant_id),
+            )
+            .where(*active_delivery_filters)
         )
-        .where(*active_delivery_filters)
-    ) or 0
-    delayed_deliveries = db.scalar(
-        select(func.count(MessageDelivery.id))
-        .join(
-            Message,
-            (Message.id == MessageDelivery.message_id)
-            & (Message.tenant_id == context.tenant_id),
+        or 0
+    )
+    delayed_deliveries = (
+        db.scalar(
+            select(func.count(MessageDelivery.id))
+            .join(
+                Message,
+                (Message.id == MessageDelivery.message_id)
+                & (Message.tenant_id == context.tenant_id),
+            )
+            .where(
+                *active_delivery_filters,
+                Message.created_at < now - DELAYED_DELIVERY_AFTER,
+            )
         )
-        .where(
-            *active_delivery_filters,
-            Message.created_at < now - DELAYED_DELIVERY_AFTER,
-        )
-    ) or 0
+        or 0
+    )
     oldest_pending_at = db.scalar(
         select(func.min(Message.created_at))
         .join(
@@ -109,33 +130,45 @@ def operational_health(
             MessageDelivery.status.in_(ACTIVE_DELIVERY_STATUSES),
         )
     )
-    failed_deliveries_24h = db.scalar(
-        select(func.count(MessageDelivery.id)).where(
-            MessageDelivery.tenant_id == context.tenant_id,
-            MessageDelivery.status == "failed",
-            MessageDelivery.completed_at >= now - FAILED_DELIVERY_WINDOW,
+    failed_deliveries_24h = (
+        db.scalar(
+            select(func.count(MessageDelivery.id)).where(
+                MessageDelivery.tenant_id == context.tenant_id,
+                MessageDelivery.status == "failed",
+                MessageDelivery.completed_at >= now - FAILED_DELIVERY_WINDOW,
+            )
         )
-    ) or 0
-    pending_inbox_events = db.scalar(
-        select(func.count(ProviderEventInbox.id)).where(
-            ProviderEventInbox.tenant_id == context.tenant_id,
-            ProviderEventInbox.status.in_(ACTIVE_INBOX_STATUSES),
+        or 0
+    )
+    pending_inbox_events = (
+        db.scalar(
+            select(func.count(ProviderEventInbox.id)).where(
+                ProviderEventInbox.tenant_id == context.tenant_id,
+                ProviderEventInbox.status.in_(ACTIVE_INBOX_STATUSES),
+            )
         )
-    ) or 0
-    delayed_inbox_events = db.scalar(
-        select(func.count(ProviderEventInbox.id)).where(
-            ProviderEventInbox.tenant_id == context.tenant_id,
-            ProviderEventInbox.status.in_(ACTIVE_INBOX_STATUSES),
-            ProviderEventInbox.created_at < now - DELAYED_DELIVERY_AFTER,
+        or 0
+    )
+    delayed_inbox_events = (
+        db.scalar(
+            select(func.count(ProviderEventInbox.id)).where(
+                ProviderEventInbox.tenant_id == context.tenant_id,
+                ProviderEventInbox.status.in_(ACTIVE_INBOX_STATUSES),
+                ProviderEventInbox.created_at < now - DELAYED_DELIVERY_AFTER,
+            )
         )
-    ) or 0
-    failed_inbox_events_24h = db.scalar(
-        select(func.count(ProviderEventInbox.id)).where(
-            ProviderEventInbox.tenant_id == context.tenant_id,
-            ProviderEventInbox.status == "failed",
-            ProviderEventInbox.completed_at >= now - FAILED_DELIVERY_WINDOW,
+        or 0
+    )
+    failed_inbox_events_24h = (
+        db.scalar(
+            select(func.count(ProviderEventInbox.id)).where(
+                ProviderEventInbox.tenant_id == context.tenant_id,
+                ProviderEventInbox.status == "failed",
+                ProviderEventInbox.completed_at >= now - FAILED_DELIVERY_WINDOW,
+            )
         )
-    ) or 0
+        or 0
+    )
 
     pending_event_filter = and_(
         ProviderEvent.tenant_id == context.tenant_id,
@@ -156,6 +189,16 @@ def operational_health(
     )
     oldest_pending_event_at = db.scalar(
         select(func.min(ProviderEvent.created_at)).where(pending_event_filter)
+    )
+    provider_contract_warnings = (
+        db.scalar(
+            select(func.count(ProviderEvent.id)).where(
+                ProviderEvent.tenant_id == context.tenant_id,
+                ProviderEvent.provider == ChannelProvider.EVOLUTION_GO.value,
+                ProviderEvent.processing_error == EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+            )
+        )
+        or 0
     )
 
     last_event_at = (
@@ -190,19 +233,56 @@ def operational_health(
         .correlate(WhatsAppChannel)
         .scalar_subquery()
     )
+    contract_warnings_sq = (
+        select(func.count(ProviderEvent.id))
+        .where(
+            ProviderEvent.tenant_id == context.tenant_id,
+            ProviderEvent.channel_id == WhatsAppChannel.id,
+            ProviderEvent.provider == ChannelProvider.EVOLUTION_GO.value,
+            ProviderEvent.processing_error == EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+        )
+        .correlate(WhatsAppChannel)
+        .scalar_subquery()
+    )
+    last_outbound_confirmed_at = (
+        select(func.max(Message.sent_at))
+        .join(
+            Conversation,
+            (Conversation.id == Message.conversation_id)
+            & (Conversation.tenant_id == context.tenant_id),
+        )
+        .where(
+            Message.tenant_id == context.tenant_id,
+            Conversation.channel_id == WhatsAppChannel.id,
+            Message.direction == MessageDirection.OUTGOING,
+            Message.provider_message_id.is_not(None),
+            Message.sent_at.is_not(None),
+        )
+        .correlate(WhatsAppChannel)
+        .scalar_subquery()
+    )
     channel_rows = db.execute(
         select(
             WhatsAppChannel,
             last_event_at.label("last_event_at"),
             pending_events_sq.label("pending_events"),
             failed_events_sq.label("failed_events"),
+            contract_warnings_sq.label("contract_warnings"),
+            last_outbound_confirmed_at.label("last_outbound_confirmed_at"),
         )
         .where(WhatsAppChannel.tenant_id == context.tenant_id)
         .order_by(WhatsAppChannel.name, WhatsAppChannel.id)
     ).all()
     channels = []
     stale_connected_channels = 0
-    for channel, event_at, pending_count, failed_count in channel_rows:
+    for (
+        channel,
+        event_at,
+        pending_count,
+        failed_count,
+        contract_warning_count,
+        outbound_at,
+    ) in channel_rows:
         pending_count = int(pending_count or 0)
         failed_count = int(failed_count or 0)
         webhook_stale = (
@@ -217,16 +297,27 @@ def operational_health(
                 id=channel.id,
                 name=channel.name,
                 phone_number=channel.phone_number,
+                provider=channel.provider,
                 status=channel.status,
+                gateway_contract_version=(
+                    EVOLUTION_GO_VERSION
+                    if channel.provider == ChannelProvider.EVOLUTION_GO
+                    else None
+                ),
+                gateway_image_version=(
+                    EVOLUTION_GO_IMAGE_VERSION
+                    if channel.provider == ChannelProvider.EVOLUTION_GO
+                    else None
+                ),
                 last_event_at=event_at,
+                last_outbound_confirmed_at=outbound_at,
+                contract_warnings=int(contract_warning_count or 0),
                 pending_events=pending_count,
                 failed_events=failed_count,
                 webhook_stale=webhook_stale,
             )
         )
-    connected_channels = sum(
-        channel.status == ChannelStatus.CONNECTED for channel in channels
-    )
+    connected_channels = sum(channel.status == ChannelStatus.CONNECTED for channel in channels)
 
     (
         redis_available,
@@ -245,23 +336,15 @@ def operational_health(
         issues.append("Worker de entregas offline; mensagens não serão enviadas.")
         critical = True
     if redis_available and not webhook_worker_online:
-        issues.append(
-            "Worker da inbox offline; mensagens recebidas aguardam processamento."
-        )
+        issues.append("Worker da inbox offline; mensagens recebidas aguardam processamento.")
         critical = True
     if delayed_deliveries:
-        issues.append(
-            f"{delayed_deliveries} entrega(s) aguardando há mais de 2 minutos."
-        )
+        issues.append(f"{delayed_deliveries} entrega(s) aguardando há mais de 2 minutos.")
         critical = True
     if not maintenance_worker_online:
-        issues.append(
-            "Worker de manutenção offline; sincronizações não serão processadas."
-        )
+        issues.append("Worker de manutenção offline; sincronizações não serão processadas.")
     if failed_deliveries_24h:
-        issues.append(
-            f"{failed_deliveries_24h} entrega(s) falharam nas últimas 24 horas."
-        )
+        issues.append(f"{failed_deliveries_24h} entrega(s) falharam nas últimas 24 horas.")
     if delayed_inbox_events:
         issues.append(
             f"{delayed_inbox_events} mensagem(ns) recebida(s) aguardando há mais de 2 minutos."
@@ -277,17 +360,20 @@ def operational_health(
             and oldest_pending_event_at < now - DELAYED_PROVIDER_EVENT_AFTER
         )
         if delayed_pending:
+            delayed_minutes = int(DELAYED_PROVIDER_EVENT_AFTER.total_seconds() // 60)
             issues.append(
-                f"{pending_provider_events} evento(s) de webhook aguardando reconciliação há mais de {int(DELAYED_PROVIDER_EVENT_AFTER.total_seconds() // 60)} minutos."
+                f"{pending_provider_events} evento(s) de webhook aguardando "
+                f"reconciliação há mais de {delayed_minutes} minutos."
             )
             if redis_available and not webhook_reconcile.active:
                 critical = True
-                issues.append(
-                    "Reconciliador automático de webhooks sem heartbeat recente."
-                )
+                issues.append("Reconciliador automático de webhooks sem heartbeat recente.")
     if failed_provider_events:
+        issues.append(f"{failed_provider_events} evento(s) de webhook com erro de processamento.")
+    if provider_contract_warnings:
         issues.append(
-            f"{failed_provider_events} evento(s) de webhook com erro de processamento."
+            f"{provider_contract_warnings} evento(s) da Evolution Go ficaram fora "
+            "do contrato certificado."
         )
     if redis_available and connected_channels and not history_reconcile.active:
         issues.append(
@@ -295,22 +381,15 @@ def operational_health(
             "pelo provider não serão solicitadas novamente."
         )
     if stale_connected_channels:
-        issues.append(
-            f"{stale_connected_channels} canal(is) conectado(s) sem eventos recentes."
-        )
+        issues.append(f"{stale_connected_channels} canal(is) conectado(s) sem eventos recentes.")
     unavailable_channels = [
-        channel
-        for channel in channels
-        if channel.status != ChannelStatus.CONNECTED
+        channel for channel in channels if channel.status != ChannelStatus.CONNECTED
     ]
     if unavailable_channels:
         names = ", ".join(channel.name for channel in unavailable_channels[:3])
         suffix = "…" if len(unavailable_channels) > 3 else ""
         issues.append(f"Canal(is) sem conexão: {names}{suffix}")
-        if any(
-            channel.status == ChannelStatus.FAILED
-            for channel in unavailable_channels
-        ):
+        if any(channel.status == ChannelStatus.FAILED for channel in unavailable_channels):
             critical = True
 
     health_status: OperationalStatus
@@ -336,6 +415,7 @@ def operational_health(
         failed_inbox_events_24h=failed_inbox_events_24h,
         pending_provider_events=pending_provider_events,
         failed_provider_events=failed_provider_events,
+        provider_contract_warnings=provider_contract_warnings,
         oldest_pending_event_at=oldest_pending_event_at,
         webhook_reconcile=WebhookReconcileRuntimeResponse(
             active=webhook_reconcile.active,
@@ -365,6 +445,80 @@ def operational_health(
         total_channels=len(channels),
         issues=issues,
         channels=channels,
+    )
+
+
+@router.post(
+    "/channels/{channel_id}/provider-probe",
+    response_model=ProviderProbeResponse,
+)
+async def probe_provider_channel(
+    channel_id: UUID,
+    context: AuthContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> ProviderProbeResponse:
+    now = datetime.now(UTC)
+    channel = db.scalar(
+        select(WhatsAppChannel).where(
+            WhatsAppChannel.id == channel_id,
+            WhatsAppChannel.tenant_id == context.tenant_id,
+        )
+    )
+    if channel is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Canal não encontrado",
+        )
+    if channel.provider != ChannelProvider.EVOLUTION_GO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="O diagnóstico detalhado está disponível apenas para Evolution Go",
+        )
+
+    try:
+        claim_evolution_credential(db, channel)
+        provider = get_provider(channel.provider, channel, db)
+    except ProviderConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    if not isinstance(provider, EvolutionGoProvider):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Adapter Evolution Go indisponível",
+        )
+
+    probe = await probe_evolution_channel(provider, channel)
+    db.add(
+        AuditLog(
+            tenant_id=context.tenant_id,
+            user_id=context.user.id,
+            action="operations.provider.probed",
+            entity_type="whatsapp_channel",
+            entity_id=channel.id,
+            metadata_={
+                "provider": str(channel.provider),
+                "observed_status": str(probe.status),
+                "latency_ms": probe.latency_ms,
+                "success": probe.error is None,
+            },
+        )
+    )
+    db.commit()
+    return ProviderProbeResponse(
+        channel_id=channel.id,
+        provider=channel.provider,
+        persisted_status=channel.status,
+        observed_status=probe.status,
+        status_matches=channel.status == probe.status,
+        checked_at=now,
+        latency_ms=probe.latency_ms,
+        raw_status=probe.raw_status,
+        error=probe.error,
+        gateway_contract_version=probe.contract_version,
+        gateway_image_version=probe.image_version,
+        gateway_source_ref=probe.source_ref,
     )
 
 

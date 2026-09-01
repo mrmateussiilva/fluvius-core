@@ -155,7 +155,7 @@ services:
       dockerfile: api/app/providers/evolution_go_gateway/Dockerfile
       args:
         EVOLUTION_GO_SOURCE_REF: ${EVOLUTION_GO_SOURCE_REF:-9337afc47e10b86cc896a6f432240e40fee95dd1}
-    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-edit-media-fix.2}
+    image: ${EVOLUTION_GO_IMAGE:-fluvius/evolution-go:0.7.2-connection-pool-fix.3}
     dns:
       - ${DOCKER_DNS_PRIMARY:-1.1.1.1}
       - ${DOCKER_DNS_SECONDARY:-8.8.8.8}

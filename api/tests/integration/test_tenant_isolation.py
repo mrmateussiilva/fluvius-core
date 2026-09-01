@@ -23,8 +23,9 @@ from app.contacts.models import Contact
 from app.conversations.models import Conversation, ConversationRead
 from app.database import SessionLocal
 from app.messages.models import Message
-from app.providers.base import QRCodeResult
+from app.providers.base import ChannelStatusResult, QRCodeResult
 from app.providers.evolution_credentials import decrypt_provider_secret
+from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.factory import get_provider
 from app.providers.models import ProviderCredential
 from app.quick_replies.models import QuickReply
@@ -796,6 +797,39 @@ class TenantIsolationTest(PostgresIntegrationTestCase):
                 )
             )
             self.assertEqual(channel.status, ChannelStatus.REQUIRES_QR)
+
+    def test_status_check_backfills_legacy_evolution_credential(self) -> None:
+        status_check = AsyncMock(return_value=ChannelStatusResult(status=ChannelStatus.CONNECTED))
+        with (
+            patch.object(
+                settings,
+                "evolution_go_instance_tokens",
+                {"tenant-a": "token-a", "tenant-b": "token-b"},
+            ),
+            patch.object(EvolutionGoProvider, "get_status", status_check),
+        ):
+            response = self.client.get(
+                f"/api/v1/channels/{self.tenant_a.channel_id}/status",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "connected")
+        status_check.assert_awaited_once()
+        with SessionLocal() as db:
+            credential = db.scalar(
+                select(ProviderCredential).where(
+                    ProviderCredential.tenant_id == self.tenant_a.tenant_id,
+                    ProviderCredential.channel_id == self.tenant_a.channel_id,
+                    ProviderCredential.provider == ChannelProvider.EVOLUTION_GO.value,
+                )
+            )
+            self.assertIsNotNone(credential)
+            self.assertEqual(credential.provisioning_status, "active")
+            self.assertEqual(
+                decrypt_provider_secret(credential.encrypted_secret),
+                "token-a",
+            )
 
     def test_cross_tenant_ids_are_rejected_by_every_operational_route(self) -> None:
         tenant_b = self.tenant_b

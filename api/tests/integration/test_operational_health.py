@@ -15,6 +15,12 @@ from app.database import SessionLocal
 from app.delivery.models import MessageDelivery
 from app.messages.models import Message
 from app.providers.base import MessageHistoryRequestResult
+from app.providers.evolution_contract import (
+    EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+    EVOLUTION_GO_IMAGE_VERSION,
+    EVOLUTION_GO_VERSION,
+)
+from app.providers.evolution_diagnostics import EvolutionChannelProbe
 from app.providers.evolution_go import EvolutionGoProvider
 from app.providers.history_reconcile import HistoryReconcileRuntime
 from app.providers.models import ProviderEvent
@@ -134,6 +140,11 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
             {channel["id"] for channel in payload["channels"]},
             {str(self.tenant_a.channel_id)},
         )
+        channel_health = payload["channels"][0]
+        self.assertEqual(channel_health["provider"], "evolution_go")
+        self.assertEqual(channel_health["gateway_contract_version"], EVOLUTION_GO_VERSION)
+        self.assertEqual(channel_health["gateway_image_version"], EVOLUTION_GO_IMAGE_VERSION)
+        self.assertIsNone(channel_health["last_outbound_confirmed_at"])
 
         with SessionLocal() as db:
             membership = db.scalar(
@@ -150,6 +161,51 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         )
         self.assertEqual(forbidden.status_code, 403, forbidden.text)
 
+    def test_provider_probe_is_admin_only_tenant_scoped_and_audited(self) -> None:
+        provider = EvolutionGoProvider(api_key="never-return-this-token")
+        probe = EvolutionChannelProbe(
+            status=ChannelStatus.CONNECTED,
+            raw_status="connected=true,loggedIn=true",
+            latency_ms=17,
+            error=None,
+        )
+        with (
+            patch("app.operations.router.claim_evolution_credential"),
+            patch("app.operations.router.get_provider", return_value=provider),
+            patch(
+                "app.operations.router.probe_evolution_channel",
+                return_value=probe,
+            ),
+        ):
+            response = self.client.post(
+                f"/api/v1/operations/channels/{self.tenant_a.channel_id}/provider-probe",
+                headers=self.headers_a,
+            )
+            cross_tenant = self.client.post(
+                f"/api/v1/operations/channels/{self.tenant_b.channel_id}/provider-probe",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["provider"], "evolution_go")
+        self.assertEqual(payload["observed_status"], "connected")
+        self.assertTrue(payload["status_matches"])
+        self.assertEqual(payload["latency_ms"], 17)
+        self.assertEqual(payload["gateway_contract_version"], EVOLUTION_GO_VERSION)
+        self.assertNotIn("never-return-this-token", response.text)
+        self.assertEqual(cross_tenant.status_code, 404, cross_tenant.text)
+
+        with SessionLocal() as db:
+            audit = db.scalar(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == self.tenant_a.tenant_id,
+                    AuditLog.action == "operations.provider.probed",
+                    AuditLog.entity_id == self.tenant_a.channel_id,
+                )
+            )
+            self.assertIsNotNone(audit)
+
     def test_offline_delivery_worker_is_critical(self) -> None:
         with patch(
             "app.operations.router._worker_health",
@@ -165,6 +221,49 @@ class OperationalHealthTest(PostgresIntegrationTestCase):
         self.assertEqual(payload["status"], "critical")
         self.assertFalse(payload["delivery_worker_online"])
         self.assertTrue(any("Worker de entregas offline" in issue for issue in payload["issues"]))
+
+    def test_health_surfaces_contract_drift_tenant_scoped(self) -> None:
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    ProviderEvent(
+                        tenant_id=self.tenant_a.tenant_id,
+                        channel_id=self.tenant_a.channel_id,
+                        provider="evolution_go",
+                        event_type="FutureEvent",
+                        provider_event_id="future-event-a",
+                        payload={"event": "FutureEvent"},
+                        processed=True,
+                        processing_error=EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+                    ),
+                    ProviderEvent(
+                        tenant_id=self.tenant_b.tenant_id,
+                        channel_id=self.tenant_b.channel_id,
+                        provider="evolution_go",
+                        event_type="FutureEvent",
+                        provider_event_id="future-event-b",
+                        payload={"event": "FutureEvent"},
+                        processed=True,
+                        processing_error=EVOLUTION_GO_CONTRACT_DRIFT_ERROR,
+                    ),
+                ]
+            )
+            db.commit()
+
+        with patch(
+            "app.operations.router._worker_health",
+            return_value=(True, True, True, True),
+        ):
+            response = self.client.get(
+                "/api/v1/operations/health",
+                headers=self.headers_a,
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()
+        self.assertEqual(payload["provider_contract_warnings"], 1)
+        self.assertEqual(payload["channels"][0]["contract_warnings"], 1)
+        self.assertTrue(any("fora do contrato certificado" in issue for issue in payload["issues"]))
 
     def test_health_surfaces_pending_webhooks_tenant_scoped(self) -> None:
         now = datetime.now(UTC)

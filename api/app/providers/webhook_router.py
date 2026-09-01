@@ -2,8 +2,6 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +38,7 @@ from app.providers.base import (
     IncomingMessageResult,
     WhatsAppProvider,
 )
+from app.providers.evolution_contract import EVOLUTION_GO_CONTRACT_DRIFT_ERROR
 from app.providers.evolution_credentials import (
     ProviderConfigurationError,
     claim_evolution_credential,
@@ -56,6 +55,7 @@ from app.providers.status_updates import apply_message_status_update
 from app.realtime.manager import realtime_manager
 from app.storage.local import LocalStorageProvider
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 EDIT_CONTENT_UNAVAILABLE = (
     "O WhatsApp informou a edição, mas o provider não disponibilizou o novo texto"
@@ -370,9 +370,7 @@ async def _accept_history_sync_event(
             channel=channel,
             event_type="HistorySync.Message",
             event_id=message_event_id,
-            sanitized_payload=provider_adapter.sanitize_webhook_payload(
-                incoming.raw_payload
-            ),
+            sanitized_payload=provider_adapter.sanitize_webhook_payload(incoming.raw_payload),
             incoming=incoming,
         )
         if result["status"] == "accepted":
@@ -480,9 +478,7 @@ async def whatsapp_webhook(
             provider_event_id=str(event_id) if event_id else None,
             payload=sanitized_payload,
             processing_error=(
-                PENDING_INCOMING_MESSAGE_ERROR
-                if normalized_event == "message"
-                else None
+                PENDING_INCOMING_MESSAGE_ERROR if normalized_event == "message" else None
             ),
         )
         db.add(event)
@@ -524,11 +520,7 @@ async def whatsapp_webhook(
                 update=update,
             )
             event.processed = application.covers(update.provider_message_ids)
-            event.processing_error = (
-                None
-                if event.processed
-                else PENDING_RECEIPT_ERROR
-            )
+            event.processing_error = None if event.processed else PENDING_RECEIPT_ERROR
             db.commit()
             for message in application.changed_messages:
                 await realtime_manager.broadcast(
@@ -568,9 +560,7 @@ async def whatsapp_webhook(
                 edit=incoming,
             )
             if edited_message is None:
-                event.processing_error = (
-                    PENDING_EDIT_ERROR
-                )
+                event.processing_error = PENDING_EDIT_ERROR
                 db.commit()
                 return {"status": "pending"}
             db.commit()
@@ -582,17 +572,13 @@ async def whatsapp_webhook(
                     "conversation_id": str(edited_message.conversation_id),
                     "channel_id": str(channel.id),
                     "edited_at": edited_message.edited_at.isoformat(),
-                    "edit_content_unavailable": (
-                        edited_message.edit_content_unavailable
-                    ),
+                    "edit_content_unavailable": (edited_message.edit_content_unavailable),
                 },
             )
             return {"status": "accepted"}
 
         thread_number = (
-            incoming.chat_id
-            if incoming.is_group and incoming.chat_id
-            else incoming.from_number
+            incoming.chat_id if incoming.is_group and incoming.chat_id else incoming.from_number
         )
         lock_provider_thread(
             db,
@@ -624,9 +610,8 @@ async def whatsapp_webhook(
         )
         sender_name = usable_contact_name(incoming.sender_name, thread_number)
         if contact is None:
-            group_label = (
-                incoming.chat_name
-                or (f"Grupo {thread_number[-6:]}" if incoming.is_group else None)
+            group_label = incoming.chat_name or (
+                f"Grupo {thread_number[-6:]}" if incoming.is_group else None
             )
             contact = Contact(
                 tenant_id=channel.tenant_id,
@@ -685,15 +670,9 @@ async def whatsapp_webhook(
                     Message.provider_message_id == incoming.reply_to_provider_message_id,
                 )
             )
-        participant_phone = (
-            incoming.participant_phone
-            if incoming.is_group
-            else None
-        )
+        participant_phone = incoming.participant_phone if incoming.is_group else None
         participant_name = (
-            incoming.participant_name or incoming.sender_name
-            if incoming.is_group
-            else None
+            incoming.participant_name or incoming.sender_name if incoming.is_group else None
         )
         message = Message(
             tenant_id=channel.tenant_id,
@@ -718,9 +697,7 @@ async def whatsapp_webhook(
             provider_message_id=incoming.provider_message_id,
             attempt_count=1 if incoming.direction == MessageDirection.OUTGOING else 0,
             last_attempt_at=(
-                incoming.timestamp
-                if incoming.direction == MessageDirection.OUTGOING
-                else None
+                incoming.timestamp if incoming.direction == MessageDirection.OUTGOING else None
             ),
             sent_at=incoming.timestamp,
         )
@@ -761,15 +738,12 @@ async def whatsapp_webhook(
         )
         for pending_event in pending_events:
             try:
-                pending_edit = await provider_adapter.handle_webhook(
-                    pending_event.payload
-                )
+                pending_edit = await provider_adapter.handle_webhook(pending_event.payload)
             except (IgnoredWebhookEvent, ValueError):
                 continue
             if (
                 isinstance(pending_edit, IncomingMessageEditResult)
-                and pending_edit.target_provider_message_id
-                == message.provider_message_id
+                and pending_edit.target_provider_message_id == message.provider_message_id
             ):
                 reconciled = apply_message_edit(
                     db,
@@ -850,21 +824,24 @@ async def whatsapp_webhook(
                     "conversation_id": str(reconciled.conversation_id),
                     "channel_id": str(channel.id),
                     "edited_at": reconciled.edited_at.isoformat(),
-                    "edit_content_unavailable": (
-                        reconciled.edit_content_unavailable
-                    ),
+                    "edit_content_unavailable": (reconciled.edit_content_unavailable),
                 },
             )
         return {"status": "accepted"}
     except IgnoredWebhookEvent:
         event.processed = True
-        event.processing_error = None
+        event.processing_error = (
+            EVOLUTION_GO_CONTRACT_DRIFT_ERROR
+            if channel.provider == ChannelProvider.EVOLUTION_GO
+            and normalized_event != "sendmessage"
+            else None
+        )
         db.commit()
         return {"status": "ignored"}
     except (ValueError, NotImplementedError) as exc:
         logger.warning(
             "Webhook com payload inválido ignorado (channel=%s event=%s): %s",
-            channel.id if hasattr(channel, 'id') else '?',
+            channel.id if hasattr(channel, "id") else "?",
             exc.__class__.__name__,
             exc,
         )

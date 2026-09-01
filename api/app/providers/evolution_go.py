@@ -35,6 +35,7 @@ from app.providers.base import (
     WhatsAppProvider,
 )
 from app.providers.evolution_circuit import evolution_circuit
+from app.providers.evolution_contract import EvolutionRoute
 from app.providers.evolution_http import get_evolution_http_client
 
 
@@ -120,7 +121,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload["quoted"] = quoted_payload
             response = await self._request(
                 "POST",
-                "/send/text",
+                EvolutionRoute.SEND_TEXT,
                 json=request_payload,
             )
             response.raise_for_status()
@@ -157,10 +158,10 @@ class EvolutionGoProvider(WhatsAppProvider):
             provider_url = self._provider_file_url(file_url)
             media_type = self._media_type(file_url)
             if media_type == "sticker":
-                path = "/send/sticker"
+                path = EvolutionRoute.SEND_STICKER
                 request_payload = {"number": to, "sticker": provider_url}
             else:
-                path = "/send/media"
+                path = EvolutionRoute.SEND_MEDIA
                 request_payload = {
                     "number": to,
                     "url": provider_url,
@@ -229,7 +230,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload["quoted"] = quoted_payload
             response = await self._request(
                 "POST",
-                "/send/contact",
+                EvolutionRoute.SEND_CONTACT,
                 json=request_payload,
             )
             response.raise_for_status()
@@ -255,7 +256,7 @@ class EvolutionGoProvider(WhatsAppProvider):
 
     async def get_status(self, channel: WhatsAppChannel) -> ChannelStatusResult:
         try:
-            response = await self._request("GET", "/instance/status")
+            response = await self._request("GET", EvolutionRoute.INSTANCE_STATUS)
             response.raise_for_status()
             return self._parse_status(response.json())
         except httpx.HTTPStatusError as exc:
@@ -263,13 +264,21 @@ class EvolutionGoProvider(WhatsAppProvider):
                 status=ChannelStatus.FAILED,
                 error=self._http_error_message(exc),
             )
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
-            return ChannelStatusResult(status=ChannelStatus.FAILED, error=str(exc))
+        except httpx.HTTPError:
+            return ChannelStatusResult(
+                status=ChannelStatus.FAILED,
+                error="Evolution Go indisponível para consultar o status.",
+            )
+        except (ValueError, KeyError):
+            return ChannelStatusResult(
+                status=ChannelStatus.FAILED,
+                error="Evolution Go retornou uma resposta de status inválida.",
+            )
 
     async def get_qr_code(self, channel: WhatsAppChannel) -> QRCodeResult:
         try:
             await self._configure_webhook(channel)
-            response = await self._request("GET", "/instance/qr")
+            response = await self._request("GET", EvolutionRoute.INSTANCE_QR)
             response.raise_for_status()
             return self._parse_qr_code(response.json())
         except httpx.HTTPStatusError as exc:
@@ -294,7 +303,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         )
         response = await self._request(
             "POST",
-            "/instance/connect",
+            EvolutionRoute.INSTANCE_CONNECT,
             json={
                 "webhookUrl": webhook_url,
                 "subscribe": self.webhook_events,
@@ -310,15 +319,15 @@ class EvolutionGoProvider(WhatsAppProvider):
     ) -> ContactProfileResult:
         requests = (
             self._profile_request(
-                "/user/check",
+                EvolutionRoute.USER_CHECK,
                 {"number": [phone_number], "formatJid": False},
             ),
-            self._profile_request("/user/info", {"number": [phone_number]}),
+            self._profile_request(EvolutionRoute.USER_INFO, {"number": [phone_number]}),
             self._profile_request(
-                "/user/avatar",
+                EvolutionRoute.USER_AVATAR,
                 {"number": phone_number, "preview": True},
             ),
-            self._profile_request("/user/contacts"),
+            self._profile_request(EvolutionRoute.USER_CONTACTS),
         )
         check, info, avatar, contacts = await asyncio.gather(*requests)
         result = self._parse_contact_profile(
@@ -342,9 +351,9 @@ class EvolutionGoProvider(WhatsAppProvider):
     ) -> ContactProfileResult:
         group_jid = self._group_jid(group_address)
         info, avatar = await asyncio.gather(
-            self._profile_request("/group/info", {"groupJid": group_jid}),
+            self._profile_request(EvolutionRoute.GROUP_INFO, {"groupJid": group_jid}),
             self._profile_request(
-                "/user/avatar",
+                EvolutionRoute.USER_AVATAR,
                 {"number": group_jid, "preview": True},
             ),
         )
@@ -356,9 +365,9 @@ class EvolutionGoProvider(WhatsAppProvider):
         return result
 
     async def list_groups(self, channel: WhatsAppChannel) -> list[GroupDirectoryEntry]:
-        payload = await self._profile_request("/group/myall")
+        payload = await self._profile_request(EvolutionRoute.GROUP_MY_ALL)
         if payload is None:
-            payload = await self._profile_request("/group/list")
+            payload = await self._profile_request(EvolutionRoute.GROUP_LIST)
         if payload is None:
             return []
         return self._parse_group_directory(payload)
@@ -374,7 +383,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             await self._configure_webhook_best_effort(channel)
             response = await self._request(
                 "POST",
-                "/chat/history-sync",
+                EvolutionRoute.HISTORY_SYNC,
                 json={
                     "messageInfo": {
                         "ID": anchor.provider_message_id,
@@ -413,7 +422,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             return
 
     async def _profile_request(
-        self, path: str, payload: dict[str, Any] | None = None
+        self, path: str | EvolutionRoute, payload: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
         if not evolution_circuit.allow(self._circuit_key):
             return None
@@ -1474,9 +1483,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             if btn_text:
                 return str(btn_text)
 
-        list_resp = cls._dict_value(
-            unwrapped, "listResponseMessage", "ListResponseMessage"
-        )
+        list_resp = cls._dict_value(unwrapped, "listResponseMessage", "ListResponseMessage")
         if list_resp:
             title = list_resp.get("title") or ""
             desc = list_resp.get("description") or ""
@@ -1494,9 +1501,7 @@ class EvolutionGoProvider(WhatsAppProvider):
             unwrapped, "templateButtonReplyMessage", "TemplateButtonReplyMessage"
         )
         if template_btn:
-            btn_text = template_btn.get("selectedDisplayText") or template_btn.get(
-                "selectedId"
-            )
+            btn_text = template_btn.get("selectedDisplayText") or template_btn.get("selectedId")
             if btn_text:
                 return str(btn_text)
 
@@ -1510,23 +1515,21 @@ class EvolutionGoProvider(WhatsAppProvider):
 
         location = cls._dict_value(unwrapped, "locationMessage", "LocationMessage")
         if location:
+            latitude = location.get("degreesLatitude")
+            longitude = location.get("degreesLongitude")
             loc_name = (
                 location.get("name")
                 or location.get("address")
-                or f"Lat: {location.get('degreesLatitude')}, Lng: {location.get('degreesLongitude')}"
+                or f"Lat: {latitude}, Lng: {longitude}"
             )
             return f"📍 Localização: {loc_name}"
 
         value = (
             unwrapped.get("conversation")
             or unwrapped.get("Conversation")
-            or cls._dict_value(unwrapped, "extendedTextMessage", "ExtendedTextMessage").get(
-                "text"
-            )
+            or cls._dict_value(unwrapped, "extendedTextMessage", "ExtendedTextMessage").get("text")
             or cls._dict_value(unwrapped, "imageMessage", "ImageMessage").get("caption")
-            or cls._dict_value(unwrapped, "documentMessage", "DocumentMessage").get(
-                "caption"
-            )
+            or cls._dict_value(unwrapped, "documentMessage", "DocumentMessage").get("caption")
             or cls._dict_value(unwrapped, "videoMessage", "VideoMessage").get("caption")
             or data.get("text")
         )
