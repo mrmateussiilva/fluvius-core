@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     local_storage_path: str = "storage"
     evolution_go_base_url: str = "http://evolution-go:8080"
     evolution_go_webhook_base_url: str = "http://api:8000"
+    evolution_go_media_base_url: str = "http://api:8000"
     evolution_go_api_key: str = ""
     evolution_go_global_api_key: str = ""
     evolution_go_instance_tokens: dict[str, str] = Field(default_factory=dict)
@@ -81,6 +82,12 @@ class Settings(BaseSettings):
             origin.rstrip("/") for origin in origins
         }:
             errors.append("PUBLIC_API_URL deve pertencer às origens CORS permitidas")
+        media_base = self.evolution_go_media_base_url.rstrip("/")
+        if not media_base or media_base == self.public_api_url.rstrip("/"):
+            errors.append(
+                "EVOLUTION_GO_MEDIA_BASE_URL deve ser o endereço interno da API "
+                "na rede Docker, distinto da origem pública de PUBLIC_API_URL"
+            )
         if not self.auth_cookie_secure:
             errors.append("AUTH_COOKIE_SECURE deve estar ativo em produção")
         if not self.login_rate_limit_enabled:

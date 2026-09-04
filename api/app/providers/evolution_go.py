@@ -54,6 +54,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         "HISTORY_SYNC",
     ]
     default_timeout = httpx.Timeout(12.0, connect=5.0)
+    media_timeout = httpx.Timeout(60.0, connect=5.0)
     profile_timeout = httpx.Timeout(6.0, connect=3.0)
 
     def __init__(
@@ -61,6 +62,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         base_url: str | None = None,
         api_key: str | None = None,
         webhook_base_url: str | None = None,
+        media_base_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self.base_url = (base_url or settings.evolution_go_base_url).rstrip("/")
@@ -68,6 +70,7 @@ class EvolutionGoProvider(WhatsAppProvider):
         self.webhook_base_url = (webhook_base_url or settings.evolution_go_webhook_base_url).rstrip(
             "/"
         )
+        self.media_base_url = (media_base_url or settings.evolution_go_media_base_url).rstrip("/")
         self.transport = transport
 
     @property
@@ -165,10 +168,13 @@ class EvolutionGoProvider(WhatsAppProvider):
                 request_payload = {
                     "number": to,
                     "url": provider_url,
-                    "caption": caption,
-                    "filename": file_url.rsplit("/", 1)[-1].split("?", 1)[0],
                     "type": media_type,
                 }
+                file_name = file_url.rsplit("/", 1)[-1].split("?", 1)[0]
+                if file_name:
+                    request_payload["filename"] = file_name
+                if caption:
+                    request_payload["caption"] = caption
             mention_targets = self._mentioned_jids(mentioned_phones, mentioned_jids)
             if mention_targets:
                 request_payload["mentionedJid"] = mention_targets
@@ -183,6 +189,7 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "POST",
                 path,
                 json=request_payload,
+                timeout=self.media_timeout,
             )
             response.raise_for_status()
             data = response.json()
@@ -1283,6 +1290,10 @@ class EvolutionGoProvider(WhatsAppProvider):
         path = file_url.split("?", 1)[0].lower()
         if content_type == "image/webp" or path.endswith(".webp"):
             return "sticker"
+        # The gateway rejects image/gif as "image"; GIF is delivered as a
+        # document so the content still reaches the recipient.
+        if content_type == "image/gif" or path.endswith(".gif"):
+            return "document"
         if content_type and content_type.startswith("image/"):
             return "image"
         if content_type and content_type.startswith("audio/"):
@@ -1294,7 +1305,7 @@ class EvolutionGoProvider(WhatsAppProvider):
     def _provider_file_url(self, file_url: str) -> str:
         public_base = settings.public_api_url.rstrip("/")
         if file_url.startswith(f"{public_base}/"):
-            return f"{self.webhook_base_url}{file_url[len(public_base) :]}"
+            return f"{self.media_base_url}{file_url[len(public_base) :]}"
         return file_url
 
     @staticmethod
@@ -1391,7 +1402,34 @@ class EvolutionGoProvider(WhatsAppProvider):
                 "Evolution Go rejeitou o token da instância. "
                 "Configure EVOLUTION_GO_API_KEY e reinicie a API."
             )
-        return f"Evolution Go respondeu com HTTP {status_code}"
+        message = f"Evolution Go respondeu com HTTP {status_code}"
+        detail = EvolutionGoProvider._gateway_error_detail(exc.response)
+        if detail:
+            message = f"{message}: {detail}"
+        return message
+
+    @staticmethod
+    def _gateway_error_detail(response: httpx.Response) -> str:
+        """Bounded, sanitized excerpt of the gateway error body.
+
+        The gateway answers errors as {"error": "..."} without credentials;
+        anything else (proxy HTML pages) is collapsed and truncated.
+        """
+        raw = ""
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            value = payload.get("error") or payload.get("message")
+            if isinstance(value, str):
+                raw = value
+        elif isinstance(payload, str):
+            raw = payload
+        if not raw:
+            raw = response.text[:400]
+        normalized = " ".join(raw.split())
+        return normalized[:160]
 
     @classmethod
     def _http_error_from_exception(cls, exc: httpx.HTTPError) -> str:

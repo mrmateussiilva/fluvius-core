@@ -58,7 +58,9 @@ FLUVIUS_BACKEND_NETWORK=fluvius-core-prod_backend
 Para outro domínio, substitua o valor pelo domínio público real. O endereço
 de webhook precisa ser público porque o gateway pode manter uma URL antiga
 como `http://api:8000`; o primeiro deploy blue/green reaplica o endereço para
-todos os canais antes da troca de tráfego.
+todos os canais antes da troca de tráfego. O download de mídia outgoing usa
+base distinto (`EVOLUTION_GO_MEDIA_BASE_URL`, fixado em `http://api:8000` no
+compose de produção) porque o Caddy bloqueia `/storage` na origem pública.
 
 ## Fluxo de publicação
 

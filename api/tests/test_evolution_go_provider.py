@@ -425,6 +425,134 @@ class EvolutionGoWebhookTest(unittest.TestCase):
             "http://api:8000/storage/figurinha.webp",
         )
 
+    def test_sends_media_without_caption_omits_optional_fields(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            json={"data": {"Info": {"ID": "PHOTO-123"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(
+                self.provider.send_media(
+                    None,
+                    "5527999999999",
+                    f"{settings.public_api_url}/storage/foto.png",
+                    None,
+                )
+            )
+        self.assertTrue(result.success)
+        body = request.await_args.kwargs["json"]
+        self.assertNotIn("caption", body)
+        self.assertEqual(body["filename"], "foto.png")
+
+    def test_sends_gif_as_document(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            json={"data": {"Info": {"ID": "GIF-123"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            result = asyncio.run(
+                self.provider.send_media(
+                    None,
+                    "5527999999999",
+                    f"{settings.public_api_url}/storage/meme.gif",
+                    None,
+                )
+            )
+        self.assertTrue(result.success)
+        self.assertEqual(request.await_args.kwargs["json"]["type"], "document")
+
+    def test_sends_media_using_internal_base_when_public_domain_is_blocked(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            json={"data": {"Info": {"ID": "PHOTO-123"}}},
+        )
+        provider = EvolutionGoProvider(
+            webhook_base_url="https://fluvius.example",
+            media_base_url="http://api:8000",
+        )
+        with (
+            patch.object(
+                settings,
+                "public_api_url",
+                "https://fluvius.example",
+            ),
+            patch.object(
+                provider,
+                "_request",
+                new=AsyncMock(return_value=response),
+            ) as request,
+        ):
+            result = asyncio.run(
+                provider.send_media(
+                    None,
+                    "5527999999999",
+                    "https://fluvius.example/storage/foto.png",
+                    "Legenda",
+                )
+            )
+        self.assertTrue(result.success)
+        self.assertEqual(
+            request.await_args.kwargs["json"]["url"],
+            "http://api:8000/storage/foto.png",
+        )
+
+    def test_media_send_uses_extended_timeout(self) -> None:
+        response = httpx.Response(
+            200,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            json={"data": {"Info": {"ID": "PHOTO-123"}}},
+        )
+        with patch.object(
+            self.provider,
+            "_request",
+            new=AsyncMock(return_value=response),
+        ) as request:
+            asyncio.run(
+                self.provider.send_media(
+                    None,
+                    "5527999999999",
+                    f"{settings.public_api_url}/storage/foto.png",
+                )
+            )
+        self.assertEqual(request.await_args.kwargs["timeout"], self.provider.media_timeout)
+
+    def test_http_error_detail_includes_gateway_reason(self) -> None:
+        response = httpx.Response(
+            500,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            json={"error": "Invalid file format: 'text/html'"},
+        )
+        request = httpx.Request("POST", "http://evolution-go:8080/send/media")
+        exc = httpx.HTTPStatusError("server error", request=request, response=response)
+        result = self.provider._send_error_result(exc)
+        self.assertFalse(result.success)
+        self.assertIn("Invalid file format", result.error or "")
+
+    def test_http_error_detail_is_bounded_and_sanitized(self) -> None:
+        response = httpx.Response(
+            502,
+            request=httpx.Request("POST", "http://evolution-go:8080/send/media"),
+            content=b"<html>\n\n  " + b"x" * 500 + b"</html>",
+            headers={"Content-Type": "text/html"},
+        )
+        request = httpx.Request("POST", "http://evolution-go:8080/send/media")
+        exc = httpx.HTTPStatusError("server error", request=request, response=response)
+        message = self.provider._http_error_message(exc)
+        self.assertIn("HTTP 502", message)
+        self.assertLessEqual(len(message), 200)
+        self.assertNotIn("\n", message)
+
     def test_sends_native_contact_with_stable_id(self) -> None:
         response = httpx.Response(
             200,
@@ -684,7 +812,10 @@ class EvolutionGoWebhookTest(unittest.TestCase):
         ):
             result = asyncio.run(self.provider.get_qr_code(channel))
         self.assertEqual(result.status, ChannelStatus.FAILED)
-        self.assertEqual(result.error, "Evolution Go respondeu com HTTP 400")
+        self.assertEqual(
+            result.error,
+            "Evolution Go respondeu com HTTP 400: invalid request",
+        )
 
     def test_configures_webhook_for_channel(self) -> None:
         response = httpx.Response(
