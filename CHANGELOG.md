@@ -5,6 +5,10 @@ Versionamento semântico a partir do MVP (`0.0.x`).
 
 ## [Unreleased]
 
+## [0.0.68] — 2026-09-03
+
+Foco: **legibilidade do tema claro e preparação objetiva da versão 1.0.0**.
+
 ### Changed
 
 - Tema claro com hierarquia mais firme entre canvas, painéis, controles e
