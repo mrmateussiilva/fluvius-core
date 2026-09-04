@@ -693,7 +693,7 @@ function previewMedia(
                   Grupo
                 </span>
               </h2>
-              <p class="truncate text-[11px] text-ink-muted sm:text-xs">
+              <p class="truncate text-xs text-ink-muted">
                 <span class="hidden sm:inline">
                   {{
                     (conversation.contact_kind || 'direct') === 'group'
@@ -1020,7 +1020,7 @@ function previewMedia(
   </div>
   <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-canvas px-6 text-center">
     <div>
-      <div class="mx-auto grid h-20 w-20 place-items-center rounded-full bg-canvas text-ink-muted">
+      <div class="mx-auto grid h-20 w-20 place-items-center rounded-full border border-line bg-panel text-ink-secondary shadow-sm">
         <MessageCircle class="h-9 w-9" />
       </div>
       <h2 class="mt-5 text-xl font-light text-ink">Fluvius Atendimento</h2>

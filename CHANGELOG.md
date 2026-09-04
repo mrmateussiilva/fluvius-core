@@ -3,6 +3,28 @@
 Formato inspirado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 Versionamento semântico a partir do MVP (`0.0.x`).
 
+## [Unreleased]
+
+### Changed
+
+- Tema claro com hierarquia mais firme entre canvas, painéis, controles e
+  histórico da conversa.
+- Texto secundário e metadados operacionais ganharam contraste; a conversa
+  selecionada e os contadores não lidos agora têm indicação mais evidente.
+- O frontend passa a validar automaticamente os contrastes críticos do tema
+  claro.
+
+## [0.0.67] — 2026-09-01
+
+Foco: **desbloqueio do realtime e entrega correta do frontend**.
+
+### Fixed
+
+- A leitura de credenciais persistidas durante webhooks deixa de bloquear a
+  linha no banco, evitando serialização e deadlock durante staging de mídia.
+- Assets versionados mantêm cache imutável, enquanto o HTML público usa
+  `no-cache` para refletir a release publicada.
+
 ## [0.0.66] — 2026-09-01
 
 Foco: **recuperação e estabilidade da integração com Evolution Go**.

@@ -215,8 +215,8 @@ function timeLabel(value: string | null) {
         >
           {{ tab.label }}
           <span
-            class="min-w-4 rounded-full px-1 text-center text-[9px] leading-4"
-            :class="activeStatus === tab.value ? 'bg-fluvius-600 text-white' : 'bg-panel-muted text-ink-secondary'"
+            class="min-w-4 rounded-full px-1 text-center text-[10px] font-semibold leading-4"
+            :class="activeStatus === tab.value ? 'bg-fluvius-700 text-white' : 'bg-panel-muted text-ink-secondary'"
           >
             {{ tabCounts[tab.value] }}
           </span>
@@ -242,8 +242,8 @@ function timeLabel(value: string | null) {
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="conversation-item group flex w-full gap-3 px-3 py-2.5 text-left transition hover:bg-canvas active:bg-panel-muted/60"
-        :class="selectedId === conversation.id ? 'bg-canvas hover:bg-canvas' : ''"
+        class="conversation-item group flex w-full gap-3 border-l-[3px] border-transparent px-3 py-2.5 text-left transition hover:bg-canvas active:bg-panel-muted/60"
+        :class="selectedId === conversation.id ? 'border-fluvius-700 bg-fluvius-50 hover:bg-fluvius-50' : ''"
         @click="emit('select', conversation.id)"
       >
         <div
@@ -260,7 +260,7 @@ function timeLabel(value: string | null) {
             </span>
             <span
               v-if="isGroup(conversation)"
-              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
             >
               Grupo
             </span>
@@ -275,7 +275,7 @@ function timeLabel(value: string | null) {
           <div class="mt-0.5 flex items-center gap-2">
             <span
               v-if="!activeChannelId"
-              class="max-w-24 shrink-0 truncate rounded-full bg-info-soft px-2 py-0.5 text-[9px] font-semibold text-info-strong"
+              class="max-w-24 shrink-0 truncate rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-semibold text-info-strong"
               :title="conversation.channel_name"
             >
               {{ conversation.channel_name }}
@@ -289,14 +289,14 @@ function timeLabel(value: string | null) {
                 conversation.status === 'open' &&
                 conversation.assigned_user_id
               "
-              class="max-w-28 shrink-0 truncate rounded-full bg-panel-muted px-2 py-0.5 text-[9px] font-medium text-ink-secondary"
+              class="max-w-28 shrink-0 truncate rounded-full bg-panel-muted px-2 py-0.5 text-[10px] font-medium text-ink-secondary"
               :title="`Responsável: ${assigneeName(conversation)}`"
             >
               {{ assigneeName(conversation) }}
             </span>
             <span
               v-if="conversation.unread_count"
-              class="grid min-h-[18px] min-w-[18px] shrink-0 place-items-center rounded-full bg-fluvius-500 px-1 text-[9px] font-semibold text-white"
+              class="grid min-h-5 min-w-5 shrink-0 place-items-center rounded-full bg-fluvius-700 px-1 text-[10px] font-semibold text-white"
             >
               {{ conversation.unread_count > 99 ? '99+' : conversation.unread_count }}
             </span>

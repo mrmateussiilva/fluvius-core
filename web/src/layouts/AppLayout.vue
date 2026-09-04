@@ -132,7 +132,7 @@ function navigateFromMobile(path: string) {
   <div class="flex h-screen h-[100dvh] overflow-hidden bg-canvas text-ink">
     <!-- Desktop Sidebar (Hidden on Mobile) -->
     <nav
-      class="relative hidden w-[68px] shrink-0 flex-col items-center bg-nav py-4 text-emerald-50/70 shadow-lg shadow-black/10 md:flex"
+      class="relative hidden w-[68px] shrink-0 flex-col items-center bg-nav py-4 text-emerald-50/85 shadow-lg shadow-black/10 md:flex"
     >
       <div
         class="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-panel font-bold text-fluvius-800 shadow-sm"
@@ -141,7 +141,7 @@ function navigateFromMobile(path: string) {
         F
       </div>
       <button
-        class="mb-5 grid h-8 w-10 place-items-center rounded-lg text-emerald-50/70 transition hover:bg-white/10 hover:text-white"
+        class="mb-5 grid h-8 w-10 place-items-center rounded-lg text-emerald-50/85 transition hover:bg-white/10 hover:text-white"
         :class="{ 'cursor-default': availableTenants.length < 2 }"
         :disabled="availableTenants.length < 2 || tenantSwitching"
         :title="
@@ -288,7 +288,7 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <ThemeMenu class="mb-2 mt-auto" inverted placement="top" />
       <div
-        class="mb-3 select-none text-[10px] font-semibold leading-none text-emerald-50/45"
+        class="mb-3 select-none text-[10px] font-semibold leading-none text-emerald-50/65"
         :title="`${APP_NAME} v${APP_VERSION}`"
       >
         v{{ APP_VERSION }}
@@ -353,7 +353,7 @@ function navigateFromMobile(path: string) {
       <!-- Mobile Bottom Navigation Bar (Hidden when inside an active chat on mobile) -->
       <nav
         v-if="!isChatActiveOnMobile"
-        class="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-white/10 bg-nav px-2 text-emerald-50/70 shadow-2xl md:hidden"
+        class="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-white/15 bg-nav px-2 text-emerald-50/85 shadow-2xl md:hidden"
       >
         <RouterLink
           to="/app/conversations"

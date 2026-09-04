@@ -72,7 +72,7 @@ async function submit() {
       <ThemeMenu />
     </div>
 
-    <section class="w-full max-w-md rounded-lg border border-line bg-panel p-6 shadow-lg shadow-black/[0.06] sm:p-8 dark:shadow-black/25">
+    <section class="w-full max-w-md rounded-xl border border-line bg-panel p-6 shadow-lg shadow-black/[0.08] sm:p-8 dark:shadow-black/25">
       <header class="mb-8 flex items-center gap-3">
         <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fluvius-700 font-bold text-white">
           F
@@ -131,7 +131,7 @@ async function submit() {
               autocomplete="username"
               placeholder="voce@empresa.com"
               :disabled="tenantUnavailable || tenantLoading"
-              class="w-full rounded-lg border border-line-strong bg-panel py-2.5 pl-10 pr-3 text-ink outline-none transition placeholder:text-ink-faint focus:border-fluvius-600 focus:ring-4 focus:ring-fluvius-600/10 disabled:cursor-not-allowed disabled:bg-panel-muted disabled:text-ink-faint"
+              class="w-full rounded-lg border border-line-strong bg-canvas py-2.5 pl-10 pr-3 text-ink outline-none transition placeholder:text-ink-faint focus:border-fluvius-600 focus:bg-panel focus:ring-4 focus:ring-fluvius-600/15 disabled:cursor-not-allowed disabled:bg-panel-muted disabled:text-ink-faint"
             />
           </div>
         </div>
@@ -152,7 +152,7 @@ async function submit() {
               autocomplete="current-password"
               placeholder="••••••••"
               :disabled="tenantUnavailable || tenantLoading"
-              class="w-full rounded-lg border border-line-strong bg-panel py-2.5 pl-10 pr-11 text-ink outline-none transition placeholder:text-ink-faint focus:border-fluvius-600 focus:ring-4 focus:ring-fluvius-600/10 disabled:cursor-not-allowed disabled:bg-panel-muted disabled:text-ink-faint"
+              class="w-full rounded-lg border border-line-strong bg-canvas py-2.5 pl-10 pr-11 text-ink outline-none transition placeholder:text-ink-faint focus:border-fluvius-600 focus:bg-panel focus:ring-4 focus:ring-fluvius-600/15 disabled:cursor-not-allowed disabled:bg-panel-muted disabled:text-ink-faint"
             />
             <button
               type="button"
@@ -178,7 +178,7 @@ async function submit() {
 
         <button
           type="submit"
-          class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-fluvius-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-fluvius-700 focus:outline-none focus:ring-4 focus:ring-fluvius-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+          class="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-fluvius-800 focus:outline-none focus:ring-4 focus:ring-fluvius-600/25 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!canSubmit"
         >
           <LoaderCircle v-if="auth.loading" class="h-4 w-4 animate-spin" />

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "check:contrast": "node scripts/check-theme-contrast.mjs",
     "build": "vue-tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
