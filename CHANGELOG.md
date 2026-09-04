@@ -5,6 +5,25 @@ Versionamento semântico a partir do MVP (`0.0.x`).
 
 ## [Unreleased]
 
+## [0.0.69] — 2026-09-03
+
+Foco: **corrigir o envio de imagens e mídia outgoing em produção**.
+
+### Fixed
+
+- Mídia outgoing passava a URL pública de `/storage` para o gateway; o Caddy
+  de produção responde 404 para essa origem e o Evolution Go devolvia HTTP 500
+  ao tentar enviar o HTML do erro como mídia. A URL agora é convertida para o
+  base interno `EVOLUTION_GO_MEDIA_BASE_URL` (`http://api:8000` na VPS).
+- `caption` e `filename` só entram no payload quando preenchidos; o gateway
+  faz bind desses campos como string e rejeitaria `null` com HTTP 400.
+- GIF passa a ser entregue como `document`, porque o gateway só aceita
+  JPEG/PNG/WebP como `image`.
+- Envio de mídia usa timeout estendido de 60 s, compatível com o limite do
+  job de delivery (90 s).
+- Erros HTTP do gateway agora incluem um trecho sanitizado e limitado do
+  corpo de erro, sem credenciais, facilitando o diagnóstico pelo operador.
+
 ## [0.0.68] — 2026-09-03
 
 Foco: **legibilidade do tema claro e preparação objetiva da versão 1.0.0**.
