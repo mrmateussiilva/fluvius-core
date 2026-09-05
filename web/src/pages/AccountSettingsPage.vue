@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   BellRing,
   Check,
@@ -19,10 +19,21 @@ import { useInterfacePreferences } from '../composables/useInterfacePreferences'
 import { useTheme, type ThemePreference } from '../composables/useTheme'
 import { useAuthStore } from '../stores/authStore'
 import { playIncomingMessageSound } from '../utils/sound'
+import {
+  getDesktopNotificationPermission,
+  requestDesktopNotificationPermission,
+  showTestConversationNotification,
+  type DesktopNotificationPermission,
+} from '../utils/notifications'
 
 const auth = useAuthStore()
 const { preference, setThemePreference } = useTheme()
-const { messageSoundEnabled, setMessageSoundEnabled } = useInterfacePreferences()
+const {
+  desktopNotificationsEnabled,
+  messageSoundEnabled,
+  setDesktopNotificationsEnabled,
+  setMessageSoundEnabled,
+} = useInterfacePreferences()
 
 const profileName = ref('')
 const currentPassword = ref('')
@@ -34,6 +45,11 @@ const profileError = ref('')
 const passwordError = ref('')
 const profileNotice = ref('')
 const passwordNotice = ref('')
+const notificationPermission = ref<DesktopNotificationPermission>(
+  getDesktopNotificationPermission(),
+)
+const notificationNotice = ref('')
+const notificationError = ref('')
 
 const userInitial = computed(
   () => auth.user?.name?.trim().charAt(0).toUpperCase() || 'U',
@@ -47,6 +63,25 @@ const profileChanged = computed(
     normalizedProfileName.value.length >= 2 &&
     normalizedProfileName.value !== auth.user?.name,
 )
+const desktopNotificationsActive = computed(
+  () =>
+    desktopNotificationsEnabled.value &&
+    notificationPermission.value === 'granted',
+)
+const desktopNotificationDescription = computed(() => {
+  if (notificationPermission.value === 'unsupported') {
+    return 'Este navegador não oferece notificações nativas.'
+  }
+  if (notificationPermission.value === 'denied') {
+    return 'Bloqueadas nas permissões do navegador.'
+  }
+  if (notificationPermission.value === 'default') {
+    return 'Clique para permitir alertas neste navegador.'
+  }
+  return desktopNotificationsActive.value
+    ? 'Cada chat aparece separadamente neste navegador.'
+    : 'Desativadas neste navegador.'
+})
 
 const themeOptions: Array<{
   value: ThemePreference
@@ -129,10 +164,68 @@ function toggleMessageSound() {
   setMessageSoundEnabled(!messageSoundEnabled.value)
 }
 
+function refreshNotificationPermission() {
+  notificationPermission.value = getDesktopNotificationPermission()
+  if (notificationPermission.value !== 'granted') {
+    setDesktopNotificationsEnabled(false)
+  }
+}
+
+async function toggleDesktopNotifications() {
+  notificationNotice.value = ''
+  notificationError.value = ''
+  refreshNotificationPermission()
+
+  if (notificationPermission.value === 'unsupported') {
+    notificationError.value = 'Este navegador não oferece suporte a notificações.'
+    return
+  }
+  if (notificationPermission.value === 'denied') {
+    notificationError.value =
+      'Libere as notificações nas configurações do navegador e tente novamente.'
+    return
+  }
+  if (desktopNotificationsActive.value) {
+    setDesktopNotificationsEnabled(false)
+    notificationNotice.value = 'Notificações por conversa desativadas neste navegador.'
+    return
+  }
+
+  const permission =
+    notificationPermission.value === 'granted'
+      ? 'granted'
+      : await requestDesktopNotificationPermission()
+  notificationPermission.value = permission
+  if (permission === 'granted') {
+    setDesktopNotificationsEnabled(true)
+    notificationNotice.value = 'Notificações por conversa ativadas.'
+    return
+  }
+  setDesktopNotificationsEnabled(false)
+  notificationError.value =
+    permission === 'denied'
+      ? 'O navegador bloqueou as notificações. Altere a permissão do site para ativá-las.'
+      : 'A permissão não foi concedida. Você pode tentar novamente quando quiser.'
+}
+
+function testDesktopNotification() {
+  notificationNotice.value = ''
+  notificationError.value = ''
+  if (!desktopNotificationsActive.value || !showTestConversationNotification()) {
+    notificationError.value = 'Ative as notificações por conversa antes de testar.'
+    return
+  }
+  notificationNotice.value = 'Notificação de teste enviada.'
+}
+
 onMounted(async () => {
   await auth.restore()
   profileName.value = auth.user?.name || ''
+  refreshNotificationPermission()
+  window.addEventListener('focus', refreshNotificationPermission)
 })
+
+onBeforeUnmount(() => window.removeEventListener('focus', refreshNotificationPermission))
 </script>
 
 <template>
@@ -403,8 +496,37 @@ onMounted(async () => {
             <button
               type="button"
               role="switch"
-              :aria-checked="messageSoundEnabled"
+              :aria-checked="desktopNotificationsActive"
               class="mt-4 flex min-h-16 w-full items-center gap-3 rounded-lg border border-line bg-canvas px-3 py-3 text-left transition hover:border-line-strong"
+              @click="toggleDesktopNotifications"
+            >
+              <BellRing
+                class="h-5 w-5 shrink-0"
+                :class="desktopNotificationsActive ? 'text-fluvius-700' : 'text-ink-faint'"
+              />
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold text-ink">Notificações por conversa</span>
+                <span class="block text-xs text-ink-muted">
+                  {{ desktopNotificationDescription }}
+                </span>
+              </span>
+              <span
+                class="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+                :class="desktopNotificationsActive ? 'bg-fluvius-600' : 'bg-disabled'"
+                aria-hidden="true"
+              >
+                <span
+                  class="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm transition-transform"
+                  :class="desktopNotificationsActive ? 'translate-x-6' : 'translate-x-1'"
+                />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="messageSoundEnabled"
+              class="mt-3 flex min-h-16 w-full items-center gap-3 rounded-lg border border-line bg-canvas px-3 py-3 text-left transition hover:border-line-strong"
               @click="toggleMessageSound"
             >
               <Volume2
@@ -429,14 +551,39 @@ onMounted(async () => {
               </span>
             </button>
 
-            <button
-              type="button"
-              class="mt-3 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:bg-panel-muted active:scale-[0.97]"
-              @click="playIncomingMessageSound(true)"
+            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:bg-panel-muted active:scale-[0.97]"
+                @click="testDesktopNotification"
+              >
+                <BellRing class="h-4 w-4" />
+                Testar notificação
+              </button>
+              <button
+                type="button"
+                class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:bg-panel-muted active:scale-[0.97]"
+                @click="playIncomingMessageSound(true)"
+              >
+                <Play class="h-4 w-4" />
+                Testar som
+              </button>
+            </div>
+
+            <p
+              v-if="notificationNotice"
+              class="mt-3 rounded-lg bg-success-soft px-3 py-2 text-xs text-success-strong"
+              role="status"
             >
-              <Play class="h-4 w-4" />
-              Testar som
-            </button>
+              {{ notificationNotice }}
+            </p>
+            <p
+              v-if="notificationError"
+              class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger-strong"
+              role="alert"
+            >
+              {{ notificationError }}
+            </p>
           </section>
         </aside>
       </div>

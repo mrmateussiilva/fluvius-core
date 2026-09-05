@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { getMe } from '../api/auth'
+import { getConversation } from '../api/conversations'
 import { ApiError } from '../api/http'
 import { useAuthStore } from './authStore'
 import { useConversationStore } from './conversationStore'
 import { playIncomingMessageSound } from '../utils/sound'
+import { showConversationNotification } from '../utils/notifications'
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ||
@@ -27,6 +29,8 @@ export const useRealtimeStore = defineStore('realtime', {
     refreshTimer: null as number | null,
     reconnectAttempt: 0,
     pendingMessageRefresh: false,
+    pendingIncomingNotifications: {} as Record<string, string>,
+    recentIncomingMessageIds: [] as string[],
     manualDisconnect: false,
   }),
   actions: {
@@ -81,9 +85,19 @@ export const useRealtimeStore = defineStore('realtime', {
 
         if (
           realtimeEvent.event === 'message.created' &&
-          realtimeEvent.data?.direction === 'incoming'
+          realtimeEvent.data?.direction === 'incoming' &&
+          conversationId
         ) {
-          playIncomingMessageSound()
+          const messageId =
+            typeof realtimeEvent.data?.id === 'string' ? realtimeEvent.data.id : null
+          if (messageId && !this.recentIncomingMessageIds.includes(messageId)) {
+            this.recentIncomingMessageIds = [
+              messageId,
+              ...this.recentIncomingMessageIds,
+            ].slice(0, 100)
+            this.pendingIncomingNotifications[conversationId] = messageId
+            playIncomingMessageSound()
+          }
         }
 
         this.scheduleReconciliation(
@@ -184,8 +198,36 @@ export const useRealtimeStore = defineStore('realtime', {
         if (refreshMessages && conversations.selectedId) {
           await conversations.refreshMessages(conversations.selectedId)
         }
+        await this.flushIncomingNotifications()
       } catch {
         // A reconexão ou o próximo evento tentará a conciliação novamente.
+      }
+    },
+    async flushIncomingNotifications() {
+      const pendingNotifications = Object.entries(this.pendingIncomingNotifications)
+      if (!pendingNotifications.length) return
+
+      const conversations = useConversationStore()
+      const tenantId = useAuthStore().user?.tenant_id
+      if (!tenantId) return
+
+      for (const [conversationId, messageId] of pendingNotifications) {
+        try {
+          const conversation =
+            conversations.conversations.find((item) => item.id === conversationId) ||
+            (await getConversation(conversationId))
+          showConversationNotification(
+            conversation,
+            tenantId,
+            messageId,
+            conversations.selectedId,
+          )
+          if (this.pendingIncomingNotifications[conversationId] === messageId) {
+            delete this.pendingIncomingNotifications[conversationId]
+          }
+        } catch {
+          // Mantém pendente para uma próxima conciliação quando a API se recuperar.
+        }
       }
     },
     disconnect() {
@@ -199,6 +241,8 @@ export const useRealtimeStore = defineStore('realtime', {
         this.refreshTimer = null
       }
       this.pendingMessageRefresh = false
+      this.pendingIncomingNotifications = {}
+      this.recentIncomingMessageIds = []
       this.clearHeartbeat()
       const socket = this.socket
       this.socket = null

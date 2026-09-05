@@ -319,8 +319,18 @@ entre a resposta HTTP e o WebSocket. O navegador envia `ping` a cada 20 segundos
 e exige `pong` em até oito segundos; conexão sem resposta é encerrada e refeita
 com backoff. Ao reconectar, voltar para a aba ou recuperar a rede, a lista e a
 conversa selecionada são sincronizadas novamente, cobrindo eventos ocorridos
-durante a interrupção. A contagem de não lidas só é zerada quando a aba está
-visível.
+durante a interrupção. Eventos `message.created` recebidos também
+podem gerar notificações nativas, mediante permissão explícita do operador. O
+cliente consulta a conversa pela API autenticada quando ela não está na lista
+atual, agrupa alertas pela combinação tenant/conversa e abre o chat exato ao
+clicar. A conversa já visível não gera alerta redundante; som e notificação são
+preferências locais independentes. A contagem de não lidas só é zerada quando a
+aba está visível.
+
+Na lista de conversas, a fila `Não atendidas` reúne conversas `new` ainda sem
+atendente e conversas `open` atribuídas ao operador cuja última mensagem é
+incoming. Isso prioriza tanto o primeiro atendimento quanto a resposta que o
+cliente ainda aguarda, sem alterar o estado operacional da conversa.
 
 ## Fila
 

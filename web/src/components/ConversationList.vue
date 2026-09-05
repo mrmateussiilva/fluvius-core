@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { MessageSquareText, Search, Smartphone, Users, X } from 'lucide-vue-next'
+import { CircleAlert, MessageSquareText, Search, Smartphone, Users, X } from 'lucide-vue-next'
 import type {
   Channel,
   ContactKind,
@@ -25,11 +25,13 @@ const emit = defineEmits<{
   select: [id: string]
   channelChange: [channelId: string | null]
 }>()
-const activeStatus = ref<ConversationStatus>('new')
+type ConversationQueue = ConversationStatus | 'pending'
+
+const activeStatus = ref<ConversationQueue>('pending')
 const kindFilter = ref<'all' | ContactKind>('all')
 const search = ref('')
-const tabs: { label: string; value: ConversationStatus }[] = [
-  { label: 'Aguardando', value: 'new' },
+const tabs: { label: string; value: ConversationQueue }[] = [
+  { label: 'Não atendidas', value: 'pending' },
   { label: 'Em atendimento', value: 'open' },
   { label: 'Finalizadas', value: 'closed' },
 ]
@@ -39,13 +41,29 @@ const kindTabs: { label: string; value: 'all' | ContactKind }[] = [
   { label: 'Grupos', value: 'group' },
 ]
 
-function belongsToTab(conversation: Conversation, status: ConversationStatus) {
+function isAssignedToCurrentUser(conversation: Conversation) {
+  return (
+    props.currentUserRole === 'admin' ||
+    !props.currentUserId ||
+    conversation.assigned_user_id === props.currentUserId
+  )
+}
+
+function needsAttention(conversation: Conversation) {
+  return (
+    conversation.status === 'new' ||
+    (conversation.status === 'open' &&
+      isAssignedToCurrentUser(conversation) &&
+      conversation.last_message_direction === 'incoming')
+  )
+}
+
+function belongsToTab(conversation: Conversation, status: ConversationQueue) {
+  if (status === 'pending') return needsAttention(conversation)
   if (status !== 'open') return conversation.status === status
   return (
     conversation.status === 'open' &&
-    (props.currentUserRole === 'admin' ||
-      !props.currentUserId ||
-      conversation.assigned_user_id === props.currentUserId)
+    isAssignedToCurrentUser(conversation)
   )
 }
 
@@ -64,7 +82,7 @@ const tabCounts = computed(() =>
       tab.value,
       props.conversations.filter((conversation) => belongsToTab(conversation, tab.value)).length,
     ]),
-  ) as Record<ConversationStatus, number>,
+  ) as Record<ConversationQueue, number>,
 )
 
 const visible = computed(() => {
@@ -86,9 +104,16 @@ const visible = computed(() => {
 watch(
   () => props.conversations.find((item) => item.id === props.selectedId)?.status,
   (status) => {
-    if (status) activeStatus.value = status
+    const selected = props.conversations.find((item) => item.id === props.selectedId)
+    if (status) activeStatus.value = selected && needsAttention(selected) ? 'pending' : status
   },
 )
+
+function attentionLabel(conversation: Conversation) {
+  if (conversation.status === 'new') return 'Sem atendente'
+  if (needsAttention(conversation)) return 'Aguardando resposta'
+  return null
+}
 
 function displayName(conversation: Conversation) {
   return conversation.contact_name || conversation.contact_phone
@@ -279,6 +304,13 @@ function timeLabel(value: string | null) {
               :title="conversation.channel_name"
             >
               {{ conversation.channel_name }}
+            </span>
+            <span
+              v-if="attentionLabel(conversation)"
+              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-strong"
+            >
+              <CircleAlert class="h-3 w-3" aria-hidden="true" />
+              {{ attentionLabel(conversation) }}
             </span>
             <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted">
               {{ messagePreview(conversation) }}

@@ -813,6 +813,7 @@ async def whatsapp_webhook(
                 "id": str(message.id),
                 "conversation_id": str(conversation.id),
                 "channel_id": str(channel.id),
+                "direction": message.direction.value,
             },
         )
         for reconciled in reconciled_edits:

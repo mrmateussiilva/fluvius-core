@@ -9,6 +9,7 @@ Estas regras valem para todo o repositório.
 - Não implementar Meta Cloud API ou BSP completos sem autorização.
 - Não criar feature fora do escopo do MVP sem autorização explícita.
 - Priorizar a operação de atendimento: receber, assumir, responder e finalizar.
+- Na fila `Não atendidas`, priorizar conversas novas sem atendente e atendimentos assumidos cuja última mensagem seja do cliente.
 
 ## Providers e mensagens
 
