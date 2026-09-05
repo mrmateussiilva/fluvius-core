@@ -66,6 +66,14 @@ configuração é isolada por `(tenant_id, channel_id)` em
 configuração e usar o simulador. A chave do provedor é cifrada no backend e
 nunca é devolvida ao frontend.
 
+O Copiloto de IA é independente do bot e pode ser usado sob demanda por quem
+tem acesso à conversa em `POST /conversations/{conversation_id}/analyze`. Ele
+carrega somente mensagens do `tenant_id` e da conversa autorizada, devolve
+resumo, intenção do cliente, detalhes importantes, urgência, próxima ação e
+sugestão de resposta. A chamada não cria mensagem, não altera status e não
+ativa o provider de WhatsApp; a sugestão só pode ser copiada ou salva como nota
+interna pelo atendente após revisão.
+
 Quando habilitado, o worker de inbox agenda um turno somente para mensagens
 diretas recebidas em canal conectado, em conversa `new`, sem atendente
 atribuído e com `is_bot_active=true`. Grupos nunca ativam o bot. Antes de

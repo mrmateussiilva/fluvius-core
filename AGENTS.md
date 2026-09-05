@@ -6,6 +6,7 @@ Estas regras valem para todo o repositório.
 
 - Não recriar Chatwoot nem importar sua arquitetura ou código.
 - Não criar CRM, dashboard, IA, billing ou campanhas agora.
+- Exceção autorizada: o Copiloto de IA sob demanda pode analisar conversas e sugerir respostas revisáveis; nunca envia mensagem nem toma decisões operacionais automaticamente.
 - Não implementar Meta Cloud API ou BSP completos sem autorização.
 - Não criar feature fora do escopo do MVP sem autorização explícita.
 - Priorizar a operação de atendimento: receber, assumir, responder e finalizar.

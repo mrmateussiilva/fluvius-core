@@ -39,6 +39,9 @@
 - Seletor de emojis Unicode por categoria e botão dedicado para escolher figurinha no composer.
 - Player de áudio com progresso e velocidades `1x`, `1,5x` e `2x`.
 - Respostas rápidas.
+- Copiloto de IA sob demanda para analisar uma conversa, destacar intenção,
+  detalhes, urgência, próxima ação e uma sugestão de resposta sempre revisável
+  pelo atendente; não envia mensagens nem muda o estado operacional.
 - Atualizações realtime essenciais.
 - Auditoria/eventos técnicos suficientes para diagnosticar provider.
 - Implantação em uma VPS com Caddy, HTTPS/WSS, serviços internos, mídias
@@ -48,7 +51,8 @@
 
 - Dashboard, métricas e gráficos.
 - CRM, funil, negócios ou cadastro rico de empresas.
-- IA, bots, classificação automática ou resumo.
+- Respostas automáticas por IA, classificação automática e decisões autônomas
+  de atendimento.
 - Billing, assinatura e limites comerciais.
 - Campanhas, broadcast ou marketing.
 - Meta Cloud API completa ou BSP completo.

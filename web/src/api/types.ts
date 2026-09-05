@@ -385,4 +385,13 @@ export interface AiSummaryResponse {
   generated_at: string
 }
 
+export interface AiConversationAnalysisResponse {
+  summary: string
+  customer_intent: string
+  key_details: string[]
+  next_action: string
+  urgency: 'low' | 'normal' | 'high'
+  suggested_reply: string
+  generated_at: string
+}
 

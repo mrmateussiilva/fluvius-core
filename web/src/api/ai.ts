@@ -1,5 +1,6 @@
 import { http } from './http'
 import type {
+  AiConversationAnalysisResponse,
   AiConfigRead,
   AiConfigUpdate,
   AiSimulateRequest,
@@ -55,5 +56,14 @@ export async function summarizeConversation(
     {
       method: 'POST',
     },
+  )
+}
+
+export async function analyzeConversation(
+  conversationId: string,
+): Promise<AiConversationAnalysisResponse> {
+  return http<AiConversationAnalysisResponse>(
+    `/api/v1/conversations/${conversationId}/analyze`,
+    { method: 'POST' },
   )
 }

@@ -23,8 +23,9 @@ import {
   UserPlus,
   X,
 } from 'lucide-vue-next'
-import { summarizeConversation } from '../api/ai'
+import { analyzeConversation } from '../api/ai'
 import type {
+  AiConversationAnalysisResponse,
   ContactDetail,
   ContactSearchResult,
   Conversation,
@@ -489,18 +490,18 @@ function toggleContactPanel() {
 
 const summarizing = ref(false)
 const summarizeError = ref<string | null>(null)
-const aiSummary = ref<string | null>(null)
-const copiedSummary = ref(false)
-const savingSummary = ref(false)
+const aiAnalysis = ref<AiConversationAnalysisResponse | null>(null)
+const copiedSuggestion = ref(false)
+const savingAnalysis = ref(false)
 const store = useConversationStore()
 
 watch(
   () => props.conversation?.id,
   () => {
-    aiSummary.value = null
+    aiAnalysis.value = null
     summarizeError.value = null
-    copiedSummary.value = false
-    savingSummary.value = false
+    copiedSuggestion.value = false
+    savingAnalysis.value = false
   },
 )
 
@@ -508,52 +509,68 @@ async function handleSummarize() {
   if (!props.conversation?.id || summarizing.value) return
   summarizing.value = true
   summarizeError.value = null
-  aiSummary.value = null
-  copiedSummary.value = false
+  aiAnalysis.value = null
+  copiedSuggestion.value = false
   try {
-    const res = await summarizeConversation(props.conversation.id)
-    aiSummary.value = res.summary
+    aiAnalysis.value = await analyzeConversation(props.conversation.id)
   } catch (err: any) {
-    summarizeError.value =
-      err?.message || 'Não foi possível gerar o resumo com IA.'
+    summarizeError.value = err?.message || 'Não foi possível analisar a conversa com IA.'
   } finally {
     summarizing.value = false
   }
 }
 
-async function copySummary() {
-  if (!aiSummary.value) return
+function urgencyLabel(urgency: AiConversationAnalysisResponse['urgency']) {
+  return { low: 'Baixa', normal: 'Normal', high: 'Alta' }[urgency]
+}
+
+function analysisNote() {
+  if (!aiAnalysis.value) return ''
+  const analysis = aiAnalysis.value
+  return [
+    '🤖 Análise do atendimento',
+    '',
+    `Resumo: ${analysis.summary}`,
+    `Intenção do cliente: ${analysis.customer_intent}`,
+    `Detalhes: ${analysis.key_details.join('; ') || 'Nenhum detalhe adicional'}`,
+    `Próxima ação: ${analysis.next_action}`,
+    `Urgência: ${urgencyLabel(analysis.urgency)}`,
+    `Sugestão de resposta: ${analysis.suggested_reply}`,
+  ].join('\n')
+}
+
+async function copySuggestedReply() {
+  if (!aiAnalysis.value) return
   try {
-    await navigator.clipboard.writeText(aiSummary.value)
-    copiedSummary.value = true
+    await navigator.clipboard.writeText(aiAnalysis.value.suggested_reply)
+    copiedSuggestion.value = true
     setTimeout(() => {
-      copiedSummary.value = false
+      copiedSuggestion.value = false
     }, 2500)
   } catch {
     // fallback
   }
 }
 
-async function saveSummaryAsInternalNote() {
-  if (!aiSummary.value || !props.conversation?.id || savingSummary.value) return
-  const noteText = `🤖 Resumo do Atendimento:\n\n${aiSummary.value}`
-  savingSummary.value = true
+async function saveAnalysisAsInternalNote() {
+  if (!aiAnalysis.value || !props.conversation?.id || savingAnalysis.value) return
+  savingAnalysis.value = true
   try {
-    const accepted = await store.send(noteText, null, [], [], [], true)
+    const accepted = await store.send(analysisNote(), null, [], [], [], true)
     if (accepted) {
-      aiSummary.value = null
+      aiAnalysis.value = null
     } else {
-      summarizeError.value = 'Não foi possível salvar o resumo como nota interna.'
+      summarizeError.value = 'Não foi possível salvar a análise como nota interna.'
     }
   } finally {
-    savingSummary.value = false
+    savingAnalysis.value = false
   }
 }
 
 function dismissSummary() {
-  aiSummary.value = null
+  aiAnalysis.value = null
   summarizeError.value = null
-  copiedSummary.value = false
+  copiedSuggestion.value = false
 }
 
 function sendMessage(
@@ -712,12 +729,12 @@ function previewMedia(
             type="button"
             class="flex h-9 items-center gap-1.5 rounded-lg border border-purple-300/80 bg-purple-50 px-2.5 text-xs font-semibold text-purple-700 shadow-sm transition hover:bg-purple-100 dark:border-purple-800/60 dark:bg-purple-950/40 dark:text-purple-300 sm:px-3"
             :disabled="summarizing"
-            title="Gerar resumo inteligente do atendimento com IA"
+            title="Analisar a conversa com IA sem enviar mensagens"
             @click="handleSummarize"
           >
             <LoaderCircle v-if="summarizing" class="h-4 w-4 animate-spin text-purple-600" />
             <Sparkles v-else class="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            <span class="hidden md:inline">{{ summarizing ? 'Resumindo...' : 'Resumo IA' }}</span>
+            <span class="hidden md:inline">{{ summarizing ? 'Analisando...' : 'Analisar IA' }}</span>
           </button>
           <button
             v-if="canClaim"
@@ -833,10 +850,10 @@ function previewMedia(
           leave-to-class="opacity-0 translate-y-2"
         >
           <section
-            v-if="summarizing || aiSummary || summarizeError"
+            v-if="summarizing || aiAnalysis || summarizeError"
             class="absolute inset-x-3 top-3 z-20 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-purple-200/80 bg-panel/95 p-4 shadow-xl shadow-purple-950/10 backdrop-blur sm:inset-x-auto sm:right-4 sm:w-[min(30rem,calc(100%-2rem))]"
             :aria-busy="summarizing"
-            aria-labelledby="conversation-summary-title"
+            aria-labelledby="conversation-analysis-title"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="flex min-w-0 items-start gap-2.5">
@@ -844,11 +861,11 @@ function previewMedia(
                   <Sparkles class="h-4 w-4" />
                 </div>
                 <div class="min-w-0">
-                  <h3 id="conversation-summary-title" class="text-sm font-semibold text-ink">
-                    Resumo da conversa
+                  <h3 id="conversation-analysis-title" class="text-sm font-semibold text-ink">
+                    Análise do atendimento
                   </h3>
                   <p class="mt-0.5 text-[11px] text-ink-muted">
-                    {{ summarizing ? 'Analisando as mensagens...' : 'Gerado com IA' }}
+                    {{ summarizing ? 'Lendo o histórico sem enviar mensagens...' : 'Copiloto de IA' }}
                   </p>
                 </div>
               </div>
@@ -856,8 +873,8 @@ function previewMedia(
                 v-if="!summarizing"
                 type="button"
                 class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-95"
-                aria-label="Fechar resumo"
-                title="Fechar resumo"
+                aria-label="Fechar análise"
+                title="Fechar análise"
                 @click="dismissSummary"
               >
                 <X class="h-4 w-4" />
@@ -866,7 +883,7 @@ function previewMedia(
 
             <div v-if="summarizing" class="mt-4 flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-3 text-xs text-purple-800 dark:bg-purple-500/10 dark:text-purple-200">
               <LoaderCircle class="h-4 w-4 animate-spin" />
-              <span>Aguarde enquanto a IA prepara o resumo.</span>
+              <span>A IA está organizando contexto, pendências e uma sugestão revisável.</span>
             </div>
             <p
               v-if="!summarizing && summarizeError"
@@ -876,29 +893,61 @@ function previewMedia(
               {{ summarizeError }}
             </p>
             <div
-              v-if="!summarizing && aiSummary"
-              class="mt-4 whitespace-pre-wrap text-sm leading-6 text-ink-secondary"
+              v-if="!summarizing && aiAnalysis"
+              class="mt-4 space-y-4 text-sm leading-6 text-ink-secondary"
             >
-              {{ aiSummary }}
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Resumo</p>
+                <p class="mt-1 text-ink-secondary">{{ aiAnalysis.summary }}</p>
+              </div>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Intenção</p>
+                  <p class="mt-1 text-ink-secondary">{{ aiAnalysis.customer_intent }}</p>
+                </div>
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Urgência</p>
+                  <span
+                    class="mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+                    :class="aiAnalysis.urgency === 'high' ? 'bg-danger-soft text-danger-strong' : aiAnalysis.urgency === 'normal' ? 'bg-warning-soft text-warning-strong' : 'bg-info-soft text-info-strong'"
+                  >
+                    {{ urgencyLabel(aiAnalysis.urgency) }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="aiAnalysis.key_details.length">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Detalhes importantes</p>
+                <ul class="mt-1 list-disc space-y-0.5 pl-4 text-ink-secondary">
+                  <li v-for="detail in aiAnalysis.key_details" :key="detail">{{ detail }}</li>
+                </ul>
+              </div>
+              <div class="rounded-lg bg-warning-soft px-3 py-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-warning-strong">Próxima ação</p>
+                <p class="mt-1 text-warning-strong">{{ aiAnalysis.next_action }}</p>
+              </div>
+              <div class="rounded-lg border border-fluvius-100 bg-fluvius-50 px-3 py-2.5 dark:border-fluvius-800/40 dark:bg-fluvius-950/20">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-fluvius-700 dark:text-fluvius-300">Sugestão de resposta</p>
+                <p class="mt-1 whitespace-pre-wrap text-ink-secondary">{{ aiAnalysis.suggested_reply }}</p>
+              </div>
             </div>
 
-            <div v-if="aiSummary && !summarizing" class="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+            <div v-if="aiAnalysis && !summarizing" class="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <button
                 type="button"
                 class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-xs font-medium text-ink-secondary transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98]"
-                @click="copySummary"
+                @click="copySuggestedReply"
               >
                 <Copy class="h-3.5 w-3.5" />
-                {{ copiedSummary ? 'Copiado' : 'Copiar' }}
+                {{ copiedSuggestion ? 'Sugestão copiada' : 'Copiar sugestão' }}
               </button>
               <button
                 type="button"
                 class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-purple-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="savingSummary"
-                @click="saveSummaryAsInternalNote"
+                :disabled="savingAnalysis"
+                @click="saveAnalysisAsInternalNote"
               >
-                <LoaderCircle v-if="savingSummary" class="h-3.5 w-3.5 animate-spin" />
-                <span>{{ savingSummary ? 'Salvando...' : 'Salvar como nota interna' }}</span>
+                <LoaderCircle v-if="savingAnalysis" class="h-3.5 w-3.5 animate-spin" />
+                <span>{{ savingAnalysis ? 'Salvando...' : 'Salvar como nota interna' }}</span>
               </button>
             </div>
           </section>

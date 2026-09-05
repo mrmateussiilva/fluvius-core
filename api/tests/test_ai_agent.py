@@ -1,3 +1,4 @@
+import json
 import unittest
 from datetime import UTC, datetime
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -372,6 +373,59 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn("Motivo", summary)
             self.assertIn("Preço do plano Pro", summary)
             mock_llm.assert_called_once()
+
+    async def test_analyze_conversation_history_returns_operator_copilot_output(self) -> None:
+        from app.ai.service import analyze_conversation_history
+
+        conv = Conversation(
+            id=self.conversation_id,
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            contact_id=self.contact_id,
+            status=ConversationStatus.OPEN,
+        )
+        ai_config = ChannelAiConfig(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            channel_id=self.channel_id,
+            provider="openai",
+            model_name="gpt-4o-mini",
+            api_key_encrypted=encrypt_secret("sk-test-123"),
+        )
+        message = Message(
+            id=uuid4(),
+            tenant_id=self.tenant_id,
+            conversation_id=self.conversation_id,
+            direction=MessageDirection.INCOMING,
+            message_type=MessageType.TEXT,
+            body="Meu pedido ainda não chegou. Preciso de ajuda.",
+        )
+        mock_db = MagicMock()
+        mock_db.scalar.side_effect = [conv, ai_config]
+        mock_db.scalars.return_value = [message]
+        raw_analysis = json.dumps(
+            {
+                "summary": "Cliente informa atraso na entrega.",
+                "customer_intent": "Verificar o status do pedido.",
+                "key_details": ["Pedido ainda não chegou"],
+                "next_action": "Consultar o status do pedido antes de responder.",
+                "urgency": "normal",
+                "suggested_reply": "Vou verificar o status do seu pedido e retorno em seguida.",
+            }
+        )
+
+        with patch("app.ai.service.call_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = (raw_analysis, False, None)
+            analysis = await analyze_conversation_history(
+                mock_db,
+                self.tenant_id,
+                self.conversation_id,
+            )
+
+        self.assertEqual(analysis.urgency, "normal")
+        self.assertEqual(analysis.key_details, ["Pedido ainda não chegou"])
+        self.assertIn("status", analysis.suggested_reply)
+        self.assertFalse(mock_llm.call_args.kwargs["enable_handoff_tools"])
 
     def test_get_channel_ai_config_router_role_check(self) -> None:
         """Validates that get_channel_ai_config correctly reads membership.role and returns config."""

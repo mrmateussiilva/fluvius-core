@@ -58,3 +58,12 @@ class AiSummaryResponse(BaseModel):
     summary: str
     generated_at: str
 
+
+class AiConversationAnalysisResponse(BaseModel):
+    summary: str
+    customer_intent: str
+    key_details: list[str]
+    next_action: str
+    urgency: Literal["low", "normal", "high"]
+    suggested_reply: str
+    generated_at: str = ""

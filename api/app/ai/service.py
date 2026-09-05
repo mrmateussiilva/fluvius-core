@@ -9,7 +9,12 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.ai.models import ChannelAiConfig
-from app.ai.schemas import AiConfigUpdate, AiSimulateRequest, AiSimulateResponse
+from app.ai.schemas import (
+    AiConfigUpdate,
+    AiConversationAnalysisResponse,
+    AiSimulateRequest,
+    AiSimulateResponse,
+)
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelStatus,
@@ -229,6 +234,7 @@ async def call_llm(
     handoff_prompt: str | None = None,
     temperature: float = 0.3,
     max_tokens: int = 500,
+    enable_handoff_tools: bool = True,
 ) -> tuple[str, bool, str | None]:
     """Calls the LLM provider using OpenAI-compatible Chat Completions API with Tool Calling.
 
@@ -242,9 +248,10 @@ async def call_llm(
     }
 
     full_system = system_prompt
-    if handoff_prompt:
+    if handoff_prompt and enable_handoff_tools:
         full_system += f"\n\nInstruções de Transbordo (Handoff):\n{handoff_prompt}"
-    full_system += f"\n\nPolítica de triagem obrigatória:\n{TRIAGE_POLICY}"
+    if enable_handoff_tools:
+        full_system += f"\n\nPolítica de triagem obrigatória:\n{TRIAGE_POLICY}"
 
     messages_payload: list[dict] = [{"role": "system", "content": full_system}]
     for msg in conversation_messages:
@@ -255,9 +262,10 @@ async def call_llm(
         "messages": messages_payload,
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "tools": [HANDOFF_TOOL],
-        "tool_choice": "auto",
     }
+    if enable_handoff_tools:
+        body["tools"] = [HANDOFF_TOOL]
+        body["tool_choice"] = "auto"
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(endpoint, headers=headers, json=body)
@@ -621,3 +629,88 @@ async def summarize_conversation_history(
     )
 
     return summary_text
+
+
+async def analyze_conversation_history(
+    db: Session,
+    tenant_id: UUID,
+    conversation_id: UUID,
+    max_messages: int = 40,
+) -> AiConversationAnalysisResponse:
+    """Builds operator-facing analysis without sending or persisting a customer reply."""
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == tenant_id,
+        )
+    )
+    if conversation is None:
+        raise ValueError("Conversa não encontrada.")
+
+    config = db.scalar(
+        select(ChannelAiConfig).where(
+            ChannelAiConfig.tenant_id == tenant_id,
+            ChannelAiConfig.channel_id == conversation.channel_id,
+        )
+    )
+    if config is None or not config.api_key_encrypted:
+        config = db.scalar(
+            select(ChannelAiConfig).where(
+                ChannelAiConfig.tenant_id == tenant_id,
+                ChannelAiConfig.api_key_encrypted.is_not(None),
+            )
+        )
+    if config is None or not config.api_key_encrypted:
+        raise ValueError("Configure a Chave de API de IA no canal antes de analisar conversas.")
+
+    messages = list(
+        db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.tenant_id == tenant_id,
+            )
+            .order_by(Message.created_at.desc())
+            .limit(max_messages)
+        )
+    )
+    messages.reverse()
+    if not messages:
+        raise ValueError("Nenhuma mensagem encontrada nesta conversa para analisar.")
+
+    formatted_lines = []
+    for message in messages:
+        if message.is_internal:
+            author = "Nota interna"
+        elif message.direction == MessageDirection.OUTGOING:
+            author = "Equipe"
+        else:
+            author = "Cliente"
+        formatted_lines.append(
+            f"{author}: {message.body or f'[{message.message_type.value}]'}"
+        )
+
+    analysis_prompt = (
+        "Você é um copiloto para atendentes humanos. Analise a conversa abaixo, mas "
+        "nunca responda ao cliente, nunca invente fatos, preços, prazos ou políticas. "
+        "Produza somente JSON válido, sem markdown e sem texto adicional, com exatamente "
+        "estas chaves: summary (texto), customer_intent (texto), key_details (lista de até 5 textos), "
+        "next_action (texto), urgency (low, normal ou high) e suggested_reply (texto curto que o "
+        "atendente deve revisar antes de enviar). Se faltarem dados, declare a lacuna em next_action "
+        "e suggested_reply deve pedir o esclarecimento necessário.\n\n"
+        f"Histórico:\n{'\n'.join(formatted_lines)}"
+    )
+    raw_analysis, _, _ = await call_llm(
+        provider=config.provider,
+        model_name=config.model_name,
+        api_key=decrypt_secret(config.api_key_encrypted),
+        system_prompt="Você gera análises estruturadas para atendimento humano.",
+        conversation_messages=[{"role": "user", "content": analysis_prompt}],
+        temperature=0.2,
+        max_tokens=700,
+        enable_handoff_tools=False,
+    )
+    try:
+        return AiConversationAnalysisResponse.model_validate_json(raw_analysis)
+    except ValueError as exc:
+        raise ValueError("A IA retornou uma análise em formato inválido. Tente novamente.") from exc

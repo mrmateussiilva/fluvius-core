@@ -10,6 +10,7 @@ from app.ai.models import ChannelAiConfig
 from app.ai.schemas import (
     AiConfigRead,
     AiConfigUpdate,
+    AiConversationAnalysisResponse,
     AiSimulateRequest,
     AiSimulateResponse,
     AiSummaryResponse,
@@ -17,6 +18,7 @@ from app.ai.schemas import (
 )
 from app.ai.service import (
     get_or_create_ai_config,
+    analyze_conversation_history,
     simulate_ai,
     summarize_conversation_history,
     update_ai_config,
@@ -259,4 +261,39 @@ async def summarize_conversation(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Falha ao gerar resumo com IA: {err}",
+        )
+
+
+@router.post(
+    "/conversations/{conversation_id}/analyze",
+    response_model=AiConversationAnalysisResponse,
+)
+async def analyze_conversation(
+    conversation_id: UUID,
+    db: Session = Depends(get_db),
+    context: AuthContext = Depends(get_auth_context),
+) -> AiConversationAnalysisResponse:
+    get_accessible_conversation(db, context, conversation_id)
+
+    try:
+        analysis = await analyze_conversation_history(
+            db,
+            context.tenant_id,
+            conversation_id,
+        )
+        return AiConversationAnalysisResponse(
+            **analysis.model_dump(exclude={"generated_at"}),
+            generated_at=datetime.now(UTC).isoformat(),
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(err))
+    except Exception:
+        logger.exception(
+            "Failed to analyze conversation %s for tenant %s",
+            conversation_id,
+            context.tenant_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Falha ao analisar a conversa com IA.",
         )
