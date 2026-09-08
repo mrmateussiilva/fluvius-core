@@ -24,6 +24,7 @@ from app.ai.service import (
     update_ai_config,
 )
 from app.auth.dependencies import AuthContext, get_auth_context
+from app.bots.configuration import end_bot_sessions
 from app.channels.models import WhatsAppChannel
 from app.conversations.router import get_accessible_conversation
 from app.database import get_db
@@ -185,6 +186,8 @@ async def toggle_conversation_bot(
     )
 
     now = datetime.now(UTC)
+    if not payload.is_bot_active or not conversation.is_bot_active:
+        end_bot_sessions(db, context.tenant_id, conversation.id)
     conversation.is_bot_active = payload.is_bot_active
     if not payload.is_bot_active:
         conversation.bot_handoff_at = now

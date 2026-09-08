@@ -8,6 +8,7 @@ import {
 } from 'vue'
 import {
   AlertTriangle,
+  Bot,
   Check,
   CheckCircle2,
   Clipboard,
@@ -15,11 +16,13 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  Save,
   Smartphone,
   Trash2,
   Wifi,
   X,
 } from 'lucide-vue-next'
+import { fetchTypebotConfig, saveTypebotConfig } from '../api/bots'
 import {
   connectChannel,
   createChannel,
@@ -33,6 +36,7 @@ import ChannelStatusBadge from '../components/ChannelStatusBadge.vue'
 
 const QR_REFRESH_INTERVAL = 30_000
 const STATUS_POLL_INTERVAL = 3_000
+const TYPEBOT_PUBLIC_ID_PATTERN = /^[A-Za-z0-9_-]{1,255}$/
 
 const channels = ref<Channel[]>([])
 const error = ref('')
@@ -45,6 +49,19 @@ const form = reactive({
   phone_number: '',
   provisioning_key: crypto.randomUUID(),
 })
+const typebotForms = reactive<
+  Record<
+    string,
+    {
+      isEnabled: boolean
+      publicId: string
+      loading: boolean
+      saving: boolean
+      error: string
+      notice: string
+    }
+  >
+>({})
 const connection = reactive<{
   channel: Channel | null
   status: ChannelStatus
@@ -73,6 +90,28 @@ const qrImageSource = computed(() => safeQrImageSource(connection.qrCode))
 const canShowPairingCode = computed(
   () => Boolean(connection.pairingCode && !qrImageSource.value),
 )
+
+function typebotState(channelId: string) {
+  if (!typebotForms[channelId]) {
+    typebotForms[channelId] = {
+      isEnabled: false,
+      publicId: '',
+      loading: false,
+      saving: false,
+      error: '',
+      notice: '',
+    }
+  }
+  return typebotForms[channelId]
+}
+
+function typebotDescription(channelId: string) {
+  const state = typebotState(channelId)
+  if (state.loading) return 'Carregando configuração'
+  if (state.isEnabled) return 'Atende novas conversas elegíveis'
+  if (state.publicId) return 'Fluxo salvo, desativado'
+  return 'Sem fluxo configurado'
+}
 
 function safeQrImageSource(value: string | null) {
   if (!value) return null
@@ -190,11 +229,68 @@ async function pollStatus() {
   }
 }
 
+async function loadTypebotConfig(channelId: string) {
+  const state = typebotState(channelId)
+  state.loading = true
+  state.error = ''
+  try {
+    const config = await fetchTypebotConfig(channelId)
+    state.isEnabled = config.is_enabled
+    state.publicId = config.public_id || ''
+  } catch (exception) {
+    state.error =
+      exception instanceof Error
+        ? exception.message
+        : 'Não foi possível carregar o Typebot'
+  } finally {
+    state.loading = false
+  }
+}
+
+async function loadTypebotConfigs() {
+  await Promise.all(channels.value.map((channel) => loadTypebotConfig(channel.id)))
+}
+
+async function saveTypebot(channel: Channel) {
+  const state = typebotState(channel.id)
+  const publicId = state.publicId.trim()
+  state.error = ''
+  state.notice = ''
+  if (!TYPEBOT_PUBLIC_ID_PATTERN.test(publicId)) {
+    state.error = 'Use apenas letras, números, _ ou - no ID público.'
+    return
+  }
+  state.saving = true
+  try {
+    const config = await saveTypebotConfig(channel.id, {
+      engine: 'typebot',
+      is_enabled: state.isEnabled,
+      public_id: publicId,
+    })
+    state.isEnabled = config.is_enabled
+    state.publicId = config.public_id || publicId
+    state.notice = config.is_enabled
+      ? 'Typebot ativado para este canal.'
+      : 'Typebot desativado para este canal.'
+    window.setTimeout(() => {
+      if (typebotForms[channel.id] === state) state.notice = ''
+    }, 3_000)
+  } catch (exception) {
+    state.error =
+      exception instanceof Error
+        ? exception.message
+        : 'Não foi possível salvar o Typebot'
+  } finally {
+    state.saving = false
+  }
+}
+
 async function refresh() {
   loadingChannels.value = true
   error.value = ''
   try {
     channels.value = await listChannels()
+    await loadTypebotConfigs()
   } catch (exception) {
     error.value =
       exception instanceof Error
@@ -230,6 +326,7 @@ async function submit() {
       provisioning_key: crypto.randomUUID(),
     })
     showCreateForm.value = false
+    await loadTypebotConfig(targetChannel.id)
     await openConnection(targetChannel)
   } catch (exception) {
     const message =
@@ -435,46 +532,110 @@ onBeforeUnmount(() => {
         v-for="channel in channels"
         v-else
         :key="channel.id"
-        class="flex flex-col gap-4 border-b border-line p-5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+        class="border-b border-line p-5 last:border-b-0"
       >
-        <div class="flex min-w-0 items-center gap-3">
-          <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fluvius-50 text-fluvius-700">
-            <Smartphone class="h-5 w-5" />
-          </div>
-          <div class="min-w-0">
-            <div class="truncate font-semibold text-ink">{{ channel.name }}</div>
-            <div class="mt-0.5 truncate text-sm text-ink-muted">
-              {{ channel.phone_number || 'Número identificado após a conexão' }}
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fluvius-50 text-fluvius-700">
+              <Smartphone class="h-5 w-5" />
+            </div>
+            <div class="min-w-0">
+              <div class="truncate font-semibold text-ink">{{ channel.name }}</div>
+              <div class="mt-0.5 truncate text-sm text-ink-muted">
+                {{ channel.phone_number || 'Número identificado após a conexão' }}
+              </div>
             </div>
           </div>
+          <div class="flex items-center justify-between gap-3 sm:justify-end">
+            <ChannelStatusBadge :status="channel.status" />
+            <button
+              v-if="channel.status !== 'connected'"
+              class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:border-fluvius-300 hover:bg-fluvius-50 hover:text-fluvius-800"
+              @click="openConnection(channel)"
+            >
+              <QrCode class="h-4 w-4" />
+              Conectar
+            </button>
+            <button
+              v-else
+              class="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-canvas"
+              @click="openConnection(channel)"
+            >
+              <RefreshCw class="h-4 w-4" />
+              Verificar
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center rounded-lg border border-line p-2 text-ink-muted transition hover:border-danger/40 hover:bg-danger-soft hover:text-danger-strong"
+              title="Excluir canal"
+              aria-label="Excluir canal"
+              @click="confirmDelete(channel)"
+            >
+              <Trash2 class="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <div class="flex items-center justify-between gap-3 sm:justify-end">
-          <ChannelStatusBadge :status="channel.status" />
-          <button
-            v-if="channel.status !== 'connected'"
-            class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:border-fluvius-300 hover:bg-fluvius-50 hover:text-fluvius-800"
-            @click="openConnection(channel)"
+
+        <div class="mt-4 rounded-lg border border-line bg-canvas p-4">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <Bot class="h-4 w-4 text-fluvius-700" />
+                <p class="text-sm font-semibold text-ink">Typebot</p>
+                <span
+                  class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                  :class="typebotState(channel.id).isEnabled ? 'bg-success-soft text-success-strong' : 'bg-panel-muted text-ink-muted'"
+                >
+                  {{ typebotDescription(channel.id) }}
+                </span>
+              </div>
+              <label class="mt-3 grid gap-1.5 text-xs font-semibold text-ink-secondary">
+                ID público do fluxo
+                <input
+                  v-model.trim="typebotState(channel.id).publicId"
+                  :disabled="typebotState(channel.id).loading || typebotState(channel.id).saving"
+                  maxlength="255"
+                  placeholder="published-test-bot"
+                  class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+              </label>
+            </div>
+            <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+              <label class="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:bg-panel-muted">
+                <input
+                  v-model="typebotState(channel.id).isEnabled"
+                  :disabled="typebotState(channel.id).loading || typebotState(channel.id).saving"
+                  type="checkbox"
+                  class="h-4 w-4 rounded border-line-strong text-fluvius-700 focus:ring-fluvius-600/20 disabled:cursor-not-allowed"
+                />
+                Ativo
+              </label>
+              <button
+                type="button"
+                :disabled="typebotState(channel.id).loading || typebotState(channel.id).saving"
+                class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-60"
+                @click="saveTypebot(channel)"
+              >
+                <LoaderCircle v-if="typebotState(channel.id).saving" class="h-4 w-4 animate-spin" />
+                <Save v-else class="h-4 w-4" />
+                {{ typebotState(channel.id).saving ? 'Salvando…' : 'Salvar Typebot' }}
+              </button>
+            </div>
+          </div>
+          <p
+            v-if="typebotState(channel.id).notice"
+            role="status"
+            class="mt-3 rounded-lg border border-success/30 bg-success-soft px-3 py-2 text-sm text-success-strong"
           >
-            <QrCode class="h-4 w-4" />
-            Conectar
-          </button>
-          <button
-            v-else
-            class="inline-flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-muted transition hover:bg-canvas"
-            @click="openConnection(channel)"
+            {{ typebotState(channel.id).notice }}
+          </p>
+          <p
+            v-if="typebotState(channel.id).error"
+            role="alert"
+            class="mt-3 rounded-lg border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-danger-strong"
           >
-            <RefreshCw class="h-4 w-4" />
-            Verificar
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center rounded-lg border border-line p-2 text-ink-muted transition hover:border-danger/40 hover:bg-danger-soft hover:text-danger-strong"
-            title="Excluir canal"
-            aria-label="Excluir canal"
-            @click="confirmDelete(channel)"
-          >
-            <Trash2 class="h-4 w-4" />
-          </button>
+            {{ typebotState(channel.id).error }}
+          </p>
         </div>
       </div>
       <p v-if="!loadingChannels && !channels.length" class="p-10 text-center text-sm text-ink-muted">
@@ -633,4 +794,3 @@ onBeforeUnmount(() => {
     </div>
   </Teleport>
 </template>
-

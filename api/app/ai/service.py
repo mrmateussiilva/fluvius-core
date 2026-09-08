@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import httpx
+from fastapi import HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +16,7 @@ from app.ai.schemas import (
     AiSimulateRequest,
     AiSimulateResponse,
 )
+from app.bots.configuration import get_typebot_config
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelStatus,
@@ -182,7 +184,31 @@ def get_or_create_ai_config(
 def update_ai_config(
     db: Session, tenant_id: UUID, channel_id: UUID, payload: AiConfigUpdate
 ) -> ChannelAiConfig:
-    config = get_or_create_ai_config(db, tenant_id, channel_id)
+    get_or_create_ai_config(db, tenant_id, channel_id)
+
+    # Serialize competing administrative enables on the existing channel row.
+    db.scalar(
+        select(WhatsAppChannel)
+        .where(
+            WhatsAppChannel.tenant_id == tenant_id,
+            WhatsAppChannel.id == channel_id,
+        )
+        .with_for_update()
+    )
+    config = db.scalar(
+        select(ChannelAiConfig)
+        .where(
+            ChannelAiConfig.tenant_id == tenant_id,
+            ChannelAiConfig.channel_id == channel_id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if config is None:
+        raise HTTPException(404, "Configuração de IA não encontrada.")
+    if payload.is_enabled:
+        typebot = get_typebot_config(db, tenant_id, channel_id)
+        if typebot and typebot.is_enabled:
+            raise HTTPException(409, "Desative Typebot antes de ativar o Agente de IA.")
 
     if payload.is_enabled is not None:
         config.is_enabled = payload.is_enabled
@@ -449,6 +475,19 @@ async def execute_ai_turn(
             logger.error("Failed to execute AI turn for conversation %s: %s", conversation_id, exc)
             return
 
+    # Same channel -> conversation lock order as bot configuration and Typebot.
+    channel = db.scalar(
+        select(WhatsAppChannel)
+        .where(
+            WhatsAppChannel.tenant_id == tenant_id,
+            WhatsAppChannel.id == channel.id,
+        )
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if channel is None:
+        return
+
     # Re-verify conversation state under lock before persisting response
     conv_check = db.scalar(
         select(Conversation)
@@ -457,15 +496,34 @@ async def execute_ai_turn(
             Conversation.tenant_id == tenant_id,
         )
         .with_for_update()
+        .execution_options(populate_existing=True)
     )
     if (
         conv_check is None
+        or conv_check.channel_id != channel.id
         or not conv_check.is_bot_active
         or conv_check.assigned_user_id is not None
         or conv_check.status != "new"
     ):
         # Operator assumed the conversation during the LLM call! Abort AI response.
         logger.info("Human operator took over conversation %s during LLM call; aborting AI response", conversation_id)
+        return
+
+    typebot = get_typebot_config(db, tenant_id, channel.id)
+    config = db.scalar(
+        select(ChannelAiConfig)
+        .where(
+            ChannelAiConfig.tenant_id == tenant_id,
+            ChannelAiConfig.channel_id == channel.id,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if (
+        channel.status != ChannelStatus.CONNECTED
+        or config is None
+        or not config.is_enabled
+        or (typebot and typebot.is_enabled)
+    ):
         return
 
     now = datetime.now(UTC)

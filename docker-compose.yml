@@ -42,6 +42,7 @@ services:
       PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
       EVOLUTION_GO_BASE_URL: http://evolution-go:8080
       EVOLUTION_GO_WEBHOOK_BASE_URL: ${EVOLUTION_GO_WEBHOOK_BASE_URL:-http://api:8000}
+      TYPEBOT_BASE_URL: ${TYPEBOT_BASE_URL:-}
       EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-local-evolution-key}
       EVOLUTION_GO_GLOBAL_API_KEY: ${EVOLUTION_GO_GLOBAL_API_KEY:-local-evolution-admin-key}
       EVOLUTION_GO_INSTANCE_TOKENS: '${EVOLUTION_GO_INSTANCE_TOKENS:-{}}'
@@ -68,6 +69,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-local-only-change-me}
       EVOLUTION_GO_BASE_URL: http://evolution-go:8080
+      TYPEBOT_BASE_URL: ${TYPEBOT_BASE_URL:-}
       EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-local-evolution-key}
       EVOLUTION_GO_INSTANCE_TOKENS: '${EVOLUTION_GO_INSTANCE_TOKENS:-{}}'
       PROVIDER_CREDENTIALS_KEY: ${PROVIDER_CREDENTIALS_KEY:-}
@@ -127,6 +129,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-local-only-change-me}
       PUBLIC_API_URL: http://localhost:${API_PORT:-8000}
+      TYPEBOT_BASE_URL: ${TYPEBOT_BASE_URL:-}
       EVOLUTION_GO_BASE_URL: http://evolution-go:8080
       EVOLUTION_GO_API_KEY: ${EVOLUTION_GO_API_KEY:-local-evolution-key}
       EVOLUTION_GO_INSTANCE_TOKENS: '${EVOLUTION_GO_INSTANCE_TOKENS:-{}}'

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     provider_credentials_key: str = ""
     webhook_secret: str = ""
     history_sync_max_age_days: int = 30
+    typebot_base_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

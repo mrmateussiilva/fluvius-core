@@ -188,7 +188,7 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
         )
 
         mock_db = MagicMock()
-        mock_db.scalar.side_effect = [conv, channel, config, contact, conv]
+        mock_db.scalar.side_effect = [conv, channel, config, contact, channel, conv, None, config]
         mock_db.scalars.return_value = [incoming]
         mock_db.refresh.side_effect = lambda item: setattr(item, "created_at", datetime.now(UTC))
 
@@ -285,7 +285,7 @@ class AiAgentUnitTest(unittest.IsolatedAsyncioTestCase):
         )
 
         mock_db = MagicMock()
-        mock_db.scalar.side_effect = [conv, channel, config, contact, conv]
+        mock_db.scalar.side_effect = [conv, channel, config, contact, channel, conv, None, config]
         mock_db.scalars.return_value = [incoming]
         mock_db.refresh.side_effect = lambda item: setattr(item, "created_at", datetime.now(UTC))
 

@@ -107,6 +107,19 @@ export interface Channel {
   provider_config: Record<string, unknown>
 }
 
+export interface TypebotConfigRead {
+  channel_id: string
+  engine: 'typebot'
+  is_enabled: boolean
+  public_id: string | null
+}
+
+export interface TypebotConfigWrite {
+  engine: 'typebot'
+  is_enabled: boolean
+  public_id: string
+}
+
 export interface OperationalChannelHealth {
   id: string
   name: string
@@ -394,4 +407,3 @@ export interface AiConversationAnalysisResponse {
   suggested_reply: string
   generated_at: string
 }
-

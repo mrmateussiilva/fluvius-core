@@ -6,6 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import AuthContext, get_auth_context
+from app.bots.configuration import end_bot_sessions
 from app.channels.models import WhatsAppChannel
 from app.common.audit_models import AuditLog
 from app.common.enums import ContactKind, ConversationStatus, MessageDirection
@@ -372,6 +373,8 @@ async def assign_conversation(
     previous_status = conversation.status
     conversation.assigned_user_id = assignee_id
     conversation.status = ConversationStatus.OPEN
+    conversation.is_bot_active = False
+    end_bot_sessions(db, context.tenant_id, conversation.id)
     changed = (
         previous_assignee_id != conversation.assigned_user_id
         or previous_status != conversation.status
@@ -413,6 +416,7 @@ async def assign_conversation(
                 "channel_id": str(conversation.channel_id),
                 "status": conversation.status.value,
                 "assigned_user_id": str(conversation.assigned_user_id),
+                "is_bot_active": conversation.is_bot_active,
             },
         )
     return get_conversation(conversation_id, context, db)
@@ -490,6 +494,7 @@ async def close_conversation(
     )
     ensure_conversation_assignee(conversation, context.user.id)
     conversation.status = ConversationStatus.CLOSED
+    end_bot_sessions(db, context.tenant_id, conversation.id)
     db.commit()
     await realtime_manager.broadcast(
         context.tenant_id,

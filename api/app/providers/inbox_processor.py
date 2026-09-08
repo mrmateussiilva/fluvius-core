@@ -3,13 +3,13 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.ai.models import ChannelAiConfig
-from app.ai.service import execute_ai_turn
 from app.attachments.service import (
     IncomingAttachmentStorageError,
     StagedIncomingAttachment,
     persist_staged_incoming_attachment,
 )
+from app.bots.configuration import configured_engine, end_bot_sessions
+from app.bots.service import execute_bot_turn, prepare_typebot_turn
 from app.channels.models import WhatsAppChannel
 from app.common.enums import (
     ChannelProvider,
@@ -105,19 +105,6 @@ async def process_provider_event_inbox(
         )
 
 
-async def _execute_ai_turn_task(
-    *,
-    tenant_id: UUID,
-    conversation_id: UUID,
-) -> None:
-    with SessionLocal() as db:
-        await execute_ai_turn(
-            db=db,
-            tenant_id=tenant_id,
-            conversation_id=conversation_id,
-        )
-
-
 async def _process_message(
     *,
     db,
@@ -196,16 +183,13 @@ async def _process_message(
             Conversation.last_message_at.desc().nullslast(),
             Conversation.created_at.desc(),
         )
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
     created_conversation = conversation is None
     reopened_conversation = False
-    ai_cfg = db.scalar(
-        select(ChannelAiConfig).where(
-            ChannelAiConfig.tenant_id == channel.tenant_id,
-            ChannelAiConfig.channel_id == channel.id,
-        )
-    )
-    should_activate_bot = bool(ai_cfg and ai_cfg.is_enabled and not incoming.is_group)
+    bot_engine = configured_engine(db, channel.tenant_id, channel.id)
+    should_activate_bot = bool(bot_engine and not incoming.is_group)
 
     if conversation is None:
         conversation = Conversation(
@@ -220,6 +204,8 @@ async def _process_message(
         db.flush()
     else:
         reopened_conversation = reopen_from_provider(conversation)
+        if reopened_conversation:
+            end_bot_sessions(db, channel.tenant_id, conversation.id)
         if (
             reopened_conversation
             and conversation.assigned_user_id is None
@@ -316,6 +302,9 @@ async def _process_message(
         except (ValueError, NotImplementedError):
             pass
 
+    if bot_engine == "typebot" and not incoming.is_group and channel.status == ChannelStatus.CONNECTED:
+        prepare_typebot_turn(db, conversation, message)
+
     event.processed = True
     event.processing_error = None
     _complete_inbox(inbox)
@@ -372,7 +361,7 @@ async def _process_message(
         and conversation.assigned_user_id is None
         and conversation.status == ConversationStatus.NEW
     ):
-        await _execute_ai_turn_task(
+        await execute_bot_turn(
             tenant_id=channel.tenant_id,
             conversation_id=conversation.id,
         )

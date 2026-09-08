@@ -118,6 +118,100 @@ assim, ele não é cancelado junto com o `asyncio.run()` do job. Falhas do
 provedor não são tratadas como sucesso e interrompem o turno sem criar uma
 mensagem falsa como `sent`.
 
+## Engines de bot: IA nativa e Typebot
+
+```text
+Inbound → is_bot_active e conversa elegível? → engine configurado
+                                              ├── IA nativa (app.ai)
+                                              └── Typebot → BotSession → Typebot API
+                                                                         ↓ messages[]
+                                       Message(pending) + MessageDelivery(queued)
+                                                                         ↓
+                                        delivery worker → WhatsAppProvider
+```
+
+`app.bots` seleciona o motor; `channel_ai_configs`, simulador, prompts,
+ferramentas e Copiloto continuam no módulo `ai`. A configuração Typebot fica em
+`channel_typebot_configs`, única por tenant/canal. Os endpoints administrativos
+rejeitam com `409` a ativação de um motor enquanto o outro estiver habilitado;
+para trocar, desative o atual primeiro. Como defesa contra dados alterados fora
+da API, Typebot tem precedência no roteamento. A IA revalida configuração e
+conversa antes de persistir sua resposta, lendo novamente os objetos ORM.
+
+Configure `TYPEBOT_BASE_URL` no ambiente da API e dos workers, por exemplo
+`https://bot.finderbit.com.br`; vazio impede ativar Typebot. Os Compose repassam
+essa variável. O administrador do tenant usa `GET` e `PUT
+/api/v1/channels/{channel_id}/typebot-config`; o PUT substitui a configuração:
+
+```json
+{"engine": "typebot", "is_enabled": true, "public_id": "seu-id-publicado"}
+```
+
+Para desativar, envie o mesmo `public_id` com `is_enabled=false`. O canal não
+aceita URL nem `tenant_id` no corpo. O ID público aceita apenas letras, números,
+`_` e `-`, e o cliente HTTP não segue redirects. Ativar a configuração vale
+automaticamente para conversas novas/reabertas; conversas existentes usam o
+toggle de bot já disponível. Nenhum endpoint de teste dispara WhatsApp.
+
+O inbound reserva `BotSession` e `BotTurn(queued)` junto da mensagem recebida.
+Uma sessão ativa por conversa é garantida por índice parcial no PostgreSQL.
+O executor serializa os turnos por tenant/conversa com advisory lock em uma
+transação separada, que permanece aberta durante HTTP sem bloquear a linha da
+conversa. Cada turno referencia exatamente a mensagem inbound, e a chave única
+tenant/mensagem impede repetição. O claim `processing` é confirmado antes do
+POST. Um claim interrompido encontrado numa execução posterior gera handoff
+`typebot_unavailable`, sem repetir o POST ambíguo. Turnos pendentes são drenados
+em ordem pela próxima execução nessa conversa; esta etapa mantém o acionamento
+pelo worker de inbox, sem acrescentar fila ou varredura própria de bots.
+Se o processo morrer após concluir a inbox, essa recuperação depende de uma
+nova incoming elegível; não existe garantia de resposta automática nesse intervalo.
+
+A primeira chamada usa `startChat` com
+`message={"type":"text","text":"conteúdo inbound"}` e solicita `richText`,
+sem streaming. Esse é o formato da [API atual de início de chat](https://docs.typebot.com/api-reference/chat/start-chat).
+Recomendamos que fluxos WhatsApp que precisam consumir a primeira mensagem
+diretamente comecem com um input: nesse caso `startChat.message` responde a ele.
+Em fluxos bubble → input, não há garantia de aplicação ao input posterior;
+não inferimos o grafo nem simulamos essa aplicação. O conteúdo fica disponível
+em `prefilledVariables.fluvius_initial_message`, devendo ser usado pelo autor
+do fluxo e permanece salvo como incoming no Fluvius. Não fazemos `continueChat`
+artificial para reaplicar a mensagem, mesmo quando a resposta contém `input`.
+`isOnlyRegistering` apenas registra a sessão sem iniciar o bot; permanece no
+default `false` (campo omitido). Não foi adotado nem validado na instância do
+projeto como solução para bubble → input. Também são enviados somente
+IDs de conversa, contato e canal (`fluvius_*_id`) e `contact_name`, se disponível.
+Declare essas variáveis no fluxo Typebot. Turnos seguintes usam o `sessionId`
+persistido em `continueChat` com `{"message":"texto inbound"}`. Nenhuma
+credencial do WhatsApp é enviada ao Typebot.
+
+Cada bubble textual vira uma mensagem separada, preservando parágrafos,
+quebras de linha e texto aninhado. Timestamps distintos preservam a ordem na
+outbox existente, inclusive dentro da mesma transação. Bubbles de mídia e
+`clientSideActions` são ignoradas com logs apenas de categoria/contagem; scripts,
+requests e JavaScript do fluxo nunca são executados pelo Fluvius. Fluxos que
+dependem dessas ações, arquivos, botões ou interfaces visuais não são suportados
+nesta etapa. Incoming sem texto faz handoff `typebot_unsupported_input`.
+
+Timeout, erro de conexão/HTTP, JSON inválido e início sem `sessionId` encerram a
+sessão com falha e desativam o bot com `typebot_unavailable`, sem mensagem falsa
+nem retry de POST. Pedidos explícitos de humano e reclamações reutilizam a
+triagem determinística e o aviso/outbox atuais. Resposta sem `input` encerra
+somente a `BotSession` (`ended`, com `ended_at`), preservando `is_bot_active=true`
+e os campos de handoff. Ausência de `input` não solicita atendimento humano.
+A próxima incoming elegível, com Typebot ainda habilitado e sem humano
+atribuído, inicia outra sessão; nunca reutiliza a sessão finalizada.
+Assumir desativa explicitamente `is_bot_active` e impede novos turnos/sessões.
+Assumir, finalizar, desativar
+bot, reabrir conversa ou trocar configuração encerra sessões anteriores.
+Reativação explícita/reabertura inicia outro ciclo, preservando todo o histórico
+no Fluvius. Antes de gravar a resposta, tenant, canal conectado, conversa `new`,
+bot ativo, ausência de atendente, configuração e sessão são revalidados; uma
+resposta em voo perde validade após tomada humana ou encerramento da sessão.
+
+Handoff iniciado explicitamente pelo fluxo Typebot fica para uma etapa futura:
+um resultado estruturado e permitido por contrato poderia mapear para os campos
+atuais de handoff, sem dar acesso do Typebot ao provider WhatsApp.
+
 ## Fluxo de recebimento
 
 1. O gateway chama `/api/v1/webhooks/whatsapp/{provider}/{channel_id}`.
