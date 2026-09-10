@@ -179,21 +179,11 @@ function timeLabel(value: string | null) {
 
 <template>
   <aside class="flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[372px]">
-    <div class="border-b border-line bg-canvas px-4 pb-3 pt-4">
-      <div class="flex items-center justify-between">
-        <div>
-          <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-fluvius-700">Atendimento</p>
-          <h1 class="mt-0.5 text-xl font-semibold tracking-tight text-ink">Conversas</h1>
-        </div>
-        <div class="grid h-9 w-9 place-items-center rounded-full bg-fluvius-50 text-fluvius-700" title="Central de conversas">
-          <MessageSquareText class="h-[18px] w-[18px]" />
-        </div>
-      </div>
-      <label class="mt-3 flex items-center gap-2 rounded-lg border border-line bg-panel px-3 py-2 text-ink-secondary">
-        <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
+    <div class="border-b border-line bg-canvas px-3 pb-2 pt-3">
+      <label class="flex h-9 items-center gap-2 rounded-lg bg-panel px-2.5 text-ink-muted shadow-sm ring-1 ring-black/5 transition focus-within:ring-2 focus-within:ring-fluvius-500/30">
         <select
           :value="activeChannelId || ''"
-          class="min-w-0 flex-1 bg-transparent text-[13px] font-medium text-ink outline-none"
+          class="shrink-0 cursor-pointer appearance-none bg-transparent text-[13px] font-medium text-ink-secondary outline-none hover:text-ink"
           aria-label="Canal de atendimento"
           @change="
             emit(
@@ -208,16 +198,15 @@ function timeLabel(value: string | null) {
             :key="channel.id"
             :value="channel.id"
           >
-            {{ channel.name }}{{ channel.phone_number ? ` · ${channel.phone_number}` : '' }}
+            {{ channel.name }}
           </option>
         </select>
-      </label>
-      <label class="mt-3 flex h-10 items-center gap-2.5 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
-        <Search class="h-4 w-4 shrink-0" />
+        <div class="h-4 w-px bg-line" />
+        <Search class="h-3.5 w-3.5 shrink-0" />
         <input
           v-model="search"
           type="search"
-          placeholder="Buscar por nome, número ou mensagem"
+          placeholder="Buscar ou começar nova conversa"
           class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
         />
         <button
@@ -230,37 +219,40 @@ function timeLabel(value: string | null) {
           <X class="h-3.5 w-3.5" />
         </button>
       </label>
-      <div class="soft-scrollbar mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          class="flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1.5 text-[11px] font-medium transition"
-          :class="activeStatus === tab.value ? 'border-fluvius-100 bg-fluvius-50 text-fluvius-700' : 'border-transparent text-ink-secondary hover:bg-canvas'"
-          @click="activeStatus = tab.value"
-        >
-          {{ tab.label }}
-          <span
-            class="min-w-4 rounded-full px-1 text-center text-[10px] font-semibold leading-4"
-            :class="activeStatus === tab.value ? 'bg-fluvius-700 text-white' : 'bg-panel-muted text-ink-secondary'"
+      
+      <div class="mt-2.5 flex items-center justify-between gap-2">
+        <div class="soft-scrollbar flex gap-1 overflow-x-auto pb-0.5">
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            class="flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-medium transition"
+            :class="activeStatus === tab.value ? 'border-fluvius-100 bg-fluvius-50 text-fluvius-700' : 'border-transparent text-ink-secondary hover:bg-panel-muted'"
+            @click="activeStatus = tab.value"
           >
-            {{ tabCounts[tab.value] }}
-          </span>
-        </button>
-      </div>
-      <div class="mt-2 flex gap-1">
-        <button
-          v-for="tab in kindTabs"
-          :key="tab.value"
-          class="rounded-md px-2 py-1 text-[10px] font-medium transition"
-          :class="
-            kindFilter === tab.value
-              ? 'bg-neutral-action text-white'
-              : 'bg-panel-muted text-ink-secondary hover:bg-line'
-          "
-          @click="kindFilter = tab.value"
-        >
-          {{ tab.label }}
-        </button>
+            {{ tab.label }}
+            <span
+              class="min-w-4 rounded-full px-1.5 text-center text-[10px] font-semibold leading-4"
+              :class="activeStatus === tab.value ? 'bg-fluvius-700 text-white' : 'bg-panel-muted text-ink-secondary'"
+            >
+              {{ tabCounts[tab.value] }}
+            </span>
+          </button>
+        </div>
+        <div class="flex shrink-0 gap-0.5">
+          <button
+            v-for="tab in kindTabs"
+            :key="tab.value"
+            class="rounded px-1.5 py-1 text-[10px] font-medium transition"
+            :class="
+              kindFilter === tab.value
+                ? 'bg-ink-secondary text-white'
+                : 'text-ink-muted hover:bg-panel-muted hover:text-ink'
+            "
+            @click="kindFilter = tab.value"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
     </div>
     <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto">

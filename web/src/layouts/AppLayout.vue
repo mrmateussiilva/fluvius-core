@@ -132,16 +132,16 @@ function navigateFromMobile(path: string) {
   <div class="flex h-screen h-[100dvh] overflow-hidden bg-canvas text-ink">
     <!-- Desktop Sidebar (Hidden on Mobile) -->
     <nav
-      class="relative hidden w-[68px] shrink-0 flex-col items-center bg-nav py-4 text-emerald-50/85 shadow-lg shadow-black/10 md:flex"
+      class="relative hidden w-[68px] shrink-0 flex-col items-center border-r border-line bg-panel py-4 shadow-sm md:flex"
     >
       <div
-        class="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-panel font-bold text-fluvius-800 shadow-sm"
+        class="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
         :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
       >
         F
       </div>
       <button
-        class="mb-5 grid h-8 w-10 place-items-center rounded-lg text-emerald-50/85 transition hover:bg-white/10 hover:text-white"
+        class="mb-5 grid h-8 w-10 place-items-center rounded-lg text-ink-muted transition hover:bg-canvas hover:text-ink"
         :class="{ 'cursor-default': availableTenants.length < 2 }"
         :disabled="availableTenants.length < 2 || tenantSwitching"
         :title="
@@ -191,16 +191,16 @@ function navigateFromMobile(path: string) {
       </div>
 
       <RouterLink
-        class="mb-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/conversations"
         title="Conversas"
       >
         <MessageCircle class="h-5 w-5" />
       </RouterLink>
       <RouterLink
-        class="mb-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/contacts"
         title="Contatos"
       >
@@ -208,16 +208,16 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="mb-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/team-board"
         title="Quadro da equipe"
       >
         <Columns3 class="h-5 w-5" />
       </RouterLink>
       <RouterLink
-        class="mb-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/quick-replies"
         title="Respostas rápidas"
       >
@@ -225,8 +225,8 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/settings/channels"
         title="Canais"
       >
@@ -234,8 +234,8 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/settings/ai"
         title="Agente de IA"
       >
@@ -243,8 +243,8 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/settings/users"
         title="Usuários"
       >
@@ -252,8 +252,8 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/settings/sync"
         title="Sincronização"
       >
@@ -261,8 +261,8 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.role === 'admin'"
-        class="relative mt-1.5 rounded-lg p-3 transition hover:bg-white/10 hover:text-white"
-        active-class="bg-white/15 text-white shadow-sm"
+        class="relative mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
+        active-class="bg-fluvius-50 text-fluvius-700"
         to="/app/settings/operations"
         title="Saúde operacional"
       >
@@ -279,30 +279,30 @@ function navigateFromMobile(path: string) {
       </RouterLink>
       <RouterLink
         v-if="auth.user?.is_platform_admin"
-        class="mt-1.5 rounded-lg p-2.5 text-amber-200 transition hover:bg-white/10 hover:text-amber-100"
-        active-class="bg-amber-400/15 text-amber-100 shadow-sm"
+        class="mt-1.5 rounded-lg p-2.5 text-ink-muted transition hover:bg-amber-50 hover:text-amber-700"
+        active-class="bg-amber-100 text-amber-800"
         to="/app/platform/tenants"
         title="Administração Fluvius"
       >
         <Building2 class="h-5 w-5" />
       </RouterLink>
-      <ThemeMenu class="mb-2 mt-auto" inverted placement="top" />
+      <ThemeMenu class="mb-2 mt-auto" placement="top" />
       <div
-        class="mb-3 select-none text-[10px] font-semibold leading-none text-emerald-50/65"
+        class="mb-3 select-none text-[10px] font-semibold leading-none text-ink-muted"
         :title="`${APP_NAME} v${APP_VERSION}`"
       >
         v{{ APP_VERSION }}
       </div>
       <RouterLink
-        class="grid h-9 w-9 place-items-center rounded-full bg-emerald-700 text-xs font-semibold text-white ring-2 ring-white/10 transition hover:bg-emerald-600 hover:ring-white/25"
-        active-class="ring-white/40"
+        class="grid h-9 w-9 place-items-center rounded-full bg-fluvius-700 text-xs font-semibold text-white ring-2 ring-transparent transition hover:bg-fluvius-600 hover:ring-fluvius-200"
+        active-class="ring-fluvius-200"
         to="/app/account"
         :title="`Minha conta · ${auth.user?.name || 'Usuário'}`"
       >
         {{ userInitial }}
       </RouterLink>
       <button
-        class="mt-2 rounded-lg p-2.5 transition hover:bg-white/10 hover:text-white"
+        class="mt-2 rounded-lg p-2.5 text-ink-muted transition hover:bg-canvas hover:text-ink"
         title="Sair"
         @click="logout"
       >

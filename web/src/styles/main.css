@@ -4,22 +4,22 @@
 
 @layer base {
   :root {
-    --color-canvas: 235 240 238;
+    --color-canvas: 240 242 245;
     --color-panel: 255 255 255;
-    --color-panel-muted: 224 231 228;
+    --color-panel-muted: 232 234 237;
     --color-panel-raised: 255 255 255;
     --color-ink: 24 31 34;
     --color-ink-secondary: 52 66 72;
     --color-ink-muted: 72 86 92;
     --color-ink-faint: 88 102 108;
-    --color-line: 193 206 200;
+    --color-line: 210 214 218;
     --color-line-strong: 132 153 144;
     --color-neutral-action: 31 42 46;
     --color-disabled: 174 185 180;
-    --color-nav: 20 73 61;
-    --color-chat: 224 227 219;
+    --color-nav: 255 255 255;
+    --color-chat: 234 230 223;
     --color-message-in: 255 255 255;
-    --color-message-out: 209 239 218;
+    --color-message-out: 217 253 211;
     --color-success-soft: 235 248 241;
     --color-success: 30 137 91;
     --color-success-strong: 20 105 69;
@@ -39,7 +39,7 @@
   }
 
   :root.dark {
-    --color-canvas: 17 19 21;
+    --color-canvas: 11 12 14;
     --color-panel: 24 27 29;
     --color-panel-muted: 32 36 39;
     --color-panel-raised: 38 43 46;
@@ -51,10 +51,10 @@
     --color-line-strong: 65 73 77;
     --color-neutral-action: 54 64 68;
     --color-disabled: 70 78 82;
-    --color-nav: 21 26 25;
-    --color-chat: 15 18 19;
+    --color-nav: 18 21 24;
+    --color-chat: 14 20 23;
     --color-message-in: 32 36 39;
-    --color-message-out: 20 73 60;
+    --color-message-out: 5 56 42;
     --color-success-soft: 21 52 40;
     --color-success: 85 201 148;
     --color-success-strong: 158 231 196;

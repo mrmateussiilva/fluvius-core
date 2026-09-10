@@ -825,6 +825,37 @@ function previewMedia(
         </button>
       </div>
 
+      <!-- Assignment Info Bar -->
+      <div
+        v-if="
+          conversation &&
+          ((conversation.assigned_user_id && !isAssignedToCurrentUser) ||
+            (!conversation.assigned_user_id && conversation.status !== 'closed'))
+        "
+        class="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas px-4 py-1.5"
+      >
+        <div class="flex items-center gap-2 text-[13px] text-ink-muted">
+          <template v-if="!conversation.assigned_user_id">
+            <Clock class="h-4 w-4 shrink-0 text-warning-strong" />
+            <span>Aguardando atendimento</span>
+          </template>
+          <template v-else>
+            <Lock class="h-4 w-4 shrink-0" />
+            <span class="truncate">
+              Atendimento de <strong>{{ assignedUser?.name || 'outro agente' }}</strong>
+            </span>
+          </template>
+        </div>
+        <button
+          v-if="currentUserId && conversation.status !== 'closed'"
+          class="h-8 shrink-0 rounded-lg bg-fluvius-700 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="operationLoading || !canApplyAssignment"
+          @click="emit('assign', assignmentTargetId)"
+        >
+          {{ assignmentActionLabel }}
+        </button>
+      </div>
+
       <!-- AI Handoff Transbordo Info Banner -->
       <div
         v-if="conversation.bot_handoff_reason && !conversation.is_bot_active && conversation.status !== 'closed'"
