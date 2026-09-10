@@ -179,11 +179,33 @@ function timeLabel(value: string | null) {
 
 <template>
   <aside class="flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[372px]">
-    <div class="border-b border-line bg-canvas px-3 pb-2 pt-3">
-      <label class="flex h-9 items-center gap-2 rounded-lg bg-panel px-2.5 text-ink-muted shadow-sm ring-1 ring-black/5 transition focus-within:ring-2 focus-within:ring-fluvius-500/30">
+    <!-- Header -->
+    <div class="border-b border-line bg-panel px-3 pb-2.5 pt-3">
+      <!-- Search bar — clean like WhatsApp Web -->
+      <label class="flex h-9 items-center gap-2.5 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
+        <Search class="h-4 w-4 shrink-0" />
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Pesquisar ou começar nova conversa"
+          class="min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-muted"
+        />
+        <button
+          v-if="search"
+          type="button"
+          class="rounded-full p-0.5 hover:bg-line"
+          title="Limpar busca"
+          @click="search = ''"
+        >
+          <X class="h-3.5 w-3.5" />
+        </button>
+      </label>
+
+      <!-- Channel selector + kind filters on the same compact row -->
+      <div class="mt-2 flex items-center justify-between gap-2">
         <select
           :value="activeChannelId || ''"
-          class="shrink-0 cursor-pointer appearance-none bg-transparent text-[13px] font-medium text-ink-secondary outline-none hover:text-ink"
+          class="h-7 min-w-0 max-w-[160px] cursor-pointer truncate rounded-md bg-canvas px-2 text-[12px] font-medium text-ink-secondary outline-none transition hover:bg-panel-muted hover:text-ink"
           aria-label="Canal de atendimento"
           @change="
             emit(
@@ -201,52 +223,15 @@ function timeLabel(value: string | null) {
             {{ channel.name }}
           </option>
         </select>
-        <div class="h-4 w-px bg-line" />
-        <Search class="h-3.5 w-3.5 shrink-0" />
-        <input
-          v-model="search"
-          type="search"
-          placeholder="Buscar ou começar nova conversa"
-          class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
-        />
-        <button
-          v-if="search"
-          type="button"
-          class="rounded-full p-0.5 hover:bg-line"
-          title="Limpar busca"
-          @click="search = ''"
-        >
-          <X class="h-3.5 w-3.5" />
-        </button>
-      </label>
-      
-      <div class="mt-2.5 flex items-center justify-between gap-2">
-        <div class="soft-scrollbar flex gap-1 overflow-x-auto pb-0.5">
-          <button
-            v-for="tab in tabs"
-            :key="tab.value"
-            class="flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-1 text-[11px] font-medium transition"
-            :class="activeStatus === tab.value ? 'border-fluvius-100 bg-fluvius-50 text-fluvius-700' : 'border-transparent text-ink-secondary hover:bg-panel-muted'"
-            @click="activeStatus = tab.value"
-          >
-            {{ tab.label }}
-            <span
-              class="min-w-4 rounded-full px-1.5 text-center text-[10px] font-semibold leading-4"
-              :class="activeStatus === tab.value ? 'bg-fluvius-700 text-white' : 'bg-panel-muted text-ink-secondary'"
-            >
-              {{ tabCounts[tab.value] }}
-            </span>
-          </button>
-        </div>
         <div class="flex shrink-0 gap-0.5">
           <button
             v-for="tab in kindTabs"
             :key="tab.value"
-            class="rounded px-1.5 py-1 text-[10px] font-medium transition"
+            class="rounded-md px-2 py-1 text-[11px] font-medium transition"
             :class="
               kindFilter === tab.value
-                ? 'bg-ink-secondary text-white'
-                : 'text-ink-muted hover:bg-panel-muted hover:text-ink'
+                ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                : 'text-ink-muted hover:bg-canvas hover:text-ink'
             "
             @click="kindFilter = tab.value"
           >
@@ -254,79 +239,92 @@ function timeLabel(value: string | null) {
           </button>
         </div>
       </div>
+
+      <!-- Status tabs (queue selector) -->
+      <div class="soft-scrollbar mt-2 flex gap-0.5 overflow-x-auto">
+        <button
+          v-for="tab in tabs"
+          :key="tab.value"
+          class="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium transition"
+          :class="
+            activeStatus === tab.value
+              ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+              : 'text-ink-secondary hover:bg-canvas hover:text-ink'
+          "
+          @click="activeStatus = tab.value"
+        >
+          {{ tab.label }}
+          <span
+            v-if="tabCounts[tab.value]"
+            class="min-w-4 rounded-full px-1.5 text-center text-[10px] font-bold leading-4"
+            :class="
+              activeStatus === tab.value
+                ? 'bg-fluvius-700 text-white'
+                : 'bg-line text-ink-secondary'
+            "
+          >
+            {{ tabCounts[tab.value] }}
+          </span>
+        </button>
+      </div>
     </div>
+
+    <!-- Conversation list — WhatsApp Web style -->
     <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto">
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="conversation-item group flex w-full gap-3 border-l-[3px] border-transparent px-3 py-2.5 text-left transition hover:bg-canvas active:bg-panel-muted/60"
-        :class="selectedId === conversation.id ? 'border-fluvius-700 bg-fluvius-50 hover:bg-fluvius-50' : ''"
+        class="group flex w-full items-center gap-3 px-3 py-1.5 text-left transition hover:bg-canvas"
+        :class="selectedId === conversation.id ? 'bg-canvas' : ''"
         @click="emit('select', conversation.id)"
       >
+        <!-- Avatar -->
         <div
-          class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full text-sm font-semibold ring-1 ring-black/[0.03]"
+          class="relative grid h-[49px] w-[49px] shrink-0 place-items-center rounded-full text-[17px] font-semibold"
           :class="avatarClass(conversation)"
         >
           <Users v-if="isGroup(conversation)" class="h-5 w-5" />
           <template v-else>{{ initials(conversation) }}</template>
         </div>
-        <div class="min-w-0 flex-1 border-b border-line pb-2.5 pt-0.5 group-last:border-transparent">
+
+        <!-- Text content -->
+        <div class="min-w-0 flex-1 border-b border-line py-3 group-last:border-transparent">
+          <!-- Row 1: contact name + time -->
           <div class="flex items-center gap-2">
-            <span class="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+            <span class="min-w-0 flex-1 truncate text-[15px] font-medium leading-[1.2] text-ink">
               {{ displayName(conversation) }}
             </span>
-            <span
-              v-if="isGroup(conversation)"
-              class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
-            >
-              Grupo
-            </span>
             <time
-              class="shrink-0 text-[11px]"
-              :class="conversation.unread_count ? 'font-medium text-fluvius-600' : 'text-ink-muted'"
+              class="shrink-0 text-[12px]"
+              :class="conversation.unread_count ? 'font-semibold text-fluvius-600' : 'text-ink-muted'"
               :datetime="conversation.last_message_at || undefined"
             >
               {{ timeLabel(conversation.last_message_at) }}
             </time>
           </div>
-          <div class="mt-0.5 flex items-center gap-2">
-            <span
-              v-if="!activeChannelId"
-              class="max-w-24 shrink-0 truncate rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-semibold text-info-strong"
-              :title="conversation.channel_name"
-            >
-              {{ conversation.channel_name }}
-            </span>
-            <span
-              v-if="attentionLabel(conversation)"
-              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-strong"
-            >
-              <CircleAlert class="h-3 w-3" aria-hidden="true" />
-              {{ attentionLabel(conversation) }}
-            </span>
-            <span class="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink-muted">
+          <!-- Row 2: message preview + unread badge -->
+          <div class="mt-[3px] flex items-center gap-1.5">
+            <span class="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink-muted">
               {{ messagePreview(conversation) }}
             </span>
+            <!-- Subtle dot for "needs attention" (no unread count yet) -->
             <span
-              v-if="
-                currentUserRole === 'admin' &&
-                conversation.status === 'open' &&
-                conversation.assigned_user_id
-              "
-              class="max-w-28 shrink-0 truncate rounded-full bg-panel-muted px-2 py-0.5 text-[10px] font-medium text-ink-secondary"
-              :title="`Responsável: ${assigneeName(conversation)}`"
-            >
-              {{ assigneeName(conversation) }}
-            </span>
+              v-if="needsAttention(conversation) && !conversation.unread_count"
+              class="h-2 w-2 shrink-0 rounded-full bg-fluvius-500"
+              title="Aguardando resposta"
+            />
+            <!-- Unread count — identical to WhatsApp Web -->
             <span
               v-if="conversation.unread_count"
-              class="grid min-h-5 min-w-5 shrink-0 place-items-center rounded-full bg-fluvius-700 px-1 text-[10px] font-semibold text-white"
+              class="grid min-h-[20px] min-w-[20px] shrink-0 place-items-center rounded-full bg-fluvius-600 px-1 text-[11px] font-bold text-white"
             >
               {{ conversation.unread_count > 99 ? '99+' : conversation.unread_count }}
             </span>
           </div>
         </div>
       </button>
+
+      <!-- Empty state -->
       <div v-if="!visible.length" class="px-8 py-14 text-center text-ink-muted">
         <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-panel-muted">
           <MessageSquareText class="h-5 w-5" />
