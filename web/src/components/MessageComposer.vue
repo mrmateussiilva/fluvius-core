@@ -1467,36 +1467,6 @@ function handleDrop(event: DragEvent) {
       :src="selectedAttachments[0].previewUrl || ''"
       :file-name="selectedAttachments[0].file.name || 'Áudio selecionado'"
     />
-    <!-- Mode Switcher: WhatsApp Message vs Internal Note -->
-    <div class="mx-auto mb-2 flex max-w-5xl items-center gap-1.5 px-0.5">
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition"
-        :class="
-          !isInternalMode
-            ? 'bg-fluvius-600/15 text-fluvius-800 ring-1 ring-fluvius-600/30 dark:bg-emerald-500/20 dark:text-emerald-300'
-            : 'text-ink-muted hover:bg-black/5 hover:text-ink'
-        "
-        @click="isInternalMode = false"
-      >
-        <Send class="h-3 w-3" />
-        Mensagem WhatsApp
-      </button>
-      <button
-        type="button"
-        class="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition"
-        :class="
-          isInternalMode
-            ? 'bg-amber-500/20 text-amber-800 ring-1 ring-amber-500/40 shadow-sm dark:bg-amber-500/30 dark:text-amber-300'
-            : 'text-ink-muted hover:bg-black/5 hover:text-ink'
-        "
-        @click="isInternalMode = true"
-      >
-        <LockKeyhole class="h-3 w-3 text-amber-600" />
-        Nota Interna (🔒 Equipe)
-      </button>
-    </div>
-
     <form class="mx-auto flex max-w-5xl items-end gap-2" @submit.prevent="submit">
       <div class="relative">
         <button
@@ -1546,6 +1516,22 @@ function handleDrop(event: DragEvent) {
           @hover="quickReplyActiveIndex = $event"
           @select="useReply"
         />
+      </div>
+      <div class="relative">
+        <button
+          type="button"
+          class="grid h-11 w-11 place-items-center rounded-full transition disabled:opacity-40"
+          :class="
+            isInternalMode
+              ? 'bg-amber-500/20 text-amber-700 dark:bg-amber-500/30 dark:text-amber-300 ring-1 ring-amber-500/40'
+              : 'text-ink-secondary hover:bg-black/5 hover:text-fluvius-700'
+          "
+          :disabled="isDisabled"
+          :title="isInternalMode ? 'Alternar para mensagem normal' : 'Alternar para nota interna 🔒'"
+          @click="isInternalMode = !isInternalMode"
+        >
+          <LockKeyhole class="h-5 w-5" />
+        </button>
       </div>
       <div class="relative">
         <input

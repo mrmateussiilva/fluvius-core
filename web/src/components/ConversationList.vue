@@ -180,32 +180,31 @@ function timeLabel(value: string | null) {
 <template>
   <aside class="flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[372px]">
     <!-- Header -->
-    <div class="border-b border-line bg-panel px-3 pb-2.5 pt-3">
-      <!-- Search bar — clean like WhatsApp Web -->
-      <label class="flex h-9 items-center gap-2.5 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
-        <Search class="h-4 w-4 shrink-0" />
-        <input
-          v-model="search"
-          type="search"
-          placeholder="Pesquisar ou começar nova conversa"
-          class="min-w-0 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-muted"
-        />
-        <button
-          v-if="search"
-          type="button"
-          class="rounded-full p-0.5 hover:bg-line"
-          title="Limpar busca"
-          @click="search = ''"
-        >
-          <X class="h-3.5 w-3.5" />
-        </button>
-      </label>
+    <div class="border-b border-line bg-panel px-3 pb-2 pt-2.5">
+      <!-- Row 1: Search bar + Channel Selector -->
+      <div class="flex items-center gap-2">
+        <label class="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-1 focus-within:ring-fluvius-500/30">
+          <Search class="h-4 w-4 shrink-0" />
+          <input
+            v-model="search"
+            type="search"
+            placeholder="Pesquisar..."
+            class="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-ink-muted"
+          />
+          <button
+            v-if="search"
+            type="button"
+            class="rounded-full p-0.5 hover:bg-line"
+            title="Limpar busca"
+            @click="search = ''"
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
+        </label>
 
-      <!-- Channel selector + kind filters on the same compact row -->
-      <div class="mt-2 flex items-center justify-between gap-2">
         <select
           :value="activeChannelId || ''"
-          class="h-7 min-w-0 max-w-[160px] cursor-pointer truncate rounded-md bg-canvas px-2 text-[12px] font-medium text-ink-secondary outline-none transition hover:bg-panel-muted hover:text-ink"
+          class="h-9 max-w-[120px] cursor-pointer truncate rounded-lg bg-canvas px-2 text-[11.5px] font-medium text-ink-secondary outline-none transition hover:bg-panel-muted hover:text-ink"
           aria-label="Canal de atendimento"
           @change="
             emit(
@@ -223,29 +222,14 @@ function timeLabel(value: string | null) {
             {{ channel.name }}
           </option>
         </select>
-        <div class="flex shrink-0 gap-0.5">
-          <button
-            v-for="tab in kindTabs"
-            :key="tab.value"
-            class="rounded-md px-2 py-1 text-[11px] font-medium transition"
-            :class="
-              kindFilter === tab.value
-                ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                : 'text-ink-muted hover:bg-canvas hover:text-ink'
-            "
-            @click="kindFilter = tab.value"
-          >
-            {{ tab.label }}
-          </button>
-        </div>
       </div>
 
-      <!-- Status tabs (queue selector) -->
-      <div class="soft-scrollbar mt-2 flex gap-0.5 overflow-x-auto">
+      <!-- Row 2: Status & Kind Filter Pills -->
+      <div class="soft-scrollbar mt-2 flex items-center gap-1 overflow-x-auto pb-0.5">
         <button
           v-for="tab in tabs"
           :key="tab.value"
-          class="flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] font-medium transition"
+          class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 text-[12px] font-medium transition"
           :class="
             activeStatus === tab.value
               ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
@@ -265,6 +249,22 @@ function timeLabel(value: string | null) {
           >
             {{ tabCounts[tab.value] }}
           </span>
+        </button>
+
+        <span class="mx-1 h-3 w-px shrink-0 bg-line" />
+
+        <button
+          v-for="tab in kindTabs"
+          :key="tab.value"
+          class="shrink-0 rounded-lg px-2 py-1 text-[11px] font-medium transition"
+          :class="
+            kindFilter === tab.value
+              ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+              : 'text-ink-muted hover:bg-canvas hover:text-ink'
+          "
+          @click="kindFilter = tab.value"
+        >
+          {{ tab.label }}
         </button>
       </div>
     </div>

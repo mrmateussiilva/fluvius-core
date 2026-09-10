@@ -52,9 +52,9 @@
     --color-neutral-action: 54 64 68;
     --color-disabled: 70 78 82;
     --color-nav: 18 21 24;
-    --color-chat: 14 20 23;
-    --color-message-in: 32 36 39;
-    --color-message-out: 5 56 42;
+    --color-chat: 11 20 26;
+    --color-message-in: 32 44 51;
+    --color-message-out: 0 92 75;
     --color-success-soft: 21 52 40;
     --color-success: 85 201 148;
     --color-success-strong: 158 231 196;
@@ -148,32 +148,6 @@
     contain-intrinsic-size: auto none auto 68px;
   }
 
-  .message-tail-in,
-  .message-tail-out {
-    position: relative;
-  }
-
-  .message-tail-in::before,
-  .message-tail-out::before {
-    position: absolute;
-    top: 0;
-    width: 0;
-    height: 0;
-    content: '';
-    border-style: solid;
-  }
-
-  .message-tail-in::before {
-    left: -8px;
-    border-width: 0 10px 10px 0;
-    border-color: transparent rgb(var(--color-message-in)) transparent transparent;
-  }
-
-  .message-tail-out::before {
-    right: -8px;
-    border-width: 0 0 10px 10px;
-    border-color: transparent transparent transparent rgb(var(--color-message-out));
-  }
 }
 
 @layer utilities {

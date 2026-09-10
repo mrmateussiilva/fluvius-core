@@ -87,12 +87,8 @@ const bubbleClass = computed(() => {
   }
   return [
     outgoing ? 'bg-message-out' : 'bg-message-in',
-    outgoing && props.groupStart ? 'message-tail-out' : '',
-    !outgoing && props.groupStart ? 'message-tail-in' : '',
-    outgoing && !props.groupStart ? 'rounded-tr-[4px]' : '',
-    !outgoing && !props.groupStart ? 'rounded-tl-[4px]' : '',
-    outgoing && !props.groupEnd ? 'rounded-br-[4px]' : '',
-    !outgoing && !props.groupEnd ? 'rounded-bl-[4px]' : '',
+    outgoing && props.groupStart ? 'rounded-tr-none' : '',
+    !outgoing && props.groupStart ? 'rounded-tl-none' : '',
   ]
 })
 
@@ -161,9 +157,31 @@ function showDetails() {
     :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="relative max-w-[88%] rounded-lg px-2.5 py-1.5 text-ink shadow-[0_1px_1px_rgba(11,20,26,0.13)] sm:max-w-[76%] lg:max-w-[68%]"
+      class="relative max-w-[85%] rounded-lg px-2.5 py-1.5 text-ink shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] dark:shadow-[0_1px_0.5px_rgba(11,20,26,0.22)] sm:max-w-[76%] lg:max-w-[66%]"
       :class="bubbleClass"
     >
+      <!-- SVG Tail Outgoing -->
+      <svg
+        v-if="message.direction === 'outgoing' && groupStart && !message.is_internal && !isNativeSticker"
+        class="absolute -right-2 top-0 h-[13px] w-[8px] text-message-out"
+        viewBox="0 0 8 13"
+        height="13"
+        width="8"
+      >
+        <path opacity="0.13" d="M5.188,1H0v11l3.091-1.39C4.606,10.043,5.188,9.231,5.188,8.349V1z" />
+        <path fill="currentColor" d="M1.533 3.568L8 12.193V1H2.812C1.042 1 .474 2.156 1.533 3.568z" />
+      </svg>
+      <!-- SVG Tail Incoming -->
+      <svg
+        v-if="message.direction === 'incoming' && groupStart && !message.is_internal && !isNativeSticker"
+        class="absolute -left-2 top-0 h-[13px] w-[8px] text-message-in"
+        viewBox="0 0 8 13"
+        height="13"
+        width="8"
+      >
+        <path opacity="0.13" d="M2.812,1H8v11L4.909,10.61C3.394,10.043,2.812,9.231,2.812,8.349V1z" />
+        <path fill="currentColor" d="M6.467 3.568L0 12.193V1h5.188c1.77 0 2.338 1.156 1.279 2.568z" />
+      </svg>
       <button
         type="button"
         class="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-l from-message-in/95 via-message-in/85 to-message-in/60 text-ink-muted opacity-100 shadow-sm transition hover:text-ink focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
@@ -288,13 +306,13 @@ function showDetails() {
 
       <button
         v-if="message.reply_to"
-        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[3px] bg-ink/[0.04] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-ink/[0.07] sm:min-w-48"
-        :class="message.reply_to.direction === 'incoming' ? 'border-info' : 'border-fluvius-500'"
+        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.07] dark:hover:bg-white/[0.09] sm:min-w-48"
+        :class="message.reply_to.direction === 'incoming' ? 'border-[#53bdeb]' : 'border-[#06cf9c] dark:border-[#00a884]'"
         @click="emit('jumpTo', message.reply_to.id)"
       >
         <span
-          class="block font-semibold"
-          :class="message.reply_to.direction === 'incoming' ? 'text-info-strong' : 'text-fluvius-700 dark:text-emerald-300'"
+          class="block font-semibold text-[12px]"
+          :class="message.reply_to.direction === 'incoming' ? 'text-[#53bdeb]' : 'text-[#06cf9c] dark:text-[#00a884]'"
         >
           {{
             message.reply_to.direction === 'incoming'
@@ -304,7 +322,7 @@ function showDetails() {
               : message.reply_to.sender_name || 'Equipe'
           }}
         </span>
-        <span class="mt-0.5 block max-w-72 truncate text-ink-secondary">
+        <span class="mt-0.5 block max-w-72 truncate text-[12px] text-ink-secondary">
           {{ message.reply_to.body || `[${message.reply_to.message_type}]` }}
         </span>
       </button>
@@ -402,7 +420,7 @@ function showDetails() {
 
       <p
         v-if="message.body"
-        class="whitespace-pre-wrap break-words px-0.5 pr-5 text-[13.5px] leading-[19px]"
+        class="whitespace-pre-wrap break-words px-0.5 pr-5 text-[14.2px] leading-[19px]"
       >
         {{ message.body }}
       </p>
@@ -437,30 +455,30 @@ function showDetails() {
       </button>
 
       <div
-        class="mt-0.5 flex items-center justify-end gap-0.5 px-0.5 text-[9.5px] leading-3 text-ink-muted"
+        class="mt-0.5 flex items-center justify-end gap-1 px-0.5 text-[11px] leading-3 text-ink-muted dark:text-[#8696a0]"
         :class="{
           'absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-white shadow-sm':
             isNativeSticker,
         }"
         :title="`${fullDateLabel} · ${statusLabel}`"
       >
-        <span v-if="copied" class="mr-1 text-fluvius-700">Copiada</span>
-        <span v-if="message.edited_at" class="mr-0.5">editada</span>
+        <span v-if="copied" class="mr-1 font-medium text-fluvius-700">Copiada</span>
+        <span v-if="message.edited_at" class="mr-0.5 text-[10px]">editada</span>
         <time :datetime="message.sent_at || message.created_at">{{ timeLabel }}</time>
         <span v-if="message.is_internal" class="flex items-center text-amber-700 dark:text-amber-300" title="Nota interna não enviada ao WhatsApp">
           <LockKeyhole class="h-3 w-3" />
         </span>
         <span v-else-if="message.direction === 'outgoing'" class="flex items-center" :title="statusLabel">
           <Clock3 v-if="message.status === 'pending'" class="h-3 w-3" :aria-label="statusLabel" />
-          <Check v-else-if="message.status === 'sent'" class="h-3 w-3" :aria-label="statusLabel" />
+          <Check v-else-if="message.status === 'sent'" class="h-3.5 w-3.5 text-[#667781] dark:text-[#8696a0]" :aria-label="statusLabel" />
           <CheckCheck
             v-else-if="message.status === 'delivered'"
-            class="h-3 w-3"
+            class="h-3.5 w-3.5 text-[#667781] dark:text-[#8696a0]"
             :aria-label="statusLabel"
           />
           <CheckCheck
             v-else-if="message.status === 'read'"
-            class="h-3.5 w-3.5 text-info"
+            class="h-3.5 w-3.5 text-[#53bdeb]"
             :aria-label="statusLabel"
           />
           <CircleAlert v-else class="h-3 w-3 text-danger" :aria-label="statusLabel" />

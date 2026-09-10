@@ -736,6 +736,24 @@ function previewMedia(
             <Sparkles v-else class="h-4 w-4 text-purple-600 dark:text-purple-400" />
             <span class="hidden md:inline">{{ summarizing ? 'Analisando...' : 'Analisar IA' }}</span>
           </button>
+          <div v-if="isAdmin && eligibleAssignableUsers.length" class="relative flex items-center">
+            <select
+              v-model="assignmentTargetId"
+              class="h-9 max-w-[130px] rounded-lg border border-line bg-panel px-2 text-xs font-medium text-ink outline-none transition hover:bg-canvas focus:border-fluvius-500 sm:max-w-[170px]"
+              :disabled="operationLoading"
+              aria-label="Atribuir a..."
+              @change="emit('assign', assignmentTargetId)"
+            >
+              <option value="" disabled selected>Atribuir a...</option>
+              <option
+                v-for="user in eligibleAssignableUsers"
+                :key="user.id"
+                :value="user.id"
+              >
+                {{ user.name }}
+              </option>
+            </select>
+          </div>
           <button
             v-if="canClaim"
             class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-canvas sm:px-3"
@@ -775,86 +793,6 @@ function previewMedia(
           </span>
         </div>
       </header>
-      <div
-        v-if="isAdmin && eligibleAssignableUsers.length"
-        class="z-10 flex min-h-12 items-center gap-2 border-b border-line bg-panel px-3 py-2 shadow-sm shadow-black/[0.03] sm:px-4"
-      >
-        <ShieldCheck class="h-4 w-4 shrink-0 text-fluvius-700" />
-        <span class="hidden shrink-0 text-xs font-medium text-ink-secondary lg:inline">
-          Responsável
-        </span>
-        <select
-          v-model="assignmentTargetId"
-          class="h-8 min-w-0 flex-1 rounded-lg border border-line bg-panel px-2 text-xs text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15 sm:max-w-64"
-          :disabled="operationLoading"
-          aria-label="Responsável pelo atendimento"
-        >
-          <option
-            v-for="user in eligibleAssignableUsers"
-            :key="user.id"
-            :value="user.id"
-          >
-            {{ user.name }} · {{ user.role === 'admin' ? 'Administrador' : 'Atendente' }}
-          </option>
-        </select>
-        <button
-          class="h-8 shrink-0 rounded-lg bg-fluvius-700 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="operationLoading || !canApplyAssignment"
-          @click="emit('assign', assignmentTargetId)"
-        >
-          {{ assignmentActionLabel }}
-        </button>
-      </div>
-
-      <!-- AI Bot Active Banner -->
-      <div
-        v-if="conversation.is_bot_active"
-        class="z-10 flex items-center justify-between border-b border-purple-500/20 bg-purple-50/90 px-3 py-2 text-xs text-purple-950 shadow-sm backdrop-blur-sm dark:bg-purple-950/40 dark:text-purple-200 sm:px-4"
-      >
-        <div class="flex items-center gap-2 font-medium">
-          <Bot class="h-4 w-4 text-purple-600 dark:text-purple-400" />
-          <span>Agente de IA em pré-atendimento</span>
-        </div>
-        <button
-          v-if="canClaim"
-          class="flex items-center gap-1.5 rounded-md bg-purple-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 active:scale-95"
-          @click="emit('assign')"
-        >
-          <UserPlus class="h-3.5 w-3.5" />
-          Assumir agora
-        </button>
-      </div>
-
-      <!-- Assignment Info Bar -->
-      <div
-        v-if="
-          conversation &&
-          ((conversation.assigned_user_id && !isAssignedToCurrentUser) ||
-            (!conversation.assigned_user_id && conversation.status !== 'closed'))
-        "
-        class="flex min-h-10 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-canvas px-4 py-1.5"
-      >
-        <div class="flex items-center gap-2 text-[13px] text-ink-muted">
-          <template v-if="!conversation.assigned_user_id">
-            <Clock class="h-4 w-4 shrink-0 text-warning-strong" />
-            <span>Aguardando atendimento</span>
-          </template>
-          <template v-else>
-            <Lock class="h-4 w-4 shrink-0" />
-            <span class="truncate">
-              Atendimento de <strong>{{ assignedUser?.name || 'outro agente' }}</strong>
-            </span>
-          </template>
-        </div>
-        <button
-          v-if="currentUserId && conversation.status !== 'closed'"
-          class="h-8 shrink-0 rounded-lg bg-fluvius-700 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-50"
-          :disabled="operationLoading || !canApplyAssignment"
-          @click="emit('assign', assignmentTargetId)"
-        >
-          {{ assignmentActionLabel }}
-        </button>
-      </div>
 
       <!-- AI Handoff Transbordo Info Banner -->
       <div
@@ -1000,7 +938,7 @@ function previewMedia(
               <div
                 class="sticky top-2 z-10 flex justify-center py-2.5"
               >
-                <span class="rounded-lg bg-panel/90 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-ink-secondary shadow-sm ring-1 ring-black/[0.03] backdrop-blur-sm">
+                <span class="rounded-lg bg-panel/95 dark:bg-[#111b21]/95 px-3 py-1 text-[11.5px] font-medium uppercase tracking-wide text-ink-muted dark:text-[#8696a0] shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm">
                   {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
