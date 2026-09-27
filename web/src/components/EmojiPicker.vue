@@ -125,7 +125,7 @@ const categoryIcons = {
 
 <template>
   <div
-    class="absolute bottom-14 left-0 z-30 flex h-72 w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg bg-panel text-ink shadow-2xl ring-1 ring-black/5"
+    class="absolute bottom-14 left-0 z-30 flex h-72 w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg bg-panel text-ink shadow-2xl ring-1 ring-line/50"
     role="dialog"
     aria-label="Selecionar emoji"
     @click.stop

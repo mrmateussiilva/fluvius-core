@@ -153,6 +153,7 @@ const isChatActiveOnMobile = computed(
   () =>
     route.path === '/app/conversations' && Boolean(conversations.selectedId),
 )
+const isConversationRoute = computed(() => route.path.startsWith('/app/conversations'))
 
 const operationalAlert = computed(() => {
   if (operations.error) return operations.error
@@ -242,12 +243,13 @@ function navItemClass(path: string) {
   <div class="flex h-screen h-[100dvh] overflow-hidden bg-canvas text-ink">
     <!-- Desktop Sidebar (Hidden on Mobile) -->
     <nav
-      class="relative hidden w-[72px] shrink-0 flex-col items-center border-r border-line bg-panel shadow-sm md:flex"
+      class="conversation-rail relative hidden w-16 shrink-0 flex-col items-center border-r border-line bg-panel md:flex"
+      :class="{ 'is-inbox-rail': isConversationRoute }"
       aria-label="Navegação principal"
     >
       <div class="grid w-full place-items-center border-b border-line px-3 py-3">
         <div
-          class="grid h-11 w-11 place-items-center rounded-xl bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
+          class="conversation-brand-mark grid h-11 w-11 place-items-center rounded-xl bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
           :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
         >
           F
@@ -270,7 +272,7 @@ function navItemClass(path: string) {
       <!-- Tenant Switcher Dropdown (Desktop) -->
       <div
         v-if="tenantMenuOpen"
-        class="absolute left-[64px] top-16 z-50 w-72 overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-black/20"
+        class="absolute left-[64px] top-16 z-50 w-72 overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-scrim/20"
       >
         <div class="border-b border-line px-4 py-3">
           <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
@@ -365,7 +367,7 @@ function navItemClass(path: string) {
       >
         <div
           v-if="!realtime.connected && auth.user && !realtime.manualDisconnect"
-          class="pointer-events-none relative z-50 mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full bg-amber-500/95 px-3.5 py-1 text-[11px] font-medium text-white shadow-lg backdrop-blur-sm dark:bg-amber-600/95 md:fixed md:left-1/2 md:top-2 md:mt-0 md:-translate-x-1/2"
+          class="pointer-events-none relative z-50 mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full border border-warning/20 bg-warning-soft px-3.5 py-1 text-[11px] font-medium text-warning-strong shadow-lg backdrop-blur-sm md:fixed md:left-1/2 md:top-2 md:mt-0 md:-translate-x-1/2"
         >
           <RefreshCw class="h-3 w-3 animate-spin" />
           <span>Reconectando ao servidor...</span>
@@ -395,12 +397,12 @@ function navItemClass(path: string) {
       <!-- Mobile Bottom Navigation Bar (Hidden when inside an active chat on mobile) -->
       <nav
         v-if="!isChatActiveOnMobile"
-        class="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-white/15 bg-nav px-2 text-emerald-50/85 shadow-2xl md:hidden"
+        class="fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-line bg-nav px-2 text-ink-muted shadow-2xl md:hidden"
       >
         <RouterLink
           to="/app/conversations"
           class="flex flex-1 flex-col items-center justify-center gap-1 py-1 transition"
-          active-class="font-semibold text-white"
+          active-class="font-semibold text-success-strong"
         >
           <MessageCircle class="h-5 w-5" />
           <span class="text-[11px] leading-none">Conversas</span>
@@ -409,7 +411,7 @@ function navItemClass(path: string) {
         <RouterLink
           to="/app/contacts"
           class="flex flex-1 flex-col items-center justify-center gap-1 py-1 transition"
-          active-class="font-semibold text-white"
+          active-class="font-semibold text-success-strong"
         >
           <ContactRound class="h-5 w-5" />
           <span class="text-[11px] leading-none">Contatos</span>
@@ -419,7 +421,7 @@ function navItemClass(path: string) {
           v-if="auth.user?.role === 'admin'"
           to="/app/team-board"
           class="flex flex-1 flex-col items-center justify-center gap-1 py-1 transition"
-          active-class="font-semibold text-white"
+            active-class="font-semibold text-success-strong"
         >
           <Columns3 class="h-5 w-5" />
           <span class="text-[11px] leading-none">Quadro</span>
@@ -429,15 +431,15 @@ function navItemClass(path: string) {
           v-else
           to="/app/quick-replies"
           class="flex flex-1 flex-col items-center justify-center gap-1 py-1 transition"
-          active-class="font-semibold text-white"
+          active-class="font-semibold text-success-strong"
         >
           <Zap class="h-5 w-5" />
           <span class="text-[11px] leading-none">Respostas</span>
         </RouterLink>
 
         <button
-          class="relative flex flex-1 flex-col items-center justify-center gap-1 py-1 transition hover:text-white"
-          :class="{ 'font-semibold text-white': mobileMenuOpen }"
+          class="relative flex flex-1 flex-col items-center justify-center gap-1 py-1 transition hover:text-ink"
+          :class="{ 'font-semibold text-success-strong': mobileMenuOpen }"
           @click="mobileMenuOpen = true"
         >
           <Menu class="h-5 w-5" />
@@ -447,8 +449,8 @@ function navItemClass(path: string) {
             class="absolute right-6 top-1 h-2 w-2 rounded-full ring-2 ring-nav"
             :class="
               operations.health?.status === 'critical' || operations.error
-                ? 'bg-rose-400'
-                : 'bg-amber-300'
+                ? 'bg-danger'
+                : 'bg-warning'
             "
           />
         </button>
@@ -458,7 +460,7 @@ function navItemClass(path: string) {
     <!-- Mobile Drawer / Menu Sheet (Bottom Drawer) -->
     <div
       v-if="mobileMenuOpen"
-      class="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm md:hidden"
+      class="fixed inset-0 z-50 flex flex-col justify-end bg-scrim/60 backdrop-blur-sm md:hidden"
       @click.self="mobileMenuOpen = false"
     >
       <div
@@ -468,7 +470,7 @@ function navItemClass(path: string) {
         <div class="flex items-center justify-between border-b border-line px-5 py-4">
           <div class="flex items-center gap-3">
             <div
-              class="grid h-10 w-10 place-items-center rounded-full bg-emerald-700 text-sm font-semibold text-white"
+              class="grid h-10 w-10 place-items-center rounded-full bg-primary-strong text-sm font-semibold text-white"
             >
               {{ userInitial }}
             </div>
@@ -481,7 +483,7 @@ function navItemClass(path: string) {
             </div>
           </div>
           <button
-            class="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition hover:bg-black/5"
+            class="grid h-9 w-9 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted"
             @click="mobileMenuOpen = false"
           >
             <X class="h-5 w-5" />
@@ -537,7 +539,7 @@ function navItemClass(path: string) {
             @click="navigateFromMobile('/app/quick-replies')"
           >
             <div class="flex items-center gap-3">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/10 text-amber-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-success-soft text-success-strong">
                 <Zap class="h-5 w-5" />
               </div>
               <div>
@@ -555,7 +557,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/team-board')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-success-soft text-success-strong">
                   <Columns3 class="h-5 w-5" />
                 </div>
                 <div>
@@ -571,7 +573,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/settings/channels')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-blue-500/10 text-blue-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-success-soft text-success-strong">
                   <Settings class="h-5 w-5" />
                 </div>
                 <div>
@@ -587,7 +589,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/settings/ai')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-purple-600/10 text-purple-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-success-soft text-success-strong">
                   <Bot class="h-5 w-5" />
                 </div>
                 <div>
@@ -603,7 +605,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/settings/users')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-purple-500/10 text-purple-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-panel-muted text-ink-secondary">
                   <UserRoundCog class="h-5 w-5" />
                 </div>
                 <div>
@@ -619,7 +621,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/settings/sync')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500/10 text-cyan-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-panel-muted text-ink-secondary">
                   <DatabaseBackup class="h-5 w-5" />
                 </div>
                 <div>
@@ -635,7 +637,7 @@ function navItemClass(path: string) {
               @click="navigateFromMobile('/app/settings/operations')"
             >
               <div class="flex items-center gap-3">
-                <div class="grid h-9 w-9 place-items-center rounded-lg bg-rose-500/10 text-rose-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-danger-soft text-danger-strong">
                   <HeartPulse class="h-5 w-5" />
                 </div>
                 <div>
@@ -645,7 +647,7 @@ function navItemClass(path: string) {
               </div>
               <span
                 v-if="operationalAlert"
-                class="rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white"
+                class="rounded-full bg-danger px-2 py-0.5 text-[10px] font-semibold text-white"
               >
                 Alerta
               </span>
@@ -659,7 +661,7 @@ function navItemClass(path: string) {
             @click="navigateFromMobile('/app/platform/tenants')"
           >
             <div class="flex items-center gap-3">
-              <div class="grid h-9 w-9 place-items-center rounded-lg bg-amber-500/10 text-amber-600">
+                <div class="grid h-9 w-9 place-items-center rounded-lg bg-success-soft text-success-strong">
                 <Building2 class="h-5 w-5" />
               </div>
               <div>

@@ -319,7 +319,7 @@ onMounted(async () => {
                 v-model="createForm.channel_ids"
                 type="checkbox"
                 :value="channel.id"
-                class="h-4 w-4 accent-emerald-600"
+                class="h-4 w-4 accent-primary"
               />
               <span class="font-medium">{{ channel.name }}</span>
               <span class="text-xs text-ink-faint">
@@ -453,7 +453,7 @@ onMounted(async () => {
                 class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
                 :class="
                   user.role === 'admin'
-                    ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300'
+                    ? 'bg-success-soft text-success-strong'
                     : 'bg-panel-muted text-ink-secondary'
                 "
               >
@@ -475,7 +475,7 @@ onMounted(async () => {
               </span>
               <button
                 v-if="!user.is_platform_admin"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-secondary transition hover:border-fluvius-300 hover:bg-fluvius-50 hover:text-fluvius-800"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-secondary transition hover:border-primary hover:bg-success-soft hover:text-success-strong"
                 @click="openEdit(user)"
               >
                 <Pencil class="h-3.5 w-3.5" />
@@ -497,7 +497,7 @@ onMounted(async () => {
 
     <div
       v-if="editingUser"
-      class="fixed inset-0 z-40 bg-black/35 backdrop-blur-[1px]"
+      class="fixed inset-0 z-40 bg-scrim/35 backdrop-blur-[1px]"
       aria-hidden="true"
       @click="closeEdit"
     />
@@ -549,7 +549,7 @@ onMounted(async () => {
               v-model="editForm.channel_ids"
               type="checkbox"
               :value="channel.id"
-              class="h-4 w-4 accent-emerald-600"
+              class="h-4 w-4 accent-primary"
             />
             <span class="font-medium">{{ channel.name }}</span>
             <span class="text-xs text-ink-faint">
@@ -600,7 +600,7 @@ onMounted(async () => {
             v-model="editForm.is_active"
             type="checkbox"
             :disabled="editingUser.id === auth.user?.id"
-            class="h-5 w-5 accent-emerald-600"
+            class="h-5 w-5 accent-primary"
           />
         </label>
       </div>

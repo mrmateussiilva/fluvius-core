@@ -70,7 +70,7 @@ function formatDate(value: string | null | undefined) {
             : 'Dados do contato'
         }}
       </h2>
-      <button class="rounded-full p-2 text-ink-muted transition hover:bg-black/5" title="Fechar" @click="emit('close')">
+      <button class="rounded-full p-2 text-ink-muted transition hover:bg-panel-muted" title="Fechar" @click="emit('close')">
         <X class="h-4 w-4" />
       </button>
     </header>
@@ -87,7 +87,7 @@ function formatDate(value: string | null | undefined) {
         />
         <div
           v-else
-          class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-fluvius-100 to-emerald-200 text-2xl font-semibold text-fluvius-800 ring-4 ring-line"
+          class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-success-soft text-2xl font-semibold text-success-strong ring-4 ring-line"
         >
           {{ initials }}
         </div>
@@ -101,7 +101,7 @@ function formatDate(value: string | null | undefined) {
         </p>
         <div
           v-if="(contact?.kind || conversation.contact_kind || 'direct') === 'group'"
-          class="mt-2 inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+          class="mt-2 inline-flex items-center gap-1 rounded-full bg-panel-muted px-2 py-1 text-xs font-medium text-ink-secondary"
         >
           Conversa em grupo
         </div>
@@ -205,7 +205,7 @@ function formatDate(value: string | null | undefined) {
               </span>
               <span
                 v-if="member.is_admin"
-                class="ml-auto rounded-full bg-violet-50 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                class="ml-auto rounded-full bg-panel-muted px-1.5 py-0.5 text-[9px] font-semibold text-ink-secondary"
               >
                 Admin
               </span>

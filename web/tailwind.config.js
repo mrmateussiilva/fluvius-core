@@ -6,6 +6,7 @@ export default {
     extend: {
       colors: {
         canvas: 'rgb(var(--color-canvas) / <alpha-value>)',
+        scrim: 'rgb(var(--color-scrim) / <alpha-value>)',
         panel: 'rgb(var(--color-panel) / <alpha-value>)',
         'panel-muted': 'rgb(var(--color-panel-muted) / <alpha-value>)',
         'panel-raised': 'rgb(var(--color-panel-raised) / <alpha-value>)',
@@ -41,6 +42,7 @@ export default {
         primary: {
           DEFAULT: 'rgb(var(--color-primary) / <alpha-value>)',
           foreground: 'rgb(var(--color-primary-foreground) / <alpha-value>)',
+          strong: 'rgb(var(--color-primary-strong) / <alpha-value>)',
         },
         secondary: {
           DEFAULT: 'rgb(var(--color-secondary) / <alpha-value>)',

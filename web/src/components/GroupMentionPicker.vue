@@ -21,7 +21,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="absolute bottom-full left-0 z-30 mb-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-black/5 bg-panel p-2 shadow-2xl">
+  <div class="absolute bottom-full left-0 z-30 mb-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-line bg-panel p-2 shadow-2xl">
     <div class="border-b border-line px-2 pb-2 pt-1">
       <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-muted">
         Mencionar ou referenciar
@@ -36,7 +36,7 @@ const emit = defineEmits<{
       class="mt-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition"
       :class="
         index === activeIndex
-          ? 'bg-fluvius-50 text-fluvius-900 dark:text-emerald-100'
+          ? 'bg-fluvius-50 text-fluvius-900 dark:text-success-strong'
           : 'hover:bg-panel-muted'
       "
       @mouseenter="emit('hover', index)"

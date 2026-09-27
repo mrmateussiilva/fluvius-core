@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
               aguardavam a mensagem correspondente.
             </p>
             <button
-              class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-info px-4 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-4 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-info px-4 text-sm font-semibold text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="
                 !selectedChannel || Boolean(activeRun) || Boolean(creatingType)
               "
@@ -505,9 +505,9 @@ onBeforeUnmount(() => {
                   class="h-full rounded-full transition-all duration-500"
                   :class="
                     run.status === 'failed'
-                      ? 'bg-rose-500'
+                      ? 'bg-danger'
                       : run.status === 'partial'
-                        ? 'bg-amber-500'
+                        ? 'bg-warning'
                         : 'bg-fluvius-600'
                   "
                   :style="{ width: `${progress(run)}%` }"

@@ -79,7 +79,7 @@ const bubbleClass = computed(() => {
   const outgoing = props.message.direction === 'outgoing'
   if (props.message.is_internal) {
     return [
-      '!bg-amber-50/95 dark:!bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 shadow-sm rounded-lg',
+      '!bg-warning-soft border border-warning/30 shadow-sm rounded-lg',
     ]
   }
   if (isNativeSticker.value) {
@@ -157,8 +157,8 @@ function showDetails() {
     :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="relative max-w-[86%] rounded-[7.5px] px-2.5 py-1.5 text-ink shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] ring-1 ring-black/[0.015] dark:shadow-[0_1px_0.5px_rgba(11,20,26,0.35)] dark:ring-white/[0.025] sm:max-w-[76%] lg:max-w-[64%]"
-      :class="bubbleClass"
+      class="message-bubble relative max-w-[92%] rounded-[7.5px] px-2.5 py-1.5 text-ink sm:max-w-[72%] 2xl:max-w-[64%]"
+      :class="[bubbleClass, { 'message-bubble-sticker': isNativeSticker }]"
     >
       <!-- SVG Tail Outgoing -->
       <svg
@@ -187,7 +187,7 @@ function showDetails() {
         class="absolute right-1 top-1 z-10 grid h-6 w-6 place-items-center rounded-full bg-gradient-to-l from-message-in/95 via-message-in/85 to-message-in/60 text-ink-muted opacity-100 shadow-sm transition hover:text-ink focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
         :class="
           isNativeSticker
-            ? '!bg-black/45 !text-white'
+            ? '!bg-scrim/45 !text-white'
             : message.direction === 'outgoing'
               ? '!from-message-out !via-message-out/90'
               : ''
@@ -236,7 +236,7 @@ function showDetails() {
       />
       <div
         v-if="menuOpen"
-        class="absolute right-1 top-7 z-30 w-48 overflow-hidden rounded-lg bg-panel py-1 text-[13px] text-ink shadow-2xl ring-1 ring-black/5"
+        class="absolute right-1 top-7 z-30 w-48 overflow-hidden rounded-lg bg-panel py-1 text-[13px] text-ink shadow-2xl ring-1 ring-line/50"
       >
         <button
           v-if="canReply"
@@ -280,23 +280,23 @@ function showDetails() {
         class="flex items-center gap-1.5 px-0.5 text-[11px] font-semibold"
         :class="
           isNativeSticker
-            ? 'absolute left-1 top-1 z-[1] rounded-full bg-black/55 px-2 py-0.5 text-white shadow-sm'
+            ? 'absolute left-1 top-1 z-[1] rounded-full bg-scrim/55 px-2 py-0.5 text-white shadow-sm'
             : message.direction === 'outgoing'
               ? 'mb-0.5 pr-7 text-success-strong'
-              : 'mb-0.5 pr-7 text-info-strong'
+              : 'mb-0.5 pr-7 text-ink-secondary'
         "
       >
         <span
           v-if="message.is_internal"
-          class="inline-flex items-center gap-1 rounded bg-amber-500/25 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-900 dark:bg-amber-400/20 dark:text-amber-200"
+          class="inline-flex items-center gap-1 rounded bg-warning-soft px-1.5 py-0.5 text-[9.5px] font-bold text-warning-strong"
           title="Nota interna visível apenas para a equipe"
         >
-          <LockKeyhole class="h-3 w-3 text-amber-700 dark:text-amber-300" />
+          <LockKeyhole class="h-3 w-3 text-warning-strong" />
           Nota Interna
         </span>
         <span
           v-else-if="message.is_bot"
-          class="inline-flex items-center gap-0.5 rounded bg-emerald-600/15 px-1 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-200"
+          class="inline-flex items-center gap-0.5 rounded bg-success-soft px-1 py-0.5 text-[9px] font-bold text-success-strong"
           title="Mensagem gerada automaticamente pelo Agente de IA"
         >
           🤖 IA
@@ -306,13 +306,13 @@ function showDetails() {
 
       <button
         v-if="message.reply_to"
-        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-black/[0.045] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.09] sm:min-w-48"
-        :class="message.reply_to.direction === 'incoming' ? 'border-[#53bdeb]' : 'border-[#06cf9c] dark:border-[#00a884]'"
+        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-panel-muted/70 px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-panel-muted dark:bg-panel-raised sm:min-w-48"
+        :class="message.reply_to.direction === 'incoming' ? 'border-line-strong' : 'border-success'"
         @click="emit('jumpTo', message.reply_to.id)"
       >
         <span
           class="block font-semibold text-[12px]"
-          :class="message.reply_to.direction === 'incoming' ? 'text-[#53bdeb]' : 'text-[#06cf9c] dark:text-[#00a884]'"
+          :class="message.reply_to.direction === 'incoming' ? 'text-ink-secondary' : 'text-success-strong'"
         >
           {{
             message.reply_to.direction === 'incoming'
@@ -336,7 +336,7 @@ function showDetails() {
           <button
             v-if="message.message_type === 'image'"
             type="button"
-            class="group/media relative block overflow-hidden rounded-md bg-black/5"
+            class="group/media relative block overflow-hidden rounded-md bg-panel-muted"
             title="Visualizar imagem"
             @click="emit('preview', attachment, message.message_type)"
           >
@@ -346,7 +346,7 @@ function showDetails() {
               class="max-h-96 w-full min-w-48 object-cover sm:min-w-56"
               loading="lazy"
             />
-            <span class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition group-hover/media:opacity-100">
+            <span class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-scrim/45 text-white opacity-0 backdrop-blur-sm transition group-hover/media:opacity-100">
               <Expand class="h-4 w-4" />
             </span>
           </button>
@@ -368,7 +368,7 @@ function showDetails() {
 
           <div
             v-else-if="message.message_type === 'video'"
-            class="group/media relative min-w-56 overflow-hidden rounded-md bg-black sm:min-w-64"
+            class="group/media relative min-w-56 overflow-hidden rounded-md bg-scrim sm:min-w-64"
           >
             <video
               class="max-h-96 w-full"
@@ -380,7 +380,7 @@ function showDetails() {
             </video>
             <button
               type="button"
-              class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition group-hover/media:opacity-100"
+              class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-scrim/45 text-white opacity-0 backdrop-blur-sm transition group-hover/media:opacity-100"
               title="Ampliar vídeo"
               @click="emit('preview', attachment, message.message_type)"
             >
@@ -455,9 +455,9 @@ function showDetails() {
       </button>
 
       <div
-        class="mt-0.5 flex items-center justify-end gap-1 px-0.5 text-[11px] leading-3 text-ink-muted dark:text-[#8696a0]"
+        class="mt-0.5 flex items-center justify-end gap-1 px-0.5 text-[11px] leading-3 text-ink-muted"
         :class="{
-          'absolute bottom-1 right-1 rounded-full bg-black/55 px-1.5 py-0.5 text-white shadow-sm':
+          'absolute bottom-1 right-1 rounded-full bg-scrim/55 px-1.5 py-0.5 text-white shadow-sm':
             isNativeSticker,
         }"
         :title="`${fullDateLabel} · ${statusLabel}`"
@@ -465,20 +465,20 @@ function showDetails() {
         <span v-if="copied" class="mr-1 font-medium text-fluvius-700">Copiada</span>
         <span v-if="message.edited_at" class="mr-0.5 text-[10px]">editada</span>
         <time :datetime="message.sent_at || message.created_at">{{ timeLabel }}</time>
-        <span v-if="message.is_internal" class="flex items-center text-amber-700 dark:text-amber-300" title="Nota interna não enviada ao WhatsApp">
+        <span v-if="message.is_internal" class="flex items-center text-warning-strong" title="Nota interna não enviada ao WhatsApp">
           <LockKeyhole class="h-3 w-3" />
         </span>
         <span v-else-if="message.direction === 'outgoing'" class="flex items-center" :title="statusLabel">
           <Clock3 v-if="message.status === 'pending'" class="h-3 w-3" :aria-label="statusLabel" />
-          <Check v-else-if="message.status === 'sent'" class="h-3.5 w-3.5 text-[#667781] dark:text-[#8696a0]" :aria-label="statusLabel" />
+          <Check v-else-if="message.status === 'sent'" class="h-3.5 w-3.5 text-ink-muted" :aria-label="statusLabel" />
           <CheckCheck
             v-else-if="message.status === 'delivered'"
-            class="h-3.5 w-3.5 text-[#667781] dark:text-[#8696a0]"
+            class="h-3.5 w-3.5 text-ink-muted"
             :aria-label="statusLabel"
           />
           <CheckCheck
             v-else-if="message.status === 'read'"
-            class="h-3.5 w-3.5 text-[#53bdeb]"
+            class="h-3.5 w-3.5 text-success-strong"
             :aria-label="statusLabel"
           />
           <CircleAlert v-else class="h-3 w-3 text-danger" :aria-label="statusLabel" />
@@ -487,13 +487,13 @@ function showDetails() {
 
       <div
         v-if="detailsOpen"
-        class="fixed inset-0 z-40 bg-black/10"
+        class="fixed inset-0 z-40 bg-scrim/10"
         aria-hidden="true"
         @click="detailsOpen = false"
       />
       <div
         v-if="detailsOpen"
-        class="absolute bottom-5 right-0 z-50 w-72 rounded-lg bg-panel p-4 text-left text-xs text-ink shadow-2xl ring-1 ring-black/5"
+        class="absolute bottom-5 right-0 z-50 w-72 rounded-lg bg-panel p-4 text-left text-xs text-ink shadow-2xl ring-1 ring-line/50"
       >
         <div class="flex items-center justify-between border-b border-line pb-2.5">
           <p class="font-semibold text-ink">Dados da mensagem</p>

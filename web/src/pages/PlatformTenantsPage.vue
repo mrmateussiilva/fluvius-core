@@ -482,7 +482,7 @@ onMounted(async () => {
               <div class="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1.5 rounded-lg border border-fluvius-200 bg-panel px-3 py-2 text-xs font-medium text-fluvius-800 hover:bg-fluvius-100"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel px-3 py-2 text-xs font-medium text-success-strong hover:bg-success-soft"
                   @click="
                     copyText(
                       tenantLoginUrl(selected.slug),
@@ -562,7 +562,7 @@ onMounted(async () => {
 
     <div
       v-if="createOpen"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/45 p-4"
+      class="fixed inset-0 z-50 grid place-items-center bg-scrim/45 p-4"
       @click.self="createOpen = false"
     >
       <form
@@ -668,7 +668,7 @@ onMounted(async () => {
 
     <div
       v-if="initialAccess"
-      class="fixed inset-0 z-[60] grid place-items-center bg-black/55 p-4"
+      class="fixed inset-0 z-[60] grid place-items-center bg-scrim/55 p-4"
       @click.self="closeInitialAccess"
     >
       <section class="w-full max-w-lg rounded-lg bg-panel p-6 shadow-2xl">

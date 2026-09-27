@@ -52,7 +52,7 @@ async function runSearch(value: string) {
 </script>
 
 <template>
-  <div class="fixed bottom-20 left-3 right-3 z-30 overflow-hidden rounded-lg bg-panel text-ink shadow-2xl ring-1 ring-black/10 sm:absolute sm:bottom-14 sm:left-0 sm:right-auto sm:w-[22rem]">
+  <div class="fixed bottom-20 left-3 right-3 z-30 overflow-hidden rounded-lg bg-panel text-ink shadow-2xl ring-1 ring-line/50 sm:absolute sm:bottom-14 sm:left-0 sm:right-auto sm:w-[22rem]">
     <div class="border-b border-line p-3">
       <label class="relative block">
         <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />

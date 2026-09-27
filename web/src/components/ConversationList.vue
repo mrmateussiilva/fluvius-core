@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CircleAlert, MessageSquareText, Search, Smartphone, Users, X } from 'lucide-vue-next'
+import { CircleAlert, MessageSquareText, PanelLeftClose, Search, Smartphone, Users, X } from 'lucide-vue-next'
 import type {
   Channel,
   ContactKind,
@@ -20,10 +20,12 @@ const props = defineProps<{
   channels: Channel[]
   activeChannelId: string | null
   canViewAllChannels: boolean
+  sidebarCollapsed: boolean
 }>()
 const emit = defineEmits<{
   select: [id: string]
   channelChange: [channelId: string | null]
+  toggleSidebar: []
 }>()
 type ConversationQueue = ConversationStatus | 'pending'
 
@@ -84,12 +86,6 @@ const tabCounts = computed(() =>
     ]),
   ) as Record<ConversationQueue, number>,
 )
-const activeTab = computed(
-  () => tabs.find((tab) => tab.value === activeStatus.value) || tabs[0],
-)
-const queueTotal = computed(() => props.conversations.length)
-const attentionTotal = computed(() => tabCounts.value.pending || 0)
-
 const visible = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('pt-BR')
   return props.conversations.filter((conversation) => {
@@ -133,11 +129,11 @@ function initials(conversation: Conversation) {
 }
 
 const avatarPalette = [
-  'bg-success-soft text-success-strong dark:bg-emerald-500/15 dark:text-emerald-300',
-  'bg-info-soft text-info-strong dark:bg-sky-500/15 dark:text-sky-300',
-  'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-  'bg-warning-soft text-warning-strong dark:bg-amber-500/15 dark:text-amber-300',
-  'bg-danger-soft text-danger-strong dark:bg-rose-500/15 dark:text-rose-300',
+  'bg-success-soft text-success-strong',
+  'bg-info-soft text-info-strong dark:bg-panel-raised dark:text-ink-secondary',
+  'bg-panel-muted text-ink-secondary dark:bg-panel-raised',
+  'bg-warning-soft text-warning-strong',
+  'bg-danger-soft text-danger-strong',
 ]
 
 function avatarClass(conversation: Conversation) {
@@ -187,25 +183,31 @@ function timeLabel(value: string | null) {
 </script>
 
 <template>
-  <aside class="flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[360px] xl:w-[380px]">
+  <aside id="conversation-sidebar" class="conversation-list-pane flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[400px] xl:w-[420px]">
     <!-- Header -->
-    <div class="border-b border-line bg-panel px-3 pb-2.5 pt-3">
-      <div class="mb-2.5 flex items-start justify-between gap-3">
+    <div class="conversation-list-header border-b border-line bg-panel px-4 pb-2.5 pt-4">
+      <div class="mb-3 flex items-center justify-between gap-3">
         <div class="min-w-0">
-          <h2 class="truncate text-xl font-semibold tracking-tight text-ink">
+          <h2 class="truncate text-[21px] font-semibold tracking-tight text-ink">
             Conversas
           </h2>
-          <p class="mt-0.5 truncate text-xs text-ink-muted">{{ activeTab.label }}</p>
         </div>
-        <div class="shrink-0 rounded-full bg-fluvius-50 px-2.5 py-1 text-xs font-semibold text-fluvius-700">
-          <span class="tabular-nums">{{ attentionTotal }}</span>
-          <span class="text-ink-muted">/{{ queueTotal }}</span>
-        </div>
+        <button
+          type="button"
+          class="hidden h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink md:grid"
+          title="Recolher lista de conversas"
+          aria-label="Recolher lista de conversas"
+          :aria-expanded="!sidebarCollapsed"
+          aria-controls="conversation-sidebar"
+          @click="emit('toggleSidebar')"
+        >
+          <PanelLeftClose class="h-[18px] w-[18px]" />
+        </button>
       </div>
 
       <!-- Row 1: Search bar + Channel Selector -->
-      <div class="grid gap-1.5">
-        <label class="flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-2 focus-within:ring-fluvius-500/20">
+      <div class="flex flex-col gap-1.5 sm:flex-row">
+        <label class="conversation-search flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-2 focus-within:ring-fluvius-500/20">
           <Search class="h-4 w-4 shrink-0" />
           <input
             v-model="search"
@@ -224,7 +226,7 @@ function timeLabel(value: string | null) {
           </button>
         </label>
 
-        <label class="flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-secondary">
+        <label class="conversation-channel-select flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-secondary sm:w-[156px] sm:shrink-0">
           <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
           <select
             :value="activeChannelId || ''"
@@ -254,10 +256,10 @@ function timeLabel(value: string | null) {
         <button
           v-for="tab in tabs"
           :key="tab.value"
-          class="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-medium transition"
+          class="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1.5 text-[11px] font-medium transition sm:gap-1.5 sm:px-3 sm:text-[12px]"
           :class="
             activeStatus === tab.value
-              ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+              ? 'bg-success-soft text-success-strong'
               : 'text-ink-secondary hover:bg-canvas hover:text-ink'
           "
           @click="activeStatus = tab.value"
@@ -284,7 +286,7 @@ function timeLabel(value: string | null) {
           class="shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition"
           :class="
             kindFilter === tab.value
-              ? 'bg-fluvius-600/15 text-fluvius-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+              ? 'bg-success-soft text-success-strong'
               : 'text-ink-muted hover:bg-canvas hover:text-ink'
           "
           @click="kindFilter = tab.value"
@@ -295,12 +297,12 @@ function timeLabel(value: string | null) {
     </div>
 
     <!-- Conversation list -->
-    <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto bg-panel">
+    <div class="conversation-list-scroll soft-scrollbar min-h-0 flex-1 overflow-y-auto bg-panel">
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="conversation-item group relative flex w-full items-center gap-3 px-3 py-2 text-left transition hover:bg-canvas"
-        :class="selectedId === conversation.id ? 'bg-panel-muted dark:bg-[#2a3942]' : ''"
+        class="conversation-item group relative flex w-full items-center gap-3 px-3 py-1.5 text-left transition hover:bg-canvas"
+        :class="selectedId === conversation.id ? 'conversation-item-selected bg-panel-muted' : ''"
         @click="emit('select', conversation.id)"
       >
         <span
@@ -317,15 +319,15 @@ function timeLabel(value: string | null) {
         </div>
 
         <!-- Text content -->
-        <div class="min-w-0 flex-1 border-b border-line py-1.5 group-last:border-b-0">
+        <div class="min-w-0 flex-1 border-b border-line py-2 group-last:border-b-0">
           <!-- Row 1: contact name + time -->
           <div class="flex items-center gap-2">
             <span class="min-w-0 flex-1 truncate text-[15px] font-medium leading-[1.2] text-ink">
               {{ displayName(conversation) }}
             </span>
             <time
-              class="shrink-0 text-[12px]"
-              :class="conversation.unread_count ? 'font-semibold text-fluvius-600' : 'text-ink-muted'"
+              class="shrink-0 text-[11px]"
+              :class="conversation.unread_count ? 'font-medium text-success-strong' : 'text-ink-muted'"
               :datetime="conversation.last_message_at || undefined"
             >
               {{ timeLabel(conversation.last_message_at) }}
@@ -345,7 +347,7 @@ function timeLabel(value: string | null) {
             <!-- Unread count — identical to WhatsApp Web -->
             <span
               v-if="conversation.unread_count"
-              class="grid min-h-[20px] min-w-[20px] shrink-0 place-items-center rounded-full bg-fluvius-600 px-1 text-[11px] font-bold text-white"
+              class="grid min-h-[20px] min-w-[20px] shrink-0 place-items-center rounded-full bg-primary-strong px-1 text-[11px] font-bold text-white"
             >
               {{ conversation.unread_count > 99 ? '99+' : conversation.unread_count }}
             </span>
@@ -353,15 +355,15 @@ function timeLabel(value: string | null) {
           <div class="mt-1 flex min-w-0 items-center gap-1.5">
             <span
               v-if="attentionLabel(conversation)"
-              class="inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-warning-strong"
+              class="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning-strong"
             >
               <CircleAlert class="h-2.5 w-2.5" />
               {{ attentionLabel(conversation) }}
             </span>
-            <span class="min-w-0 truncate text-[11px] text-ink-faint">
+            <span class="min-w-0 truncate text-[10px] text-ink-faint">
               {{ channelName(conversation.channel_id) }}
             </span>
-            <span v-if="assigneeName(conversation)" class="text-[11px] text-ink-faint">
+            <span v-if="assigneeName(conversation)" class="text-[10px] text-ink-faint">
               · {{ assigneeName(conversation) }}
             </span>
           </div>

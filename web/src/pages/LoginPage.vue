@@ -100,19 +100,19 @@ async function submit() {
         <div class="mx-auto w-full max-w-xl">
           <div class="mb-5 flex items-end justify-between gap-6">
             <div>
-              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-fluvius-700 dark:text-emerald-300">
+              <p class="text-xs font-semibold uppercase tracking-[0.16em] text-fluvius-700 dark:text-success-strong">
                 Operação agora
               </p>
               <h1 class="mt-3 max-w-md text-4xl font-semibold leading-tight text-ink">
                 Entre direto na fila que precisa de atenção.
               </h1>
             </div>
-            <Badge class="border-fluvius-600/20 bg-fluvius-50 text-fluvius-800 dark:bg-fluvius-700/15 dark:text-emerald-100">
+            <Badge class="border-fluvius-600/20 bg-fluvius-50 text-fluvius-800 dark:bg-success-soft dark:text-success-strong">
               pronto
             </Badge>
           </div>
 
-          <div class="rounded-xl border border-line bg-panel/92 p-4 shadow-xl shadow-black/[0.07] backdrop-blur dark:shadow-black/30">
+          <div class="rounded-xl border border-line bg-panel/92 p-4 shadow-xl shadow-scrim/30 backdrop-blur">
             <div class="flex items-center justify-between border-b border-line pb-3">
               <div>
                 <p class="text-sm font-semibold text-ink">Fila não atendidas</p>
@@ -164,7 +164,7 @@ async function submit() {
                     <p class="text-sm font-semibold text-ink">Resposta em revisão</p>
                     <p class="mt-1 text-xs text-ink-muted">Operador confirma antes de enviar</p>
                   </div>
-                  <span class="rounded-md bg-panel px-2 py-1 text-[11px] font-semibold text-fluvius-800 dark:text-emerald-200">
+                  <span class="rounded-md bg-panel px-2 py-1 text-[11px] font-semibold text-fluvius-800 dark:text-success-strong">
                     pendente
                   </span>
                 </div>
@@ -180,7 +180,7 @@ async function submit() {
     </section>
 
     <section class="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-12">
-      <Card class="w-full max-w-md border-line bg-panel shadow-xl shadow-black/[0.08] dark:shadow-black/25">
+      <Card class="w-full max-w-md border-line bg-panel shadow-xl shadow-scrim/25">
         <CardHeader class="space-y-7 p-6 pb-0 sm:p-8 sm:pb-0">
           <div class="flex items-center gap-3 lg:hidden">
             <div class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-fluvius-700 font-bold text-white">
@@ -210,7 +210,7 @@ async function submit() {
           </div>
           <div
             v-else-if="tenant"
-            class="mb-5 flex items-center gap-2.5 rounded-lg border border-fluvius-600/25 bg-fluvius-50 px-3.5 py-3 text-sm text-fluvius-800 dark:bg-fluvius-700/15 dark:text-emerald-100"
+            class="mb-5 flex items-center gap-2.5 rounded-lg border border-fluvius-600/25 bg-fluvius-50 px-3.5 py-3 text-sm text-fluvius-800 dark:bg-success-soft dark:text-success-strong"
           >
             <Building2 class="h-4 w-4 shrink-0 text-fluvius-600" />
             <span>

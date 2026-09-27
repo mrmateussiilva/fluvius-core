@@ -17,6 +17,9 @@ import {
   LoaderCircle,
   LockKeyhole,
   MessageCircle,
+  MoreVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
   RotateCcw,
   ShieldCheck,
   Sparkles,
@@ -58,6 +61,7 @@ const props = defineProps<{
   operationError: string | null
   hasMoreMessages?: boolean
   loadingOlderMessages?: boolean
+  sidebarCollapsed: boolean
 }>()
 const emit = defineEmits<{
   assign: [userId?: string]
@@ -91,10 +95,12 @@ const emit = defineEmits<{
   showContact: []
   refreshContact: []
   loadOlder: []
+  toggleSidebar: []
 }>()
 const messageList = ref<HTMLElement | null>(null)
 const assignmentTargetId = ref('')
 const contactPanelOpen = ref(false)
+const actionsMenuOpen = ref(false)
 const replyingTo = ref<Message | null>(null)
 const highlightedMessageId = ref<string | null>(null)
 const mediaPreview = ref<{
@@ -678,10 +684,22 @@ function previewMedia(
 <template>
   <div v-if="conversation" class="relative flex h-full w-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <section class="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-chat">
-      <header class="z-10 flex min-h-[58px] shrink-0 items-center justify-between border-b border-line bg-panel px-3 py-2 shadow-sm shadow-black/[0.04] sm:px-4">
+      <header class="conversation-chat-header z-10 flex min-h-[58px] shrink-0 items-center justify-between border-b border-line bg-panel px-3 py-2 sm:px-4">
         <div class="flex min-w-0 items-center">
           <button
-            class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 md:hidden"
+            type="button"
+            class="mr-2 hidden h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink md:grid"
+            :title="sidebarCollapsed ? 'Abrir lista de conversas' : 'Recolher lista de conversas'"
+            :aria-label="sidebarCollapsed ? 'Abrir lista de conversas' : 'Recolher lista de conversas'"
+            :aria-expanded="!sidebarCollapsed"
+            aria-controls="conversation-sidebar"
+            @click="emit('toggleSidebar')"
+          >
+            <PanelLeftOpen v-if="sidebarCollapsed" class="h-[18px] w-[18px]" />
+            <PanelLeftClose v-else class="h-[18px] w-[18px]" />
+          </button>
+          <button
+            class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted md:hidden"
             title="Voltar para conversas"
             @click="emit('back')"
           >
@@ -691,7 +709,7 @@ function previewMedia(
             class="flex min-w-0 items-center gap-3 rounded-lg text-left transition hover:opacity-75"
             @click="toggleContactPanel"
           >
-            <div class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-fluvius-100 to-emerald-200 text-xs font-semibold text-fluvius-800 ring-1 ring-black/5">
+            <div class="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full bg-fluvius-100 text-xs font-semibold text-fluvius-800 ring-1 ring-line dark:bg-panel-raised dark:text-ink dark:ring-line">
               <img
                 v-if="contact?.profile_picture_url"
                 :src="contact.profile_picture_url"
@@ -705,7 +723,7 @@ function previewMedia(
                 <span class="truncate">{{ conversation.contact_name || conversation.contact_phone }}</span>
                 <span
                   v-if="(conversation.contact_kind || 'direct') === 'group'"
-                  class="shrink-0 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-500/15 dark:text-violet-300"
+                  class="shrink-0 rounded-full bg-panel-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-secondary"
                 >
                   Grupo
                 </span>
@@ -723,83 +741,90 @@ function previewMedia(
             </div>
           </button>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="relative flex items-center gap-1">
           <ChannelStatusBadge class="hidden xl:inline-flex" :status="conversation.channel_status" />
           <button
             type="button"
-            class="flex h-9 items-center gap-1.5 rounded-lg border border-purple-300/80 bg-purple-50 px-2.5 text-xs font-semibold text-purple-700 shadow-sm transition hover:bg-purple-100 dark:border-purple-800/60 dark:bg-purple-950/40 dark:text-purple-300 sm:px-3"
-            :disabled="summarizing"
-            title="Analisar a conversa com IA sem enviar mensagens"
-            @click="handleSummarize"
+            class="grid h-10 w-10 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink"
+            title="Mais ações"
+            aria-label="Mais ações da conversa"
+            :aria-expanded="actionsMenuOpen"
+            @click="actionsMenuOpen = !actionsMenuOpen"
           >
-            <LoaderCircle v-if="summarizing" class="h-4 w-4 animate-spin text-purple-600" />
-            <Sparkles v-else class="h-4 w-4 text-purple-600 dark:text-purple-400" />
-            <span class="hidden md:inline">{{ summarizing ? 'Analisando...' : 'Analisar IA' }}</span>
+            <MoreVertical class="h-5 w-5" />
           </button>
-          <div v-if="isAdmin && eligibleAssignableUsers.length" class="relative flex items-center">
-            <select
-              v-model="assignmentTargetId"
-              class="h-9 max-w-[130px] rounded-lg border border-line bg-canvas px-2 text-xs font-medium text-ink outline-none transition hover:bg-panel-muted focus:border-fluvius-500 sm:max-w-[170px]"
-              :disabled="operationLoading"
-              aria-label="Atribuir a..."
-              @change="emit('assign', assignmentTargetId)"
+          <div
+            v-if="actionsMenuOpen"
+            class="fixed inset-0 z-30"
+            aria-hidden="true"
+            @click="actionsMenuOpen = false"
+          />
+          <div
+            v-if="actionsMenuOpen"
+            class="absolute right-0 top-11 z-40 w-64 overflow-hidden rounded-lg border border-line bg-panel-raised py-1 text-ink shadow-xl"
+          >
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-panel-muted disabled:opacity-50"
+              :disabled="summarizing"
+              @click="actionsMenuOpen = false; handleSummarize()"
             >
-              <option value="" disabled selected>Atribuir a...</option>
-              <option
-                v-for="user in eligibleAssignableUsers"
-                :key="user.id"
-                :value="user.id"
+              <LoaderCircle v-if="summarizing" class="h-4 w-4 animate-spin text-ink-muted" />
+              <Sparkles v-else class="h-4 w-4 text-ink-muted" />
+              {{ summarizing ? 'Analisando conversa…' : 'Analisar com IA' }}
+            </button>
+            <div v-if="isAdmin && eligibleAssignableUsers.length" class="border-y border-line px-3 py-2">
+              <label class="mb-1 block text-[11px] text-ink-muted">Atribuir conversa</label>
+              <select
+                v-model="assignmentTargetId"
+                class="h-9 w-full rounded-md border border-line bg-canvas px-2 text-sm text-ink outline-none focus:border-fluvius-500"
+                :disabled="operationLoading"
+                aria-label="Atribuir a..."
+                @change="emit('assign', assignmentTargetId); actionsMenuOpen = false"
               >
-                {{ user.name }}
-              </option>
-            </select>
+                <option value="" disabled selected>Escolha um atendente</option>
+                <option v-for="user in eligibleAssignableUsers" :key="user.id" :value="user.id">
+                  {{ user.name }}
+                </option>
+              </select>
+            </div>
+            <button
+              v-if="canClaim"
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-panel-muted disabled:opacity-50"
+              :disabled="operationLoading"
+              @click="actionsMenuOpen = false; emit('assign')"
+            >
+              <RotateCcw v-if="conversation.status === 'closed'" class="h-4 w-4 text-ink-muted" />
+              <UserPlus v-else class="h-4 w-4 text-ink-muted" />
+              {{ conversation.status === 'closed' ? 'Reabrir atendimento' : 'Assumir atendimento' }}
+            </button>
+            <div
+              v-if="conversation.status === 'open' && !canOperate && !canClaim"
+              class="flex items-center gap-3 px-3 py-2.5 text-sm text-warning-strong"
+              title="Atendimento atribuído a outro agente"
+            >
+              <LockKeyhole class="h-4 w-4" />Outro agente está atendendo
+            </div>
+            <button
+              v-if="canOperate"
+              type="button"
+              class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-danger-strong transition hover:bg-danger-soft disabled:opacity-50"
+              :disabled="operationLoading"
+              @click="actionsMenuOpen = false; emit('close')"
+            >
+              <CheckCircle2 class="h-4 w-4" />Finalizar atendimento
+            </button>
           </div>
-          <button
-            v-if="canClaim"
-            class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-panel-muted sm:px-3"
-            :disabled="operationLoading"
-            :title="
-              conversation.status === 'closed'
-                ? 'Reabrir atendimento'
-                : isAdmin && conversation.assigned_user_id
-                  ? 'Assumir atendimento de outro agente'
-                  : 'Assumir atendimento'
-            "
-            @click="emit('assign')"
-          >
-            <RotateCcw v-if="conversation.status === 'closed'" class="h-4 w-4" />
-            <UserPlus v-else class="h-4 w-4" />
-            <span class="hidden sm:inline">
-              {{ conversation.status === 'closed' ? 'Reabrir' : 'Assumir' }}
-            </span>
-          </button>
-          <button
-            v-if="canOperate"
-            class="flex h-9 items-center gap-1.5 rounded-lg bg-fluvius-700 px-2.5 text-xs font-medium text-white shadow-sm transition hover:bg-fluvius-800 sm:px-3"
-            :disabled="operationLoading"
-            title="Finalizar atendimento"
-            @click="emit('close')"
-          >
-            <CheckCircle2 class="h-4 w-4" />
-            <span class="hidden sm:inline">Finalizar</span>
-          </button>
-          <span
-            v-if="conversation.status === 'open' && !canOperate && !canClaim"
-            class="flex h-9 items-center gap-1.5 rounded-lg bg-warning-soft px-2.5 text-xs font-medium text-warning-strong ring-1 ring-warning/20 sm:px-3"
-            title="Atendimento atribuído a outro agente"
-          >
-            <LockKeyhole class="h-3.5 w-3.5" />
-            <span class="hidden lg:inline">Outro agente</span>
-          </span>
         </div>
       </header>
 
       <!-- AI Handoff Transbordo Info Banner -->
       <div
         v-if="conversation.bot_handoff_reason && !conversation.is_bot_active && conversation.status !== 'closed'"
-        class="z-10 flex items-center gap-2 border-b border-amber-500/20 bg-amber-50/90 px-3 py-1.5 text-[11px] text-amber-950 shadow-sm backdrop-blur-sm dark:bg-amber-950/30 dark:text-amber-200 sm:px-4"
+        class="z-10 flex items-center gap-2 border-b border-warning/20 bg-warning-soft px-3 py-1.5 text-[11px] text-warning-strong shadow-sm backdrop-blur-sm sm:px-4"
       >
-        <AlertCircle class="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <AlertCircle class="h-3.5 w-3.5 shrink-0 text-warning-strong" />
         <span class="truncate"><strong>Transbordo da IA:</strong> {{ conversation.bot_handoff_reason }}</span>
       </div>
 
@@ -820,13 +845,13 @@ function previewMedia(
         >
           <section
             v-if="summarizing || aiAnalysis || summarizeError"
-            class="absolute inset-x-3 top-3 z-20 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-purple-200/80 bg-panel/95 p-4 shadow-xl shadow-purple-950/10 backdrop-blur sm:inset-x-auto sm:right-4 sm:w-[min(30rem,calc(100%-2rem))]"
+            class="absolute inset-x-3 top-3 z-20 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-line bg-panel-raised/95 p-4 shadow-xl backdrop-blur sm:inset-x-auto sm:right-4 sm:w-[min(30rem,calc(100%-2rem))]"
             :aria-busy="summarizing"
             aria-labelledby="conversation-analysis-title"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="flex min-w-0 items-start gap-2.5">
-                <div class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300">
+                <div class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-success-soft text-success-strong">
                   <Sparkles class="h-4 w-4" />
                 </div>
                 <div class="min-w-0">
@@ -841,7 +866,7 @@ function previewMedia(
               <button
                 v-if="!summarizing"
                 type="button"
-                class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-95"
+                class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-muted transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-95"
                 aria-label="Fechar análise"
                 title="Fechar análise"
                 @click="dismissSummary"
@@ -850,7 +875,7 @@ function previewMedia(
               </button>
             </div>
 
-            <div v-if="summarizing" class="mt-4 flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-3 text-xs text-purple-800 dark:bg-purple-500/10 dark:text-purple-200">
+            <div v-if="summarizing" class="mt-4 flex items-center gap-2 rounded-lg bg-success-soft px-3 py-3 text-xs text-success-strong">
               <LoaderCircle class="h-4 w-4 animate-spin" />
               <span>A IA está organizando contexto, pendências e uma sugestão revisável.</span>
             </div>
@@ -894,8 +919,8 @@ function previewMedia(
                 <p class="text-[11px] font-semibold uppercase tracking-wide text-warning-strong">Próxima ação</p>
                 <p class="mt-1 text-warning-strong">{{ aiAnalysis.next_action }}</p>
               </div>
-              <div class="rounded-lg border border-fluvius-100 bg-fluvius-50 px-3 py-2.5 dark:border-fluvius-800/40 dark:bg-fluvius-950/20">
-                <p class="text-[11px] font-semibold uppercase tracking-wide text-fluvius-700 dark:text-fluvius-300">Sugestão de resposta</p>
+              <div class="rounded-lg border border-success/20 bg-success-soft px-3 py-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-success-strong">Sugestão de resposta</p>
                 <p class="mt-1 whitespace-pre-wrap text-ink-secondary">{{ aiAnalysis.suggested_reply }}</p>
               </div>
             </div>
@@ -903,7 +928,7 @@ function previewMedia(
             <div v-if="aiAnalysis && !summarizing" class="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
               <button
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-xs font-medium text-ink-secondary transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98]"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-3 text-xs font-medium text-ink-secondary transition hover:bg-panel-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-[0.98]"
                 @click="copySuggestedReply"
               >
                 <Copy class="h-3.5 w-3.5" />
@@ -911,7 +936,7 @@ function previewMedia(
               </button>
               <button
                 type="button"
-                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-purple-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                class="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-strong px-3 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary/30 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 :disabled="savingAnalysis"
                 @click="saveAnalysisAsInternalNote"
               >
@@ -923,10 +948,10 @@ function previewMedia(
         </Transition>
         <div
           ref="messageList"
-          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-2 sm:px-8 sm:py-3 lg:px-12"
+          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-2 sm:px-6 sm:py-3 lg:px-8"
           @scroll.passive="handleScroll"
         >
-          <div class="mx-auto w-full max-w-[920px]">
+          <div class="w-full">
             <div v-if="loadingOlderMessages" class="flex justify-center py-2">
               <span class="h-4 w-4 animate-spin rounded-full border-2 border-fluvius-600 border-t-transparent" />
             </div>
@@ -938,7 +963,7 @@ function previewMedia(
               <div
                 class="sticky top-2 z-10 flex justify-center py-2"
               >
-                <span class="rounded-lg bg-panel/95 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:bg-[#182229]/95 dark:text-[#8696a0]">
+                <span class="rounded-lg bg-panel-raised/95 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted shadow-sm ring-1 ring-line/50 backdrop-blur-sm">
                   {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
@@ -996,7 +1021,7 @@ function previewMedia(
           <button
             v-else-if="!isNearBottom"
             type="button"
-            class="absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-panel/90 text-ink-secondary shadow-md ring-1 ring-black/10 backdrop-blur-sm transition hover:bg-panel hover:text-ink active:scale-95"
+            class="absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-panel/90 text-ink-secondary shadow-md ring-1 ring-line/50 backdrop-blur-sm transition hover:bg-panel hover:text-ink active:scale-95"
             title="Rolar para as mensagens mais recentes"
             @click="scrollToBottom('smooth')"
           >
@@ -1036,7 +1061,19 @@ function previewMedia(
       @close="mediaPreview = null"
     />
   </div>
-  <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-chat px-6 text-center">
+  <section v-else class="relative grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-chat px-6 text-center">
+    <button
+      v-if="sidebarCollapsed"
+      type="button"
+      class="absolute left-4 top-3 z-10 hidden h-9 w-9 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink md:grid"
+      title="Abrir lista de conversas"
+      aria-label="Abrir lista de conversas"
+      aria-expanded="false"
+      aria-controls="conversation-sidebar"
+      @click="emit('toggleSidebar')"
+    >
+      <PanelLeftOpen class="h-[18px] w-[18px]" />
+    </button>
     <div>
       <div class="mx-auto grid h-20 w-20 place-items-center rounded-full border border-line bg-panel text-ink-secondary shadow-sm">
         <MessageCircle class="h-9 w-9" />

@@ -190,7 +190,7 @@ async function handleSimulateSend() {
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div class="flex items-center gap-2.5">
-            <div class="grid h-10 w-10 place-items-center rounded-xl bg-purple-600/15 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300">
+            <div class="grid h-10 w-10 place-items-center rounded-xl bg-success-soft text-success-strong">
               <Bot class="h-5 w-5" />
             </div>
             <div>
@@ -260,7 +260,7 @@ async function handleSimulateSend() {
                   type="checkbox"
                   class="peer sr-only"
                 />
-                <div class="peer h-6 w-11 rounded-full bg-line-strong transition peer-checked:bg-purple-600 peer-focus:ring-2 peer-focus:ring-purple-500/20 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full" />
+                <div class="peer h-6 w-11 rounded-full bg-line-strong transition peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-primary/20 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full" />
               </label>
             </div>
 
@@ -379,7 +379,7 @@ async function handleSimulateSend() {
                     min="0"
                     max="1"
                     step="0.05"
-                    class="mt-2 w-full accent-purple-600"
+                    class="mt-2 w-full accent-primary"
                   />
                   <span class="text-[10px] text-ink-muted">0 = Mais preciso, 1 = Mais criativo</span>
                 </div>
@@ -393,7 +393,7 @@ async function handleSimulateSend() {
                     min="100"
                     max="1500"
                     step="50"
-                    class="mt-2 w-full accent-purple-600"
+                    class="mt-2 w-full accent-primary"
                   />
                   <span class="text-[10px] text-ink-muted">Limite de caracteres gerados por mensagem</span>
                 </div>
@@ -403,7 +403,7 @@ async function handleSimulateSend() {
             <div class="mt-6 flex justify-end">
               <button
                 type="button"
-                class="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700 active:scale-95 disabled:opacity-50"
+                class="flex items-center gap-2 rounded-lg bg-primary-strong px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:opacity-90 active:scale-95 disabled:opacity-50"
                 :disabled="saving"
                 @click="handleSave"
               >
@@ -420,7 +420,7 @@ async function handleSimulateSend() {
             <!-- Simulator Header -->
             <div class="flex items-center justify-between border-b border-line px-4 py-3 bg-panel-muted/50 rounded-t-xl">
               <div class="flex items-center gap-2">
-                <Sparkles class="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                <Sparkles class="h-4 w-4 text-success-strong" />
                 <div>
                   <h3 class="text-xs font-semibold text-ink">Simulador Interativo (Test Drive)</h3>
                   <p class="text-[10px] text-ink-muted">Teste como o bot se comporta antes de ligar no WhatsApp.</p>
@@ -439,9 +439,9 @@ async function handleSimulateSend() {
             <!-- Handoff Alert in Simulator -->
             <div
               v-if="simHandoffNote"
-              class="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300"
+              class="flex items-center gap-2 border-b border-warning/20 bg-warning-soft px-3 py-2 text-xs font-medium text-warning-strong"
             >
-              <AlertCircle class="h-4 w-4 shrink-0 text-amber-600" />
+              <AlertCircle class="h-4 w-4 shrink-0 text-warning-strong" />
               <span>Transbordo Acionado: <strong>{{ simHandoffNote }}</strong></span>
             </div>
 
@@ -460,7 +460,7 @@ async function handleSimulateSend() {
                   class="max-w-[85%] rounded-2xl px-3.5 py-2 text-xs leading-relaxed shadow-sm"
                   :class="
                     msg.role === 'user'
-                      ? 'bg-purple-600 text-white'
+                      ? 'bg-message-out text-white'
                       : 'bg-panel text-ink ring-1 ring-line'
                   "
                 >
@@ -469,7 +469,7 @@ async function handleSimulateSend() {
               </div>
 
               <div v-if="simLoading" class="flex items-center gap-2 text-xs text-ink-muted">
-                <span class="h-3 w-3 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                <span class="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                 <span>{{ botName }} digitando...</span>
               </div>
             </div>
@@ -480,12 +480,12 @@ async function handleSimulateSend() {
                 v-model="simInput"
                 type="text"
                 placeholder="Envie uma mensagem de teste..."
-                class="h-9 flex-1 rounded-lg border border-line bg-panel px-3 text-xs text-ink outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/15"
+                class="h-9 flex-1 rounded-lg border border-line bg-panel px-3 text-xs text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
                 :disabled="simLoading"
               />
               <button
                 type="submit"
-                class="grid h-9 w-9 place-items-center rounded-lg bg-purple-600 text-white shadow-sm transition hover:bg-purple-700 active:scale-95 disabled:opacity-50"
+                class="grid h-9 w-9 place-items-center rounded-lg bg-primary-strong text-white shadow-sm transition hover:opacity-90 active:scale-95 disabled:opacity-50"
                 :disabled="!simInput.trim() || simLoading"
               >
                 <Send class="h-4 w-4" />

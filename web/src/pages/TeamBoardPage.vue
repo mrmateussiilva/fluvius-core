@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
           class="flex max-h-full w-[290px] shrink-0 flex-col rounded-lg border bg-panel-muted/80 shadow-sm transition sm:w-[310px]"
           :class="
             dragOverColumnId === column.id
-              ? 'border-fluvius-400 bg-fluvius-50 ring-2 ring-fluvius-400/20'
+              ? 'border-success bg-success-soft ring-2 ring-success/20'
               : 'border-line'
           "
           @dragenter.prevent="dragOver(column.id)"

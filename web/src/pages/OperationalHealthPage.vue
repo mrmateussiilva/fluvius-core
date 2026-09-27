@@ -306,7 +306,7 @@ onMounted(async () => {
               {{ operations.lastReconcile.remaining_pending_events }} pendente(s)
             </p>
             <button
-              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="
                 operations.reconciling ||
                 (operations.health.pending_provider_events === 0 &&
@@ -367,7 +367,7 @@ onMounted(async () => {
               {{ operations.lastHistorySync.failed_threads }} falha(s)
             </p>
             <button
-              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-info-strong disabled:cursor-not-allowed disabled:opacity-50"
+              class="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-info px-3 text-sm font-semibold text-white transition hover:bg-primary-strong disabled:cursor-not-allowed disabled:opacity-50"
               :disabled="
                 operations.historySyncing ||
                 operations.health.connected_channels === 0

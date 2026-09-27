@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { listChannels } from '../api/channels'
 import type { Channel, ContactSearchResult, TenantUser } from '../api/types'
@@ -16,6 +16,29 @@ const realtime = useRealtimeStore()
 const route = useRoute()
 const assignableUsers = ref<TenantUser[]>([])
 const channels = ref<Channel[]>([])
+const sidebarCollapsed = ref(false)
+const sidebarPreferenceReady = ref(false)
+const sidebarPreferenceKey = computed(() =>
+  auth.user ? `fluvius_conversation_sidebar_collapsed:${auth.user.id}` : null,
+)
+
+const conversationListClass = computed(() => {
+  if (store.selectedId) return sidebarCollapsed.value ? 'hidden md:hidden' : 'hidden md:flex'
+  return sidebarCollapsed.value ? 'flex md:hidden' : 'flex'
+})
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
+
+watch(sidebarCollapsed, (collapsed) => {
+  if (!sidebarPreferenceReady.value || !sidebarPreferenceKey.value) return
+  try {
+    localStorage.setItem(sidebarPreferenceKey.value, String(collapsed))
+  } catch {
+    // The layout remains usable when local storage is unavailable.
+  }
+})
 
 function channelStorageKey() {
   return auth.user
@@ -98,6 +121,15 @@ function backToConversationList() {
 
 onMounted(async () => {
   await auth.restore()
+  if (sidebarPreferenceKey.value) {
+    try {
+      sidebarCollapsed.value =
+        localStorage.getItem(sidebarPreferenceKey.value) === 'true'
+    } catch {
+      sidebarCollapsed.value = false
+    }
+  }
+  sidebarPreferenceReady.value = true
   channels.value = await listChannels()
   const requestedConversationId =
     typeof route.query.conversation === 'string'
@@ -153,7 +185,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-full w-full min-h-0 flex-1 overflow-hidden">
     <ConversationList
-      :class="store.selectedId ? 'hidden md:flex' : 'flex'"
+      :class="conversationListClass"
+      :sidebar-collapsed="sidebarCollapsed"
       :conversations="store.conversations"
       :selected-id="store.selectedId"
       :current-user-id="auth.user?.id || null"
@@ -164,6 +197,7 @@ onBeforeUnmount(() => {
       :can-view-all-channels="auth.user?.role === 'admin'"
       @select="store.selectConversation"
       @channel-change="selectChannel"
+      @toggle-sidebar="toggleSidebar"
     />
     <ConversationChat
       :class="store.selectedId ? 'flex' : 'hidden md:flex'"
@@ -182,6 +216,7 @@ onBeforeUnmount(() => {
       :operation-error="store.operationError"
       :has-more-messages="store.hasMoreMessagesByConversation[store.selectedId || ''] ?? true"
       :loading-older-messages="store.loadingOlderMessages"
+      :sidebar-collapsed="sidebarCollapsed"
       @assign="store.assignSelected"
       @close="store.closeSelected"
       @send="sendMessage"
@@ -193,6 +228,7 @@ onBeforeUnmount(() => {
       @show-contact="store.loadSelectedContact()"
       @refresh-contact="store.loadSelectedContact(true)"
       @load-older="store.selectedId && store.loadOlderMessages(store.selectedId)"
+      @toggle-sidebar="toggleSidebar"
     />
   </div>
 </template>

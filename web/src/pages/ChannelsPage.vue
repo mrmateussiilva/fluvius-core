@@ -558,7 +558,7 @@ onBeforeUnmount(() => {
             <ChannelStatusBadge :status="channel.status" />
             <button
               v-if="channel.status !== 'connected'"
-              class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:border-fluvius-300 hover:bg-fluvius-50 hover:text-fluvius-800"
+              class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3 py-2 text-sm font-semibold text-ink-secondary transition hover:border-primary hover:bg-success-soft hover:text-success-strong"
               @click="openConnection(channel)"
             >
               <QrCode class="h-4 w-4" />
@@ -663,7 +663,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <div
       v-if="connection.channel"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 grid place-items-center bg-scrim/55 p-4 backdrop-blur-sm"
       @click.self="closeConnection"
     >
       <section
@@ -762,7 +762,7 @@ onBeforeUnmount(() => {
 
     <div
       v-if="deletingChannel"
-      class="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 grid place-items-center bg-scrim/55 p-4 backdrop-blur-sm"
       @click.self="cancelDelete"
     >
       <section

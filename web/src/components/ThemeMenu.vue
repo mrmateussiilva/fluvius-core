@@ -44,7 +44,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
       class="grid h-9 w-9 place-items-center rounded-lg transition focus:outline-none focus:ring-2 focus:ring-fluvius-500/40"
       :class="
         props.inverted
-          ? 'text-emerald-50/70 hover:bg-white/10 hover:text-white'
+          ? 'text-ink-muted hover:bg-panel-muted hover:text-ink'
           : 'text-ink-muted hover:bg-panel-muted hover:text-ink'
       "
       title="Aparência"
@@ -57,7 +57,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeOnOutsideClick)
 
     <div
       v-if="open"
-      class="absolute z-50 w-40 overflow-hidden rounded-lg border border-line bg-panel-raised p-1 text-ink shadow-xl shadow-black/15"
+      class="absolute z-50 w-40 overflow-hidden rounded-lg border border-line bg-panel-raised p-1 text-ink shadow-xl shadow-scrim/15"
       :class="props.placement === 'top' ? 'bottom-0 left-12' : 'right-0 top-11'"
       role="menu"
     >

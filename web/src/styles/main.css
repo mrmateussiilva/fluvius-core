@@ -4,6 +4,10 @@
 
 @layer base {
   :root {
+    --color-selected: 232 234 237;
+    --color-scrim: 11 15 14;
+    --color-chat-pattern: 22 133 106;
+    --color-primary-strong: 17 107 87;
     --color-canvas: 240 242 245;
     --color-panel: 255 255 255;
     --color-panel-muted: 232 234 237;
@@ -14,7 +18,7 @@
     --color-ink-faint: 88 102 108;
     --color-line: 210 214 218;
     --color-line-strong: 132 153 144;
-    --color-neutral-action: 31 42 46;
+    --color-neutral-action: 50 60 55;
     --color-disabled: 174 185 180;
     --color-nav: 255 255 255;
     --color-chat: 234 230 223;
@@ -29,9 +33,9 @@
     --color-danger-soft: 254 239 241;
     --color-danger: 210 65 83;
     --color-danger-strong: 157 37 52;
-    --color-info-soft: 235 246 252;
-    --color-info: 31 132 180;
-    --color-info-strong: 23 94 128;
+    --color-info-soft: 235 248 241;
+    --color-info: 17 107 87;
+    --color-info-strong: 23 94 69;
     --color-input: 225 229 232;
     --color-ring: 22 133 106;
     --color-primary: 22 133 106;
@@ -56,51 +60,54 @@
   }
 
   :root.dark {
-    --color-canvas: 11 12 14;
-    --color-panel: 24 27 29;
-    --color-panel-muted: 32 36 39;
-    --color-panel-raised: 38 43 46;
-    --color-ink: 232 236 238;
-    --color-ink-secondary: 174 184 189;
-    --color-ink-muted: 136 149 155;
-    --color-ink-faint: 120 132 138;
-    --color-line: 47 54 58;
-    --color-line-strong: 65 73 77;
-    --color-neutral-action: 54 64 68;
-    --color-disabled: 70 78 82;
-    --color-nav: 18 21 24;
-    --color-chat: 11 20 26;
-    --color-message-in: 32 44 51;
-    --color-message-out: 0 92 75;
-    --color-success-soft: 21 52 40;
-    --color-success: 85 201 148;
-    --color-success-strong: 158 231 196;
-    --color-warning-soft: 58 45 21;
-    --color-warning: 232 180 83;
-    --color-warning-strong: 251 214 142;
-    --color-danger-soft: 62 29 34;
-    --color-danger: 238 123 136;
-    --color-danger-strong: 251 181 189;
-    --color-info-soft: 23 47 58;
-    --color-info: 105 190 229;
-    --color-info-strong: 177 224 246;
-    --color-input: 47 54 58;
-    --color-ring: 85 201 148;
-    --color-primary: 85 201 148;
-    --color-primary-foreground: 6 42 34;
-    --color-secondary: 32 36 39;
-    --color-secondary-foreground: 232 236 238;
-    --color-destructive: 238 123 136;
-    --color-destructive-foreground: 62 29 34;
-    --color-muted: 32 36 39;
-    --color-muted-foreground: 136 149 155;
-    --color-accent: 0 92 75;
-    --color-accent-foreground: 232 236 238;
-    --color-popover: 38 43 46;
-    --color-popover-foreground: 232 236 238;
-    --color-card: 24 27 29;
-    --color-card-foreground: 232 236 238;
-    --scrollbar-thumb: 136 149 155;
+    --color-canvas: 11 15 14;
+    --color-panel: 20 25 23;
+    --color-panel-muted: 26 32 30;
+    --color-panel-raised: 32 38 36;
+    --color-ink: 232 236 234;
+    --color-ink-secondary: 167 176 172;
+    --color-ink-muted: 127 138 133;
+    --color-ink-faint: 102 112 107;
+    --color-line: 45 52 49;
+    --color-line-strong: 67 76 71;
+    --color-neutral-action: 32 38 36;
+    --color-disabled: 68 77 72;
+    --color-nav: 17 22 20;
+    --color-chat: 11 15 14;
+    --color-message-in: 32 38 36;
+    --color-message-out: 7 94 84;
+    --color-success-soft: 21 51 41;
+    --color-success: 0 168 132;
+    --color-success-strong: 139 220 192;
+    --color-warning-soft: 42 33 16;
+    --color-warning: 201 159 78;
+    --color-warning-strong: 244 210 122;
+    --color-danger-soft: 53 30 31;
+    --color-danger: 210 103 104;
+    --color-danger-strong: 239 172 164;
+    --color-info-soft: 32 38 36;
+    --color-info: 0 128 105;
+    --color-info-strong: 207 214 210;
+    --color-input: 32 38 36;
+    --color-ring: 0 168 132;
+    --color-primary: 0 168 132;
+    --color-primary-foreground: 255 255 255;
+    --color-secondary: 26 32 30;
+    --color-secondary-foreground: 232 236 234;
+    --color-destructive: 210 103 104;
+    --color-destructive-foreground: 255 255 255;
+    --color-muted: 26 32 30;
+    --color-muted-foreground: 127 138 133;
+    --color-accent: 21 51 41;
+    --color-accent-foreground: 232 236 234;
+    --color-popover: 32 38 36;
+    --color-popover-foreground: 232 236 234;
+    --color-card: 20 25 23;
+    --color-card-foreground: 232 236 234;
+    --color-selected: 36 43 40;
+    --color-chat-pattern: 127 138 133;
+    --color-primary-strong: 0 128 105;
+    --scrollbar-thumb: 127 138 133;
     color-scheme: dark;
   }
 
@@ -150,17 +157,97 @@
     background-color: rgb(var(--color-chat));
     background-image:
       linear-gradient(rgb(var(--color-chat) / 0.94), rgb(var(--color-chat) / 0.94)),
-      radial-gradient(circle at 12px 12px, rgb(22 133 106 / 0.08) 1.1px, transparent 1.5px),
-      radial-gradient(circle at 36px 36px, rgb(22 133 106 / 0.05) 1px, transparent 1.4px);
-    background-size: auto, 48px 48px, 48px 48px;
+      radial-gradient(circle at 18px 18px, transparent 8px, rgb(var(--color-chat-pattern) / 0.12) 8.5px, transparent 9.5px),
+      radial-gradient(circle at 57px 50px, rgb(var(--color-chat-pattern) / 0.13) 1px, transparent 1.5px);
+    background-size: auto, 72px 72px, 72px 72px;
     overscroll-behavior: contain;
   }
 
   :root.dark .chat-wallpaper {
     background-image:
-      linear-gradient(rgb(var(--color-chat) / 0.96), rgb(var(--color-chat) / 0.96)),
-      radial-gradient(circle at 12px 12px, rgb(255 255 255 / 0.035) 1.1px, transparent 1.5px),
-      radial-gradient(circle at 36px 36px, rgb(255 255 255 / 0.025) 1px, transparent 1.4px);
+      linear-gradient(rgb(var(--color-chat) / 0.91), rgb(var(--color-chat) / 0.91)),
+      radial-gradient(circle at 18px 18px, transparent 8px, rgb(var(--color-chat-pattern) / 0.12) 8.5px, transparent 9.5px),
+      radial-gradient(circle at 57px 50px, rgb(var(--color-chat-pattern) / 0.13) 1px, transparent 1.5px);
+  }
+
+  .conversation-rail.is-inbox-rail {
+    border-color: rgb(var(--color-line));
+    background: rgb(var(--color-nav));
+  }
+
+  .conversation-rail.is-inbox-rail > div:first-child {
+    border-color: rgb(var(--color-line));
+  }
+
+  .conversation-rail.is-inbox-rail .conversation-brand-mark {
+    background: transparent;
+    box-shadow: none;
+    color: rgb(var(--color-primary));
+  }
+
+  .conversation-rail.is-inbox-rail a,
+  .conversation-rail.is-inbox-rail button {
+    color: rgb(var(--color-ink-muted));
+  }
+
+  .conversation-rail.is-inbox-rail a:hover,
+  .conversation-rail.is-inbox-rail button:hover {
+    background: rgb(var(--color-panel-muted));
+    color: rgb(var(--color-ink));
+  }
+
+  .conversation-rail.is-inbox-rail a[class*="bg-fluvius-50"] {
+    background: rgb(var(--color-success-soft));
+    color: rgb(var(--color-success-strong));
+    box-shadow: inset 3px 0 rgb(var(--color-primary));
+  }
+
+  :root.dark .conversation-list-pane {
+    border-color: rgb(var(--color-line));
+  }
+
+  :root.dark .conversation-list-header {
+    border-color: rgb(var(--color-line));
+    background: rgb(var(--color-panel-muted));
+  }
+
+  :root.dark .conversation-search,
+  :root.dark .conversation-channel-select {
+    background: rgb(var(--color-panel-raised));
+    color: rgb(var(--color-ink-muted));
+  }
+
+  :root.dark .conversation-search input,
+  :root.dark .conversation-channel-select select {
+    color: rgb(var(--color-ink));
+  }
+
+  :root.dark .conversation-chat-header,
+  :root.dark .conversation-composer {
+    border-color: rgb(var(--color-line));
+    background: rgb(var(--color-panel-muted));
+  }
+
+  :root.dark .conversation-chat-header button:hover,
+  :root.dark .conversation-composer button:hover {
+    background-color: rgb(var(--color-panel-raised));
+  }
+
+  :root.dark .conversation-item-selected {
+    background: rgb(var(--color-selected));
+  }
+
+  :root.dark .conversation-composer-input:not(.composer-internal-input) {
+    background: rgb(var(--color-panel-raised));
+    box-shadow: none;
+  }
+
+  :root.dark .conversation-send-button:not(.composer-internal-send) {
+    background: rgb(var(--color-primary));
+  }
+
+  :root.dark .conversation-send-button:not(.composer-internal-send):hover {
+    background: rgb(var(--color-primary-strong));
   }
 
   .soft-scrollbar {
@@ -183,6 +270,16 @@
     contain-intrinsic-size: auto none auto 56px;
   }
 
+  .message-bubble:not(.message-bubble-sticker) {
+    border: 1px solid rgb(var(--color-line) / 0.15);
+    box-shadow: 0 1px 0.5px rgb(var(--color-scrim) / 0.13);
+  }
+
+  :root.dark .message-bubble:not(.message-bubble-sticker) {
+    border-color: rgb(var(--color-line) / 0.2);
+    box-shadow: 0 1px 0.5px rgb(var(--color-scrim) / 0.35);
+  }
+
   .conversation-item {
     content-visibility: auto;
     contain-intrinsic-size: auto none auto 68px;
@@ -192,15 +289,21 @@
 
 @layer utilities {
   :root.dark .bg-fluvius-50 {
-    @apply bg-fluvius-700/15;
+    @apply bg-success-soft;
   }
 
   :root.dark .border-fluvius-100 {
-    @apply border-fluvius-600/30;
+    @apply border-line-strong;
   }
 
   :root.dark .text-fluvius-700,
   :root.dark .text-fluvius-800 {
-    @apply text-emerald-300;
+    @apply text-success-strong;
+  }
+
+  :root.dark [class~="bg-fluvius-700"],
+  :root.dark [class~="bg-fluvius-800"],
+  :root.dark [class~="hover:bg-fluvius-800"]:hover {
+    background-color: rgb(var(--color-primary-strong));
   }
 }

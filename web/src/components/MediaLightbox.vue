@@ -29,13 +29,13 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div
-      class="fixed inset-0 z-[80] flex flex-col bg-black/95 text-white backdrop-blur-sm"
+      class="fixed inset-0 z-[80] flex flex-col bg-scrim/95 text-white backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label="Visualização de mídia"
       @click.self="emit('close')"
     >
-      <header class="flex h-16 shrink-0 items-center justify-between gap-4 bg-black/20 px-4 sm:px-6">
+      <header class="flex h-16 shrink-0 items-center justify-between gap-4 bg-scrim/20 px-4 sm:px-6">
         <div class="min-w-0">
           <p class="truncate text-sm font-medium">{{ attachment.file_name }}</p>
           <p class="mt-0.5 text-[11px] text-white/55">{{ attachment.content_type }}</p>
@@ -70,7 +70,7 @@ onBeforeUnmount(() => {
         />
         <video
           v-else-if="messageType === 'video'"
-          class="max-h-full max-w-full rounded-lg bg-black shadow-2xl"
+          class="max-h-full max-w-full rounded-lg bg-scrim shadow-2xl"
           controls
           autoplay
           :src="attachment.public_url"

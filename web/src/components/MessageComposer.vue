@@ -1262,7 +1262,7 @@ function handleDrop(event: DragEvent) {
 
 <template>
   <div
-    class="relative shrink-0 border-t border-line bg-panel-muted px-3 py-2 sm:px-5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+    class="conversation-composer relative shrink-0 border-t border-line bg-panel-muted px-3 py-2 sm:px-5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     @dragenter.prevent="handleDragEnter"
     @dragover.prevent
     @dragleave.prevent="handleDragLeave"
@@ -1315,7 +1315,7 @@ function handleDrop(event: DragEvent) {
     </div>
     <div
       v-if="selectedSharedContact"
-      class="mx-auto mb-2 flex h-[68px] max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-black/5"
+      class="mx-auto mb-2 flex h-[68px] max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-line/50"
     >
       <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-success-soft text-success-strong">
         <UserRound class="h-5 w-5" />
@@ -1339,7 +1339,7 @@ function handleDrop(event: DragEvent) {
     </div>
     <div
       v-if="isRecording"
-      class="mx-auto mb-2 flex h-12 max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-black/5"
+      class="mx-auto mb-2 flex h-12 max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-line/50"
     >
       <span class="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-danger" />
       <span class="min-w-14 font-mono text-sm font-semibold text-ink">
@@ -1401,7 +1401,7 @@ function handleDrop(event: DragEvent) {
         <div
           v-for="(attachment, index) in selectedAttachments"
           :key="attachment.id"
-          class="flex h-[76px] w-[260px] shrink-0 items-center gap-2 overflow-hidden rounded-lg bg-panel p-2 shadow-sm ring-1 ring-black/5"
+          class="flex h-[76px] w-[260px] shrink-0 items-center gap-2 overflow-hidden rounded-lg bg-panel p-2 shadow-sm ring-1 ring-line/50"
         >
           <div class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-md bg-fluvius-50 text-fluvius-700">
             <img
@@ -1467,12 +1467,12 @@ function handleDrop(event: DragEvent) {
       :src="selectedAttachments[0].previewUrl || ''"
       :file-name="selectedAttachments[0].file.name || 'Áudio selecionado'"
     />
-    <form class="mx-auto flex max-w-[920px] items-end gap-1.5 sm:gap-2" @submit.prevent="submit">
+    <form class="conversation-composer-form mx-auto flex w-full max-w-[1200px] items-end gap-1.5 sm:gap-2" @submit.prevent="submit">
       <div class="relative">
         <button
           type="button"
-          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40 sm:h-11 sm:w-11"
-          :class="{ 'bg-black/5 text-fluvius-700': showEmojis }"
+          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-fluvius-700 disabled:opacity-40 sm:h-11 sm:w-11"
+          :class="{ 'bg-panel-muted text-fluvius-700': showEmojis }"
           :disabled="isDisabled"
           title="Escolher emoji"
           :aria-expanded="showEmojis"
@@ -1491,8 +1491,8 @@ function handleDrop(event: DragEvent) {
       <div class="relative">
         <button
           type="button"
-          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40 sm:h-11 sm:w-11"
-          :class="{ 'bg-black/5 text-fluvius-700': showReplies }"
+          class="hidden h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-fluvius-700 disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
+          :class="{ 'bg-panel-muted text-fluvius-700': showReplies }"
           :disabled="isDisabled"
           title="Respostas rápidas"
           :aria-expanded="showReplies"
@@ -1520,11 +1520,11 @@ function handleDrop(event: DragEvent) {
       <div class="relative">
         <button
           type="button"
-          class="grid h-10 w-10 place-items-center rounded-full transition disabled:opacity-40 sm:h-11 sm:w-11"
+          class="hidden h-10 w-10 place-items-center rounded-full transition disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
           :class="
             isInternalMode
-              ? 'bg-amber-500/20 text-amber-700 dark:bg-amber-500/30 dark:text-amber-300 ring-1 ring-amber-500/40'
-              : 'text-ink-secondary hover:bg-black/5 hover:text-fluvius-700'
+              ? 'bg-warning-soft text-warning-strong ring-1 ring-warning/40'
+              : 'text-ink-secondary hover:bg-panel-muted hover:text-fluvius-700'
           "
           :disabled="isDisabled"
           :title="isInternalMode ? 'Alternar para mensagem normal' : 'Alternar para nota interna 🔒'"
@@ -1544,7 +1544,7 @@ function handleDrop(event: DragEvent) {
         />
         <button
           type="button"
-          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-fluvius-700 disabled:opacity-40 sm:h-11 sm:w-11"
+          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-fluvius-700 disabled:opacity-40 sm:h-11 sm:w-11"
           :disabled="isDisabled || sending || isInternalMode"
           :title="isInternalMode ? 'Notas internas aceitam apenas texto' : 'Escolher tipo de anexo'"
           :aria-expanded="showAttachments"
@@ -1563,7 +1563,7 @@ function handleDrop(event: DragEvent) {
         />
         <div
           v-if="showAttachments"
-          class="absolute bottom-14 left-0 z-30 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-panel py-2 text-ink shadow-2xl ring-1 ring-black/5"
+          class="absolute bottom-14 left-0 z-30 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-panel py-2 text-ink shadow-2xl ring-1 ring-line/50"
         >
           <p class="px-4 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
             Enviar anexo
@@ -1573,7 +1573,7 @@ function handleDrop(event: DragEvent) {
             class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
             @click="openAttachmentPicker('media', 'image/*,video/*')"
           >
-            <span class="grid h-9 w-9 place-items-center rounded-full bg-violet-500 text-white">
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-panel-muted text-ink-secondary">
               <ImageIcon class="h-5 w-5" />
             </span>
             <span>
@@ -1586,7 +1586,7 @@ function handleDrop(event: DragEvent) {
             class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
             @click="openStickerPicker"
           >
-            <span class="grid h-9 w-9 place-items-center rounded-full bg-emerald-500 text-white">
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-success-soft text-success-strong">
               <Sticker class="h-5 w-5" />
             </span>
             <span>
@@ -1599,7 +1599,7 @@ function handleDrop(event: DragEvent) {
             class="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition hover:bg-panel-muted"
             @click="openContactSharePicker"
           >
-            <span class="grid h-9 w-9 place-items-center rounded-full bg-emerald-600 text-white">
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-success-soft text-success-strong">
               <UserRound class="h-5 w-5" />
             </span>
             <span>
@@ -1617,7 +1617,7 @@ function handleDrop(event: DragEvent) {
               )
             "
           >
-            <span class="grid h-9 w-9 place-items-center rounded-full bg-sky-500 text-white">
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-panel-muted text-ink-secondary">
               <FileText class="h-5 w-5" />
             </span>
             <span>
@@ -1635,7 +1635,7 @@ function handleDrop(event: DragEvent) {
               )
             "
           >
-            <span class="grid h-9 w-9 place-items-center rounded-full bg-orange-500 text-white">
+            <span class="grid h-9 w-9 place-items-center rounded-full bg-panel-muted text-ink-secondary">
               <Music class="h-5 w-5" />
             </span>
             <span>
@@ -1658,7 +1658,7 @@ function handleDrop(event: DragEvent) {
       <button
         v-if="!isInternalMode"
         type="button"
-        class="hidden h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 hover:text-success disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
+        class="hidden h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-success disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
         :disabled="isDisabled || sending || preparingSticker"
         :title="preparingSticker ? 'Preparando figurinha...' : 'Enviar figurinha'"
         @click="openStickerPicker"
@@ -1669,7 +1669,21 @@ function handleDrop(event: DragEvent) {
         />
         <Sticker v-else class="h-5 w-5" />
       </button>
-      <div class="relative flex-1">
+      <div class="relative min-w-0 flex-1">
+        <button
+          type="button"
+          class="absolute left-1 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full transition disabled:opacity-40 sm:hidden"
+          :class="
+            isInternalMode
+              ? 'bg-warning-soft text-warning-strong'
+              : 'text-ink-secondary hover:bg-panel-muted'
+          "
+          :disabled="isDisabled"
+          :title="isInternalMode ? 'Alternar para mensagem normal' : 'Alternar para nota interna 🔒'"
+          @click="isInternalMode = !isInternalMode"
+        >
+          <LockKeyhole class="h-4 w-4" />
+        </button>
         <div
           v-if="showMentions"
           class="fixed inset-0 z-20"
@@ -1690,13 +1704,13 @@ function handleDrop(event: DragEvent) {
           ref="textarea"
           v-model="text"
           rows="1"
-          class="soft-scrollbar min-h-10 w-full resize-none rounded-2xl border-0 px-4 py-2.5 text-[14px] leading-5 text-ink shadow-sm outline-none transition disabled:bg-panel-muted sm:min-h-11 sm:rounded-[22px] sm:py-3"
+          class="conversation-composer-input soft-scrollbar min-h-10 w-full resize-none rounded-2xl border-0 py-2.5 pl-11 pr-4 text-[14px] leading-5 text-ink shadow-sm outline-none transition disabled:bg-panel-muted sm:min-h-11 sm:rounded-[22px] sm:px-4 sm:py-3"
           :class="
             isInternalMode
-              ? 'bg-amber-500/10 ring-1 ring-amber-400 placeholder:text-amber-700/60 focus:ring-amber-500 dark:bg-amber-950/30 dark:ring-amber-600/50 dark:placeholder:text-amber-400/50'
+              ? 'composer-internal-input bg-warning-soft ring-1 ring-warning/40 text-warning-strong placeholder:text-warning-strong focus:ring-warning'
               : 'bg-panel placeholder:text-ink-muted focus:ring-1 focus:ring-fluvius-500/30'
           "
-          :placeholder="isInternalMode ? 'Escreva uma nota interna (visível apenas para a equipe)...' : 'Digite uma mensagem...'"
+          :placeholder="isInternalMode ? 'Nota interna para a equipe…' : 'Mensagem'"
           :disabled="isDisabled"
           @click="handleTextareaNavigation"
           @focus="handleTextareaFocus"
@@ -1708,10 +1722,10 @@ function handleDrop(event: DragEvent) {
       </div>
       <button
         :type="hasSendContent ? 'submit' : 'button'"
-        class="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-disabled disabled:shadow-none sm:h-11 sm:w-11"
+        class="conversation-send-button grid h-10 w-10 shrink-0 place-items-center rounded-full text-white shadow-sm transition disabled:cursor-not-allowed disabled:bg-disabled disabled:shadow-none sm:h-11 sm:w-11"
         :class="
           isInternalMode
-            ? 'bg-amber-600 hover:bg-amber-700'
+            ? 'composer-internal-send bg-warning hover:bg-warning'
             : 'bg-fluvius-600 hover:bg-fluvius-700'
         "
         :disabled="
