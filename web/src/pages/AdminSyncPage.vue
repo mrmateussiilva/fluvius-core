@@ -57,6 +57,12 @@ const activeRun = computed(
       (run) => run.status === 'queued' || run.status === 'running',
     ) || null,
 )
+const completedRuns = computed(
+  () => runs.value.filter((run) => run.status === 'completed').length,
+)
+const failedRuns = computed(
+  () => runs.value.filter((run) => run.status === 'failed' || run.status === 'partial').length,
+)
 const contactsAvailable = computed(
   () => selectedChannel.value?.status === 'connected',
 )
@@ -258,7 +264,7 @@ onBeforeUnmount(() => {
 
       <div
         v-if="loading"
-        class="mt-8 grid min-h-60 place-items-center rounded-lg border border-line bg-panel"
+        class="mt-8 grid min-h-60 place-items-center rounded-xl border border-line bg-panel shadow-sm"
       >
         <div class="flex items-center gap-2 text-sm text-ink-muted">
           <LoaderCircle class="h-5 w-5 animate-spin text-fluvius-700" />
@@ -267,7 +273,7 @@ onBeforeUnmount(() => {
       </div>
 
       <template v-else>
-        <section class="mt-6 rounded-lg border border-line bg-panel p-5 shadow-sm">
+        <section class="mt-6 rounded-xl border border-line bg-panel p-5 shadow-sm sm:p-6">
           <div class="grid gap-4 md:grid-cols-[1fr_180px_auto] md:items-end">
             <label>
               <span class="text-xs font-semibold uppercase tracking-wide text-ink-muted">
@@ -275,7 +281,7 @@ onBeforeUnmount(() => {
               </span>
               <select
                 v-model="selectedChannelId"
-                class="mt-1.5 h-11 w-full rounded-lg border border-line bg-panel px-3 text-sm text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
+                class="mt-1.5 h-11 w-full rounded-lg border border-line-strong bg-canvas px-3 text-sm text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
               >
                 <option v-if="!channels.length" value="">Nenhum canal cadastrado</option>
                 <option
@@ -293,7 +299,7 @@ onBeforeUnmount(() => {
               </span>
               <select
                 v-model.number="recentDays"
-                class="mt-1.5 h-11 w-full rounded-lg border border-line bg-panel px-3 text-sm text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
+                class="mt-1.5 h-11 w-full rounded-lg border border-line-strong bg-canvas px-3 text-sm text-ink outline-none focus:border-fluvius-500 focus:ring-2 focus:ring-fluvius-500/15"
               >
                 <option :value="1">Últimas 24 horas</option>
                 <option :value="3">Últimos 3 dias</option>
@@ -313,8 +319,27 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
+        <section class="mt-5 grid gap-3 sm:grid-cols-3">
+          <article class="rounded-xl border border-line bg-panel p-4 shadow-sm">
+            <p class="text-xs font-medium text-ink-muted">Execução ativa</p>
+            <p class="mt-1 text-xl font-semibold text-ink">
+              {{ activeRun ? statusLabel(activeRun.status) : 'Nenhuma' }}
+            </p>
+          </article>
+          <article class="rounded-xl border border-line bg-panel p-4 shadow-sm">
+            <p class="text-xs font-medium text-ink-muted">Concluídas no canal</p>
+            <p class="mt-1 text-xl font-semibold tabular-nums text-ink">{{ completedRuns }}</p>
+          </article>
+          <article class="rounded-xl border border-line bg-panel p-4 shadow-sm">
+            <p class="text-xs font-medium text-ink-muted">Com alerta</p>
+            <p class="mt-1 text-xl font-semibold tabular-nums" :class="failedRuns ? 'text-warning-strong' : 'text-ink'">
+              {{ failedRuns }}
+            </p>
+          </article>
+        </section>
+
         <section class="mt-5 grid gap-4 lg:grid-cols-3">
-          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+          <article class="rounded-xl border border-line bg-panel p-5 shadow-sm">
             <span class="grid h-11 w-11 place-items-center rounded-lg bg-success-soft text-success-strong">
               <ContactRound class="h-5 w-5" />
             </span>
@@ -342,7 +367,7 @@ onBeforeUnmount(() => {
             </button>
           </article>
 
-          <article class="rounded-lg border border-line bg-panel p-5 shadow-sm">
+          <article class="rounded-xl border border-line bg-panel p-5 shadow-sm">
             <span class="grid h-11 w-11 place-items-center rounded-lg bg-info-soft text-info-strong">
               <MessageSquareMore class="h-5 w-5" />
             </span>
@@ -367,7 +392,7 @@ onBeforeUnmount(() => {
             </button>
           </article>
 
-          <article class="rounded-lg border border-fluvius-100 bg-fluvius-50/50 p-5 shadow-sm dark:bg-fluvius-700/10">
+          <article class="rounded-xl border border-fluvius-100 bg-fluvius-50/50 p-5 shadow-sm dark:bg-fluvius-700/10">
             <span class="grid h-11 w-11 place-items-center rounded-lg bg-panel text-fluvius-700 ring-1 ring-fluvius-100">
               <DatabaseBackup class="h-5 w-5" />
             </span>
@@ -396,7 +421,7 @@ onBeforeUnmount(() => {
           </article>
         </section>
 
-        <aside class="mt-5 flex items-start gap-3 rounded-lg border border-warning/30 bg-warning-soft p-4 text-warning-strong">
+        <aside class="mt-5 flex items-start gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 text-warning-strong">
           <AlertTriangle class="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <p class="text-sm font-semibold">Limite desta primeira versão</p>
@@ -408,7 +433,7 @@ onBeforeUnmount(() => {
           </div>
         </aside>
 
-        <section class="mt-6 overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
+        <section class="mt-6 overflow-hidden rounded-xl border border-line bg-panel shadow-sm">
           <header class="flex items-center justify-between border-b border-line px-5 py-4">
             <div>
               <h2 class="font-semibold text-ink">Execuções recentes</h2>
@@ -460,7 +485,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div
                     v-if="itemBreakdown(run).length"
-                    class="mt-2 flex flex-wrap gap-1.5"
+                class="mt-2 flex flex-wrap gap-1.5"
                   >
                     <span
                       v-for="item in itemBreakdown(run)"

@@ -79,7 +79,7 @@ const bubbleClass = computed(() => {
   const outgoing = props.message.direction === 'outgoing'
   if (props.message.is_internal) {
     return [
-      '!bg-amber-50/95 dark:!bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 shadow-sm rounded-xl',
+      '!bg-amber-50/95 dark:!bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 shadow-sm rounded-lg',
     ]
   }
   if (isNativeSticker.value) {
@@ -157,7 +157,7 @@ function showDetails() {
     :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="relative max-w-[85%] rounded-lg px-2.5 py-1.5 text-ink shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] dark:shadow-[0_1px_0.5px_rgba(11,20,26,0.22)] sm:max-w-[76%] lg:max-w-[66%]"
+      class="relative max-w-[86%] rounded-[7.5px] px-2.5 py-1.5 text-ink shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] ring-1 ring-black/[0.015] dark:shadow-[0_1px_0.5px_rgba(11,20,26,0.35)] dark:ring-white/[0.025] sm:max-w-[76%] lg:max-w-[64%]"
       :class="bubbleClass"
     >
       <!-- SVG Tail Outgoing -->
@@ -306,7 +306,7 @@ function showDetails() {
 
       <button
         v-if="message.reply_to"
-        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.07] dark:hover:bg-white/[0.09] sm:min-w-48"
+        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-black/[0.045] px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-black/[0.07] dark:bg-white/[0.06] dark:hover:bg-white/[0.09] sm:min-w-48"
         :class="message.reply_to.direction === 'incoming' ? 'border-[#53bdeb]' : 'border-[#06cf9c] dark:border-[#00a884]'"
         @click="emit('jumpTo', message.reply_to.id)"
       >
@@ -420,7 +420,7 @@ function showDetails() {
 
       <p
         v-if="message.body"
-        class="whitespace-pre-wrap break-words px-0.5 pr-5 text-[14.2px] leading-[19px]"
+        class="whitespace-pre-wrap break-words px-0.5 pr-5 text-[14px] leading-[19px]"
       >
         {{ message.body }}
       </p>

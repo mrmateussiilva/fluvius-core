@@ -678,7 +678,7 @@ function previewMedia(
 <template>
   <div v-if="conversation" class="relative flex h-full w-full min-h-0 min-w-0 flex-1 overflow-hidden">
     <section class="flex h-full w-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-chat">
-      <header class="z-10 flex min-h-[56px] shrink-0 items-center justify-between border-b border-line bg-panel-muted px-3 py-2 shadow-sm shadow-black/[0.04] sm:min-h-[64px] sm:px-4">
+      <header class="z-10 flex min-h-[58px] shrink-0 items-center justify-between border-b border-line bg-panel px-3 py-2 shadow-sm shadow-black/[0.04] sm:px-4">
         <div class="flex min-w-0 items-center">
           <button
             class="-ml-2 mr-1 grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-black/5 md:hidden"
@@ -739,7 +739,7 @@ function previewMedia(
           <div v-if="isAdmin && eligibleAssignableUsers.length" class="relative flex items-center">
             <select
               v-model="assignmentTargetId"
-              class="h-9 max-w-[130px] rounded-lg border border-line bg-panel px-2 text-xs font-medium text-ink outline-none transition hover:bg-canvas focus:border-fluvius-500 sm:max-w-[170px]"
+              class="h-9 max-w-[130px] rounded-lg border border-line bg-canvas px-2 text-xs font-medium text-ink outline-none transition hover:bg-panel-muted focus:border-fluvius-500 sm:max-w-[170px]"
               :disabled="operationLoading"
               aria-label="Atribuir a..."
               @change="emit('assign', assignmentTargetId)"
@@ -756,7 +756,7 @@ function previewMedia(
           </div>
           <button
             v-if="canClaim"
-            class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-canvas sm:px-3"
+            class="flex h-9 items-center gap-1.5 rounded-lg border border-line bg-canvas px-2.5 text-xs font-medium text-ink shadow-sm transition hover:bg-panel-muted sm:px-3"
             :disabled="operationLoading"
             :title="
               conversation.status === 'closed'
@@ -923,10 +923,10 @@ function previewMedia(
         </Transition>
         <div
           ref="messageList"
-          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-3 sm:px-6 sm:py-4 lg:px-8"
+          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-2 sm:px-8 sm:py-3 lg:px-12"
           @scroll.passive="handleScroll"
         >
-          <div class="mx-auto w-full max-w-5xl">
+          <div class="mx-auto w-full max-w-[920px]">
             <div v-if="loadingOlderMessages" class="flex justify-center py-2">
               <span class="h-4 w-4 animate-spin rounded-full border-2 border-fluvius-600 border-t-transparent" />
             </div>
@@ -936,9 +936,9 @@ function previewMedia(
               class="relative pb-px"
             >
               <div
-                class="sticky top-2 z-10 flex justify-center py-2.5"
+                class="sticky top-2 z-10 flex justify-center py-2"
               >
-                <span class="rounded-lg bg-panel/95 dark:bg-[#111b21]/95 px-3 py-1 text-[11.5px] font-medium uppercase tracking-wide text-ink-muted dark:text-[#8696a0] shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm">
+                <span class="rounded-lg bg-panel/95 px-3 py-1 text-[11px] font-medium uppercase tracking-wide text-ink-muted shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm dark:bg-[#182229]/95 dark:text-[#8696a0]">
                   {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
@@ -968,7 +968,7 @@ function previewMedia(
               </template>
             </section>
             <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-ink-muted">
-              <div class="grid h-14 w-14 place-items-center rounded-full bg-panel/70 shadow-sm">
+              <div class="grid h-14 w-14 place-items-center rounded-full bg-panel/80 shadow-sm ring-1 ring-line">
                 <MessageCircle class="h-6 w-6 text-fluvius-700" />
               </div>
               <p class="mt-3 text-sm font-medium text-ink">Comece este atendimento</p>
@@ -1036,7 +1036,7 @@ function previewMedia(
       @close="mediaPreview = null"
     />
   </div>
-  <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-canvas px-6 text-center">
+  <section v-else class="grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-chat px-6 text-center">
     <div>
       <div class="mx-auto grid h-20 w-20 place-items-center rounded-full border border-line bg-panel text-ink-secondary shadow-sm">
         <MessageCircle class="h-9 w-9" />

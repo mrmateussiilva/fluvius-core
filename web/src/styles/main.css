@@ -149,11 +149,18 @@
   .chat-wallpaper {
     background-color: rgb(var(--color-chat));
     background-image:
-      linear-gradient(rgb(var(--color-chat) / 0.92), rgb(var(--color-chat) / 0.92)),
-      radial-gradient(circle at 12px 12px, rgb(22 133 106 / 0.1) 1.2px, transparent 1.5px),
-      radial-gradient(circle at 36px 36px, rgb(22 133 106 / 0.06) 1px, transparent 1.4px);
+      linear-gradient(rgb(var(--color-chat) / 0.94), rgb(var(--color-chat) / 0.94)),
+      radial-gradient(circle at 12px 12px, rgb(22 133 106 / 0.08) 1.1px, transparent 1.5px),
+      radial-gradient(circle at 36px 36px, rgb(22 133 106 / 0.05) 1px, transparent 1.4px);
     background-size: auto, 48px 48px, 48px 48px;
     overscroll-behavior: contain;
+  }
+
+  :root.dark .chat-wallpaper {
+    background-image:
+      linear-gradient(rgb(var(--color-chat) / 0.96), rgb(var(--color-chat) / 0.96)),
+      radial-gradient(circle at 12px 12px, rgb(255 255 255 / 0.035) 1.1px, transparent 1.5px),
+      radial-gradient(circle at 36px 36px, rgb(255 255 255 / 0.025) 1px, transparent 1.4px);
   }
 
   .soft-scrollbar {

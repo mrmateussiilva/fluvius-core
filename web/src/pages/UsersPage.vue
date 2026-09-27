@@ -222,7 +222,7 @@ onMounted(async () => {
       </div>
 
       <div class="mt-6 grid gap-4 sm:grid-cols-[1fr_auto]">
-        <div class="rounded-lg border border-success/30 bg-success-soft p-4">
+        <div class="rounded-xl border border-success/30 bg-success-soft p-5">
           <div class="flex items-start gap-3">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-panel text-success-strong shadow-sm">
               <Smartphone class="h-5 w-5" />
@@ -240,7 +240,7 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div class="flex min-w-48 items-center gap-3 rounded-lg border border-line bg-panel p-4 shadow-sm">
+        <div class="flex min-w-48 items-center gap-3 rounded-xl border border-line bg-panel p-5 shadow-sm">
           <span class="grid h-10 w-10 place-items-center rounded-full bg-panel-muted text-ink-secondary">
             <UserRound class="h-5 w-5" />
           </span>
@@ -267,7 +267,7 @@ onMounted(async () => {
 
       <form
         v-if="showCreateForm"
-        class="mt-5 rounded-lg border border-line bg-panel p-5 shadow-sm"
+        class="mt-5 rounded-xl border border-line bg-panel p-5 shadow-sm sm:p-6"
         @submit.prevent="submitCreate"
       >
         <div class="flex items-center justify-between">
@@ -297,7 +297,7 @@ onMounted(async () => {
               maxlength="160"
               autocomplete="off"
               placeholder="Ex.: Mateus Vendedor"
-              class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+              class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
             />
           </label>
           <fieldset
@@ -336,7 +336,7 @@ onMounted(async () => {
               maxlength="320"
               autocomplete="off"
               placeholder="atendente@empresa.com"
-              class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+              class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
             />
           </label>
           <label class="grid gap-1.5 text-xs font-semibold text-ink-secondary">
@@ -351,7 +351,7 @@ onMounted(async () => {
                 maxlength="128"
                 autocomplete="new-password"
                 placeholder="Mínimo de 8 caracteres"
-                class="w-full rounded-lg border border-line-strong py-2.5 pl-9 pr-3 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+                class="w-full rounded-lg border border-line-strong bg-canvas py-2.5 pl-9 pr-3 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
               />
             </span>
           </label>
@@ -359,7 +359,7 @@ onMounted(async () => {
             Papel
             <select
               v-model="createForm.role"
-              class="rounded-lg border border-line-strong bg-panel px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+              class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
             >
               <option value="agent">Atendente</option>
               <option value="admin">Administrador</option>
@@ -384,7 +384,7 @@ onMounted(async () => {
         </div>
       </form>
 
-      <div class="mt-5 overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
+      <div class="mt-5 overflow-hidden rounded-xl border border-line bg-panel shadow-sm">
         <div class="border-b border-line px-5 py-4">
           <h2 class="font-semibold text-ink">Pessoas com acesso</h2>
           <p class="mt-0.5 text-xs text-ink-muted">
@@ -395,8 +395,16 @@ onMounted(async () => {
           <LoaderCircle class="mb-2 h-5 w-5 animate-spin text-fluvius-700" />
           Carregando equipe…
         </div>
-        <div v-else-if="!users.length" class="p-8 text-center text-sm text-ink-muted">
-          Nenhum usuário cadastrado.
+        <div v-else-if="!users.length" class="grid min-h-56 place-items-center p-8 text-center">
+          <div>
+            <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-fluvius-50 text-fluvius-700">
+              <UsersRound class="h-5 w-5" />
+            </div>
+            <p class="mt-3 text-sm font-medium text-ink">Nenhum usuário cadastrado</p>
+            <p class="mx-auto mt-1 max-w-xs text-xs leading-5 text-ink-muted">
+              Crie o primeiro acesso para separar atendimentos por pessoa e canal.
+            </p>
+          </div>
         </div>
         <div v-else class="divide-y divide-line">
           <div
@@ -495,7 +503,7 @@ onMounted(async () => {
     />
     <form
       v-if="editingUser"
-      class="fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg bg-panel p-5 shadow-2xl"
+      class="fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-panel p-5 shadow-2xl"
       role="dialog"
       aria-label="Gerenciar usuário"
       @submit.prevent="submitEdit"
@@ -522,7 +530,7 @@ onMounted(async () => {
             required
             minlength="2"
             maxlength="160"
-            class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+            class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
           />
         </label>
         <fieldset
@@ -560,7 +568,7 @@ onMounted(async () => {
           <select
             v-model="editForm.role"
             :disabled="editingUser.id === auth.user?.id"
-            class="rounded-lg border border-line-strong bg-panel px-3 py-2.5 text-sm font-normal text-ink outline-none disabled:bg-panel-muted disabled:text-ink-muted"
+            class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none disabled:bg-panel-muted disabled:text-ink-muted"
           >
             <option value="agent">Atendente</option>
             <option value="admin">Administrador</option>
@@ -575,7 +583,7 @@ onMounted(async () => {
             maxlength="128"
             autocomplete="new-password"
             placeholder="Deixe vazio para não alterar"
-            class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+            class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
           />
         </label>
         <label

@@ -46,6 +46,109 @@ const tenantSwitching = ref(false)
 const tenantError = ref('')
 const mobileMenuOpen = ref(false)
 
+const navSections = computed(() =>
+  [
+    {
+      label: 'Atendimento',
+      items: [
+        {
+          label: 'Conversas',
+          description: 'Fila e atendimento',
+          to: '/app/conversations',
+          icon: MessageCircle,
+        },
+        {
+          label: 'Contatos',
+          description: 'Base do WhatsApp',
+          to: '/app/contacts',
+          icon: ContactRound,
+        },
+        {
+          label: 'Quadro da equipe',
+          description: 'Distribuição da fila',
+          to: '/app/team-board',
+          icon: Columns3,
+          admin: true,
+        },
+        {
+          label: 'Respostas rápidas',
+          description: 'Atalhos de conversa',
+          to: '/app/quick-replies',
+          icon: Zap,
+        },
+      ],
+    },
+    {
+      label: 'Administração',
+      items: [
+        {
+          label: 'Canais',
+          description: 'WhatsApp e conexão',
+          to: '/app/settings/channels',
+          icon: Settings,
+          admin: true,
+        },
+        {
+          label: 'Agente de IA',
+          description: 'Copiloto sob demanda',
+          to: '/app/settings/ai',
+          icon: Bot,
+          admin: true,
+        },
+        {
+          label: 'Usuários',
+          description: 'Equipe e permissões',
+          to: '/app/settings/users',
+          icon: UserRoundCog,
+          admin: true,
+        },
+        {
+          label: 'Sincronização',
+          description: 'Histórico e imports',
+          to: '/app/settings/sync',
+          icon: DatabaseBackup,
+          admin: true,
+        },
+        {
+          label: 'Saúde operacional',
+          description: 'Workers e filas',
+          to: '/app/settings/operations',
+          icon: HeartPulse,
+          admin: true,
+          alert: true,
+        },
+      ],
+    },
+    {
+      label: 'Plataforma',
+      items: [
+        {
+          label: 'Empresas',
+          description: 'Administração global',
+          to: '/app/platform/tenants',
+          icon: Building2,
+          platformAdmin: true,
+        },
+      ],
+    },
+  ]
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        if ('admin' in item && item.admin && auth.user?.role !== 'admin') return false
+        if (
+          'platformAdmin' in item &&
+          item.platformAdmin &&
+          !auth.user?.is_platform_admin
+        ) {
+          return false
+        }
+        return true
+      }),
+    }))
+    .filter((section) => section.items.length),
+)
+
 const isChatActiveOnMobile = computed(
   () =>
     route.path === '/app/conversations' && Boolean(conversations.selectedId),
@@ -126,22 +229,32 @@ function navigateFromMobile(path: string) {
   mobileMenuOpen.value = false
   void router.push(path)
 }
+
+function navItemClass(path: string) {
+  const active = route.path === path || route.path.startsWith(`${path}/`)
+  return active
+    ? 'bg-fluvius-50 text-fluvius-800 ring-1 ring-fluvius-600/20'
+    : 'text-ink-muted hover:bg-canvas hover:text-ink'
+}
 </script>
 
 <template>
   <div class="flex h-screen h-[100dvh] overflow-hidden bg-canvas text-ink">
     <!-- Desktop Sidebar (Hidden on Mobile) -->
     <nav
-      class="relative hidden w-[68px] shrink-0 flex-col items-center border-r border-line bg-panel py-4 shadow-sm md:flex"
+      class="relative hidden w-[72px] shrink-0 flex-col items-center border-r border-line bg-panel shadow-sm md:flex"
+      aria-label="Navegação principal"
     >
-      <div
-        class="mb-2 grid h-10 w-10 place-items-center rounded-lg bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
-        :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
-      >
-        F
+      <div class="grid w-full place-items-center border-b border-line px-3 py-3">
+        <div
+          class="grid h-11 w-11 place-items-center rounded-xl bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
+          :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
+        >
+          F
+        </div>
       </div>
       <button
-        class="mb-5 grid h-8 w-10 place-items-center rounded-lg text-ink-muted transition hover:bg-canvas hover:text-ink"
+        class="mt-3 grid h-11 w-11 place-items-center rounded-xl text-ink-muted transition hover:bg-canvas hover:text-ink disabled:cursor-default disabled:opacity-70"
         :class="{ 'cursor-default': availableTenants.length < 2 }"
         :disabled="availableTenants.length < 2 || tenantSwitching"
         :title="
@@ -151,13 +264,13 @@ function navigateFromMobile(path: string) {
         "
         @click="tenantMenuOpen = !tenantMenuOpen"
       >
-        <Building2 class="h-4 w-4" />
+        <Building2 class="h-5 w-5" />
       </button>
 
       <!-- Tenant Switcher Dropdown (Desktop) -->
       <div
         v-if="tenantMenuOpen"
-        class="absolute left-14 top-14 z-50 w-72 overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-black/20"
+        class="absolute left-[64px] top-16 z-50 w-72 overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-black/20"
       >
         <div class="border-b border-line px-4 py-3">
           <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
@@ -190,124 +303,53 @@ function navigateFromMobile(path: string) {
         </button>
       </div>
 
-      <RouterLink
-        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/conversations"
-        title="Conversas"
-      >
-        <MessageCircle class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/contacts"
-        title="Contatos"
-      >
-        <ContactRound class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/team-board"
-        title="Quadro da equipe"
-      >
-        <Columns3 class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        class="mb-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/quick-replies"
-        title="Respostas rápidas"
-      >
-        <Zap class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/settings/channels"
-        title="Canais"
-      >
-        <Settings class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/settings/ai"
-        title="Agente de IA"
-      >
-        <Bot class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/settings/users"
-        title="Usuários"
-      >
-        <UserRoundCog class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/settings/sync"
-        title="Sincronização"
-      >
-        <DatabaseBackup class="h-5 w-5" />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.role === 'admin'"
-        class="relative mt-1.5 rounded-lg p-3 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        active-class="bg-fluvius-50 text-fluvius-700"
-        to="/app/settings/operations"
-        title="Saúde operacional"
-      >
-        <HeartPulse class="h-5 w-5" />
-        <span
-          v-if="operationalAlert"
-          class="absolute right-2 top-2 h-2 w-2 rounded-full ring-2 ring-fluvius-900"
-          :class="
-            operations.health?.status === 'critical' || operations.error
-              ? 'bg-rose-400'
-              : 'bg-amber-300'
-          "
-        />
-      </RouterLink>
-      <RouterLink
-        v-if="auth.user?.is_platform_admin"
-        class="mt-1.5 rounded-lg p-2.5 text-ink-muted transition hover:bg-amber-50 hover:text-amber-700"
-        active-class="bg-amber-100 text-amber-800"
-        to="/app/platform/tenants"
-        title="Administração Fluvius"
-      >
-        <Building2 class="h-5 w-5" />
-      </RouterLink>
-      <ThemeMenu class="mb-2 mt-auto" placement="top" />
-      <div
-        class="mb-3 select-none text-[10px] font-semibold leading-none text-ink-muted"
-        :title="`${APP_NAME} v${APP_VERSION}`"
-      >
-        v{{ APP_VERSION }}
+      <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-3">
+        <section v-for="section in navSections" :key="section.label" class="mb-4 last:mb-0">
+          <div class="mx-auto mb-2 h-px w-8 bg-line" :title="section.label" />
+          <div class="space-y-1.5">
+            <RouterLink
+              v-for="item in section.items"
+              :key="item.to"
+              :to="item.to"
+              class="relative grid h-11 w-11 place-items-center rounded-xl transition"
+              :class="navItemClass(item.to)"
+              :title="`${item.label} · ${item.description}`"
+            >
+              <component :is="item.icon" class="h-5 w-5 shrink-0" />
+              <span class="sr-only">{{ item.label }}</span>
+              <span
+                v-if="'alert' in item && item.alert && operationalAlert"
+                class="absolute right-2 top-2 h-2 w-2 rounded-full"
+                :class="
+                  operations.health?.status === 'critical' || operations.error
+                    ? 'bg-danger'
+                    : 'bg-warning'
+                "
+              />
+            </RouterLink>
+          </div>
+        </section>
       </div>
-      <RouterLink
-        class="grid h-9 w-9 place-items-center rounded-full bg-fluvius-700 text-xs font-semibold text-white ring-2 ring-transparent transition hover:bg-fluvius-600 hover:ring-fluvius-200"
-        active-class="ring-fluvius-200"
-        to="/app/account"
-        :title="`Minha conta · ${auth.user?.name || 'Usuário'}`"
-      >
-        {{ userInitial }}
-      </RouterLink>
-      <button
-        class="mt-2 rounded-lg p-2.5 text-ink-muted transition hover:bg-canvas hover:text-ink"
-        title="Sair"
-        @click="logout"
-      >
-        <LogOut class="h-5 w-5" />
-      </button>
+      <div class="grid w-full place-items-center gap-2 border-t border-line px-2 py-3">
+        <RouterLink
+          class="grid h-11 w-11 place-items-center rounded-xl text-ink-secondary transition hover:bg-canvas hover:text-ink"
+          :class="navItemClass('/app/account')"
+          to="/app/account"
+          :title="`Minha conta · ${auth.user?.name || 'Usuário'}`"
+        >
+          <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-fluvius-700 text-xs font-semibold text-white">
+            {{ userInitial }}
+          </span>
+        </RouterLink>
+        <ThemeMenu placement="top" />
+        <button
+          class="grid h-11 w-11 place-items-center rounded-xl text-ink-muted transition hover:bg-canvas hover:text-ink"
+          title="Sair"
+          @click="logout"
+        >
+          <LogOut class="h-5 w-5" />
+        </button>
+      </div>
     </nav>
 
     <!-- Main Content Area -->

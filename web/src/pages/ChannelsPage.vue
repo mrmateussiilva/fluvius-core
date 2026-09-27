@@ -88,6 +88,12 @@ const qrImageSource = computed(() => safeQrImageSource(connection.qrCode))
 const canShowPairingCode = computed(
   () => Boolean(connection.pairingCode && !qrImageSource.value),
 )
+const connectedChannelsCount = computed(
+  () => channels.value.filter((channel) => channel.status === 'connected').length,
+)
+const disconnectedChannelsCount = computed(
+  () => channels.value.filter((channel) => channel.status !== 'connected').length,
+)
 
 function typebotState(channelId: string) {
   if (!typebotForms[channelId]) {
@@ -411,23 +417,37 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-5xl p-6 sm:p-8">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+  <div class="mx-auto max-w-6xl p-5 sm:p-8">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
-        <h1 class="text-2xl font-semibold text-ink">Canais do WhatsApp</h1>
-        <p class="mt-1 text-sm text-ink-muted">
+        <div class="flex items-center gap-2 text-fluvius-700">
+          <Wifi class="h-5 w-5" />
+          <span class="text-xs font-semibold uppercase tracking-[0.14em]">Administração</span>
+        </div>
+        <h1 class="mt-1 text-2xl font-semibold tracking-tight text-ink">Canais do WhatsApp</h1>
+        <p class="mt-1 max-w-2xl text-sm leading-6 text-ink-muted">
           Conecte o WhatsApp sem expor as credenciais da Evolution no navegador.
         </p>
       </div>
-      <div class="inline-flex items-center gap-2 text-xs font-medium text-ink-muted">
-        <Wifi class="h-4 w-4 text-fluvius-700" />
-        Gateway protegido pela API
+      <div class="grid grid-cols-3 gap-2 text-xs sm:flex">
+        <div class="rounded-xl border border-line bg-panel px-4 py-3 shadow-sm">
+          <span class="block text-ink-muted">Total</span>
+          <strong class="mt-1 block text-lg font-semibold tabular-nums text-ink">{{ channels.length }}</strong>
+        </div>
+        <div class="rounded-xl border border-line bg-panel px-4 py-3 shadow-sm">
+          <span class="block text-ink-muted">Conectados</span>
+          <strong class="mt-1 block text-lg font-semibold tabular-nums text-success-strong">{{ connectedChannelsCount }}</strong>
+        </div>
+        <div class="rounded-xl border border-line bg-panel px-4 py-3 shadow-sm">
+          <span class="block text-ink-muted">A revisar</span>
+          <strong class="mt-1 block text-lg font-semibold tabular-nums text-warning-strong">{{ disconnectedChannelsCount }}</strong>
+        </div>
       </div>
     </div>
 
     <div
       v-if="!loadingChannels && channels.length && !showCreateForm"
-      class="mt-6 flex flex-col gap-4 rounded-lg border border-info/30 bg-info-soft p-5 sm:flex-row sm:items-center sm:justify-between"
+      class="mt-6 flex flex-col gap-4 rounded-xl border border-info/30 bg-info-soft p-5 sm:flex-row sm:items-center sm:justify-between"
     >
       <div>
         <p class="font-semibold text-info-strong">Seu canal já está cadastrado</p>
@@ -447,7 +467,7 @@ onBeforeUnmount(() => {
 
     <form
       v-if="!loadingChannels && (!channels.length || showCreateForm)"
-      class="mt-6 grid gap-4 rounded-lg border border-line bg-panel p-5 shadow-sm sm:grid-cols-2"
+      class="mt-6 grid gap-4 rounded-xl border border-line bg-panel p-5 shadow-sm sm:grid-cols-2 sm:p-6"
       @submit.prevent="submit"
     >
       <label class="grid gap-1.5 text-xs font-semibold text-ink-secondary">
@@ -457,7 +477,7 @@ onBeforeUnmount(() => {
           required
           maxlength="120"
           placeholder="Atendimento principal"
-          class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+          class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
         />
       </label>
       <label class="grid gap-1.5 text-xs font-semibold text-ink-secondary">
@@ -466,7 +486,7 @@ onBeforeUnmount(() => {
           v-model="form.phone_number"
           maxlength="32"
           placeholder="Opcional"
-          class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
+          class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20"
         />
       </label>
       <div class="sm:col-span-2 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -511,7 +531,7 @@ onBeforeUnmount(() => {
       {{ error }}
     </p>
 
-    <div class="mt-5 overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
+    <div class="mt-5 overflow-hidden rounded-xl border border-line bg-panel shadow-sm">
       <div v-if="loadingChannels" class="grid place-items-center p-12 text-ink-muted">
         <LoaderCircle class="h-6 w-6 animate-spin" />
         <span class="mt-2 text-sm">Carregando canais…</span>
@@ -564,7 +584,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <div class="mt-4 rounded-lg border border-line bg-canvas p-4">
+        <div class="mt-4 rounded-xl border border-line bg-canvas p-4">
           <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
@@ -584,7 +604,7 @@ onBeforeUnmount(() => {
                   :disabled="typebotState(channel.id).loading || typebotState(channel.id).saving"
                   maxlength="255"
                   placeholder="published-test-bot"
-                  class="rounded-lg border border-line-strong px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  class="rounded-lg border border-line-strong bg-canvas px-3 py-2.5 text-sm font-normal text-ink outline-none transition focus:border-fluvius-600 focus:ring-2 focus:ring-fluvius-600/20 disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </label>
             </div>
@@ -626,9 +646,17 @@ onBeforeUnmount(() => {
           </p>
         </div>
       </div>
-      <p v-if="!loadingChannels && !channels.length" class="p-10 text-center text-sm text-ink-muted">
-        Nenhum canal cadastrado.
-      </p>
+      <div v-if="!loadingChannels && !channels.length" class="grid min-h-56 place-items-center px-6 text-center">
+        <div>
+          <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-fluvius-50 text-fluvius-700">
+            <Smartphone class="h-5 w-5" />
+          </div>
+          <p class="mt-3 text-sm font-medium text-ink">Nenhum canal cadastrado</p>
+          <p class="mx-auto mt-1 max-w-xs text-xs leading-5 text-ink-muted">
+            Crie o primeiro canal para liberar atendimento pelo WhatsApp.
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 
