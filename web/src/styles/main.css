@@ -32,6 +32,23 @@
     --color-info-soft: 235 246 252;
     --color-info: 31 132 180;
     --color-info-strong: 23 94 128;
+    --color-input: 225 229 232;
+    --color-ring: 22 133 106;
+    --color-primary: 22 133 106;
+    --color-primary-foreground: 255 255 255;
+    --color-secondary: 232 234 237;
+    --color-secondary-foreground: 24 31 34;
+    --color-destructive: 210 65 83;
+    --color-destructive-foreground: 255 255 255;
+    --color-muted: 232 234 237;
+    --color-muted-foreground: 72 86 92;
+    --color-accent: 217 253 211;
+    --color-accent-foreground: 11 84 70;
+    --color-popover: 255 255 255;
+    --color-popover-foreground: 24 31 34;
+    --color-card: 255 255 255;
+    --color-card-foreground: 24 31 34;
+    --radius: 0.5rem;
     --scrollbar-thumb: 78 94 87;
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -67,6 +84,22 @@
     --color-info-soft: 23 47 58;
     --color-info: 105 190 229;
     --color-info-strong: 177 224 246;
+    --color-input: 47 54 58;
+    --color-ring: 85 201 148;
+    --color-primary: 85 201 148;
+    --color-primary-foreground: 6 42 34;
+    --color-secondary: 32 36 39;
+    --color-secondary-foreground: 232 236 238;
+    --color-destructive: 238 123 136;
+    --color-destructive-foreground: 62 29 34;
+    --color-muted: 32 36 39;
+    --color-muted-foreground: 136 149 155;
+    --color-accent: 0 92 75;
+    --color-accent-foreground: 232 236 238;
+    --color-popover: 38 43 46;
+    --color-popover-foreground: 232 236 238;
+    --color-card: 24 27 29;
+    --color-card-foreground: 232 236 238;
     --scrollbar-thumb: 136 149 155;
     color-scheme: dark;
   }
