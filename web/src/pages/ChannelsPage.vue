@@ -34,7 +34,6 @@ import type { ChannelConnectionResult } from '../api/channels'
 import type { Channel, ChannelStatus } from '../api/types'
 import ChannelStatusBadge from '../components/ChannelStatusBadge.vue'
 
-const QR_REFRESH_INTERVAL = 30_000
 const STATUS_POLL_INTERVAL = 3_000
 const TYPEBOT_PUBLIC_ID_PATTERN = /^[A-Za-z0-9_-]{1,255}$/
 
@@ -81,7 +80,6 @@ const connection = reactive<{
 })
 
 let statusTimer: number | null = null
-let qrRefreshTimer: number | null = null
 let closeTimer: number | null = null
 let requestGeneration = 0
 let statusRequestRunning = false
@@ -137,10 +135,8 @@ function updateChannelStatus(channelId: string, status: ChannelStatus) {
 
 function clearConnectionTimers() {
   if (statusTimer !== null) window.clearInterval(statusTimer)
-  if (qrRefreshTimer !== null) window.clearTimeout(qrRefreshTimer)
   if (closeTimer !== null) window.clearTimeout(closeTimer)
   statusTimer = null
-  qrRefreshTimer = null
   closeTimer = null
 }
 
@@ -164,13 +160,6 @@ function applyConnectionResult(result: ChannelConnectionResult) {
   if (result.status === 'connected') completeConnection()
 }
 
-function scheduleQrRefresh() {
-  if (qrRefreshTimer !== null) window.clearTimeout(qrRefreshTimer)
-  qrRefreshTimer = window.setTimeout(() => {
-    void requestConnection(false)
-  }, QR_REFRESH_INTERVAL)
-}
-
 function startStatusPolling() {
   if (statusTimer !== null || connection.status === 'connected') return
   statusTimer = window.setInterval(() => {
@@ -191,7 +180,6 @@ async function requestConnection(showLoading = true) {
     applyConnectionResult(result)
     if (result.status !== 'connected' && result.status !== 'failed') {
       startStatusPolling()
-      scheduleQrRefresh()
     }
   } catch (exception) {
     if (generation !== requestGeneration || connection.channel?.id !== channel.id) return
