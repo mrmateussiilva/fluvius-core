@@ -183,54 +183,20 @@ function timeLabel(value: string | null) {
 </script>
 
 <template>
-  <aside id="conversation-sidebar" class="conversation-list-pane flex h-full w-full shrink-0 flex-col border-r border-line bg-panel md:w-[400px] xl:w-[420px]">
+  <aside id="conversation-sidebar" class="conversation-list-pane motion-sidebar flex h-full w-full shrink-0 flex-col overflow-hidden border-r border-line bg-panel md:w-[400px] xl:w-[420px] 2xl:w-[440px]">
     <!-- Header -->
     <div class="conversation-list-header border-b border-line bg-panel px-4 pb-2.5 pt-4">
-      <div class="mb-3 flex items-center justify-between gap-3">
+      <div class="mb-3 flex items-center justify-between gap-2">
         <div class="min-w-0">
           <h2 class="truncate text-[21px] font-semibold tracking-tight text-ink">
             Conversas
           </h2>
         </div>
-        <button
-          type="button"
-          class="hidden h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink md:grid"
-          title="Recolher lista de conversas"
-          aria-label="Recolher lista de conversas"
-          :aria-expanded="!sidebarCollapsed"
-          aria-controls="conversation-sidebar"
-          @click="emit('toggleSidebar')"
-        >
-          <PanelLeftClose class="h-[18px] w-[18px]" />
-        </button>
-      </div>
-
-      <!-- Row 1: Search bar + Channel Selector -->
-      <div class="flex flex-col gap-1.5 sm:flex-row">
-        <label class="conversation-search flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-2 focus-within:ring-fluvius-500/20">
-          <Search class="h-4 w-4 shrink-0" />
-          <input
-            v-model="search"
-            type="search"
-            placeholder="Pesquisar ou começar uma conversa"
-            class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
-          />
-          <button
-            v-if="search"
-            type="button"
-            class="rounded-full p-0.5 hover:bg-line"
-            title="Limpar busca"
-            @click="search = ''"
-          >
-            <X class="h-3.5 w-3.5" />
-          </button>
-        </label>
-
-        <label class="conversation-channel-select flex h-9 min-w-0 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-secondary sm:w-[156px] sm:shrink-0">
-          <Smartphone class="h-4 w-4 shrink-0 text-fluvius-700" />
+        <label class="conversation-channel-select flex h-8 min-w-0 w-[148px] shrink-0 items-center gap-1.5 rounded-lg bg-canvas px-2.5 text-ink-secondary">
+          <Smartphone class="h-3.5 w-3.5 shrink-0 text-fluvius-700" />
           <select
             :value="activeChannelId || ''"
-            class="min-w-0 flex-1 cursor-pointer truncate bg-transparent text-[13px] font-medium text-ink outline-none"
+            class="min-w-0 flex-1 cursor-pointer truncate bg-transparent text-[12px] font-medium text-ink outline-none"
             aria-label="Canal de atendimento"
             @change="
               emit(
@@ -249,14 +215,48 @@ function timeLabel(value: string | null) {
             </option>
           </select>
         </label>
+        <button
+          type="button"
+          class="hidden h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted transition hover:bg-panel-muted hover:text-ink md:grid"
+          title="Recolher lista de conversas"
+          aria-label="Recolher lista de conversas"
+          :aria-expanded="!sidebarCollapsed"
+          aria-controls="conversation-sidebar"
+          @click="emit('toggleSidebar')"
+        >
+          <PanelLeftClose class="h-[18px] w-[18px]" />
+        </button>
+      </div>
+
+      <!-- Search -->
+      <div class="flex">
+        <label class="conversation-search flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg bg-canvas px-3 text-ink-muted transition focus-within:bg-panel focus-within:shadow-sm focus-within:ring-2 focus-within:ring-fluvius-500/20">
+          <Search class="h-4 w-4 shrink-0" />
+          <input
+            v-model="search"
+            type="search"
+            placeholder="Pesquisar ou começar uma conversa"
+            class="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-muted"
+          />
+          <button
+            v-if="search"
+            type="button"
+            class="rounded-full p-0.5 hover:bg-line"
+            title="Limpar busca"
+            @click="search = ''"
+          >
+            <X class="h-3.5 w-3.5" />
+          </button>
+        </label>
+
       </div>
 
       <!-- Row 2: Status & Kind Filter Pills -->
-      <div class="soft-scrollbar mt-2.5 flex items-center gap-1 overflow-x-auto pb-0.5">
+      <div class="conversation-filter-scroll mt-2.5 flex items-center gap-1 overflow-x-auto pb-0.5">
         <button
           v-for="tab in tabs"
           :key="tab.value"
-          class="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1.5 text-[11px] font-medium transition sm:gap-1.5 sm:px-3 sm:text-[12px]"
+          class="motion-interactive flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-1.5 text-[11px] font-medium sm:gap-1.5 sm:px-3 sm:text-[12px]"
           :class="
             activeStatus === tab.value
               ? 'bg-success-soft text-success-strong'
@@ -283,7 +283,7 @@ function timeLabel(value: string | null) {
         <button
           v-for="tab in kindTabs"
           :key="tab.value"
-          class="shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition"
+          class="motion-interactive shrink-0 rounded-full px-2.5 py-1.5 text-[11px] font-medium"
           :class="
             kindFilter === tab.value
               ? 'bg-success-soft text-success-strong'
@@ -297,21 +297,25 @@ function timeLabel(value: string | null) {
     </div>
 
     <!-- Conversation list -->
-    <div class="conversation-list-scroll soft-scrollbar min-h-0 flex-1 overflow-y-auto bg-panel">
+    <TransitionGroup
+      name="conversation-list"
+      tag="div"
+      class="conversation-list-scroll soft-scrollbar relative min-h-0 flex-1 overflow-y-auto bg-panel"
+    >
       <button
         v-for="conversation in visible"
         :key="conversation.id"
-        class="conversation-item group relative flex w-full items-center gap-3 px-3 py-1.5 text-left transition hover:bg-canvas"
-        :class="selectedId === conversation.id ? 'conversation-item-selected bg-panel-muted' : ''"
+        class="conversation-item group relative flex min-h-[72px] w-full items-center gap-3 px-3 py-1 text-left"
+        :class="selectedId === conversation.id ? 'conversation-item-selected' : ''"
         @click="emit('select', conversation.id)"
       >
         <span
           v-if="needsAttention(conversation)"
-          class="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-fluvius-600"
+          class="motion-status-enter absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-fluvius-600"
         />
         <!-- Avatar -->
         <div
-          class="relative grid h-12 w-12 shrink-0 place-items-center rounded-full text-[16px] font-semibold"
+          class="relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-[14px] font-semibold"
           :class="avatarClass(conversation)"
         >
           <Users v-if="isGroup(conversation)" class="h-5 w-5" />
@@ -319,7 +323,7 @@ function timeLabel(value: string | null) {
         </div>
 
         <!-- Text content -->
-        <div class="min-w-0 flex-1 border-b border-line py-2 group-last:border-b-0">
+        <div class="min-w-0 flex-1 border-b border-line py-1 group-last:border-b-0">
           <!-- Row 1: contact name + time -->
           <div class="flex items-center gap-2">
             <span class="min-w-0 flex-1 truncate text-[15px] font-medium leading-[1.2] text-ink">
@@ -334,7 +338,7 @@ function timeLabel(value: string | null) {
             </time>
           </div>
           <!-- Row 2: message preview + unread badge -->
-          <div class="mt-[3px] flex items-center gap-1.5">
+          <div class="mt-0.5 flex items-center gap-1.5">
             <span class="min-w-0 flex-1 truncate text-[13px] leading-[18px] text-ink-muted">
               {{ messagePreview(conversation) }}
             </span>
@@ -345,17 +349,19 @@ function timeLabel(value: string | null) {
               title="Aguardando resposta"
             />
             <!-- Unread count — identical to WhatsApp Web -->
-            <span
-              v-if="conversation.unread_count"
-              class="grid min-h-[20px] min-w-[20px] shrink-0 place-items-center rounded-full bg-primary-strong px-1 text-[11px] font-bold text-white"
-            >
-              {{ conversation.unread_count > 99 ? '99+' : conversation.unread_count }}
-            </span>
+            <Transition name="motion-badge">
+              <span
+                v-if="conversation.unread_count"
+                class="grid min-h-[20px] min-w-[20px] shrink-0 place-items-center rounded-full bg-primary-strong px-1 text-[11px] font-bold text-white"
+              >
+                {{ conversation.unread_count > 99 ? '99+' : conversation.unread_count }}
+              </span>
+            </Transition>
           </div>
-          <div class="mt-1 flex min-w-0 items-center gap-1.5">
+          <div class="mt-0.5 flex min-w-0 items-center gap-1.5">
             <span
               v-if="attentionLabel(conversation)"
-              class="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning-strong"
+              class="motion-status-enter inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning-strong"
             >
               <CircleAlert class="h-2.5 w-2.5" />
               {{ attentionLabel(conversation) }}
@@ -371,7 +377,7 @@ function timeLabel(value: string | null) {
       </button>
 
       <!-- Empty state -->
-      <div v-if="!visible.length" class="mx-3 my-4 rounded-xl border border-dashed border-line bg-panel px-8 py-14 text-center text-ink-muted">
+      <div v-if="!visible.length" key="empty" class="mx-3 my-4 rounded-xl border border-dashed border-line bg-panel px-8 py-14 text-center text-ink-muted">
         <div class="mx-auto grid h-12 w-12 place-items-center rounded-full bg-fluvius-50 text-fluvius-700">
           <MessageSquareText class="h-5 w-5" />
         </div>
@@ -382,6 +388,6 @@ function timeLabel(value: string | null) {
           {{ search ? 'Tente outro nome, telefone ou trecho da mensagem.' : 'Quando um cliente chamar ou responder, o atendimento volta para esta fila.' }}
         </p>
       </div>
-    </div>
+    </TransitionGroup>
   </aside>
 </template>

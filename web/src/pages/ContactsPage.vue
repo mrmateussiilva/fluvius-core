@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   LoaderCircle,
@@ -39,6 +39,7 @@ const saving = ref(false)
 const error = ref('')
 const notice = ref('')
 const showCreateForm = ref(false)
+const contactNameInput = ref<HTMLInputElement | null>(null)
 const selectedChannelId = ref('')
 const startingContactId = ref<string | null>(null)
 const editingContactId = ref<string | null>(null)
@@ -222,6 +223,19 @@ async function submitContact() {
   }
 }
 
+async function toggleCreateForm() {
+  if (saving.value) return
+  showCreateForm.value = !showCreateForm.value
+  error.value = ''
+  notice.value = ''
+  if (showCreateForm.value) {
+    await nextTick()
+    contactNameInput.value?.focus()
+    return
+  }
+  Object.assign(form, { name: '', phone_number: '' })
+}
+
 function startEditing(contact: ContactListItem) {
   editingContactId.value = contact.id
   editingName.value = contact.name || contact.display_name
@@ -367,10 +381,13 @@ onBeforeUnmount(clearSyncPoll)
           <button
             type="button"
             class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 text-sm font-semibold text-white transition hover:bg-fluvius-800 active:scale-[0.97]"
-            @click="showCreateForm = !showCreateForm"
+            :aria-expanded="showCreateForm"
+            aria-controls="contact-create-form"
+            @click="toggleCreateForm"
           >
-            <Plus class="h-4 w-4" />
-            Novo contato
+            <X v-if="showCreateForm" class="h-4 w-4" />
+            <Plus v-else class="h-4 w-4" />
+            {{ showCreateForm ? 'Cancelar' : 'Novo contato' }}
           </button>
         </div>
       </div>
@@ -422,14 +439,19 @@ onBeforeUnmount(clearSyncPoll)
     </section>
 
     <form
-      v-if="showCreateForm"
+      v-show="showCreateForm"
+      id="contact-create-form"
       class="grid shrink-0 gap-3 border-b border-line bg-panel px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,1fr)_220px_auto]"
       @submit.prevent="submitContact"
     >
       <input
+        ref="contactNameInput"
         v-model="form.name"
         required
         maxlength="160"
+        :disabled="saving"
+        aria-label="Nome do contato"
+        autocomplete="name"
         placeholder="Nome"
         class="h-10 rounded-lg border border-line-strong bg-canvas px-3 text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-2 focus:ring-fluvius-500/20"
       />
@@ -437,6 +459,11 @@ onBeforeUnmount(clearSyncPoll)
         v-model="form.phone_number"
         required
         maxlength="32"
+        :disabled="saving"
+        type="tel"
+        aria-label="Telefone do contato"
+        autocomplete="tel"
+        inputmode="tel"
         placeholder="+55 27 99999-9999"
         class="h-10 rounded-lg border border-line-strong bg-canvas px-3 text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-2 focus:ring-fluvius-500/20"
       />
@@ -444,10 +471,11 @@ onBeforeUnmount(clearSyncPoll)
         type="submit"
         class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-fluvius-700 px-4 text-sm font-medium text-white transition hover:bg-fluvius-800 disabled:cursor-not-allowed disabled:opacity-60"
         :disabled="saving"
+        :aria-busy="saving"
       >
         <LoaderCircle v-if="saving" class="h-4 w-4 animate-spin" />
         <UserRoundPlus v-else class="h-4 w-4" />
-        Salvar
+        {{ saving ? 'Salvando…' : 'Salvar contato' }}
       </button>
     </form>
 

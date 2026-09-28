@@ -243,12 +243,26 @@ function dayKey(value: string) {
 function belongsToSameGroup(first: Message, second: Message) {
   return (
     first.direction === second.direction &&
+    first.is_internal === second.is_internal &&
+    messageAuthorKey(first) === messageAuthorKey(second) &&
     dayKey(first.created_at) === dayKey(second.created_at) &&
     Math.abs(
       new Date(second.created_at).getTime() -
         new Date(first.created_at).getTime(),
     ) <= MESSAGE_GROUP_WINDOW
   )
+}
+
+function messageAuthorKey(message: Message) {
+  if (message.direction === 'incoming') {
+    return (
+      message.participant_phone ||
+      message.participant_name ||
+      message.sender_name ||
+      'incoming'
+    )
+  }
+  return message.sender_name || (message.is_bot ? 'bot' : 'outgoing')
 }
 
 const retryingMessageSet = computed(
@@ -281,7 +295,7 @@ const messageDayGroups = computed(() => {
       index,
       groupStart,
       groupEnd,
-      spacingClass: groupStart ? 'mt-2' : 'mt-[2px]',
+      spacingClass: groupStart ? 'mt-[10px]' : 'mt-px',
     }
 
     const currentGroup = groups.at(-1)
@@ -759,10 +773,11 @@ function previewMedia(
             aria-hidden="true"
             @click="actionsMenuOpen = false"
           />
-          <div
-            v-if="actionsMenuOpen"
-            class="absolute right-0 top-11 z-40 w-64 overflow-hidden rounded-lg border border-line bg-panel-raised py-1 text-ink shadow-xl"
-          >
+          <Transition name="motion-pop">
+            <div
+              v-if="actionsMenuOpen"
+              class="absolute right-0 top-11 z-40 w-64 origin-top-right overflow-hidden rounded-lg border border-line bg-panel-raised py-1 text-ink shadow-xl"
+            >
             <button
               type="button"
               class="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-panel-muted disabled:opacity-50"
@@ -815,7 +830,8 @@ function previewMedia(
             >
               <CheckCircle2 class="h-4 w-4" />Finalizar atendimento
             </button>
-          </div>
+            </div>
+          </Transition>
         </div>
       </header>
 
@@ -835,14 +851,7 @@ function previewMedia(
         {{ operationError }}
       </p>
       <div class="relative min-h-0 flex-1 overflow-hidden">
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 translate-y-2"
-          enter-to-class="opacity-100 translate-y-0"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100 translate-y-0"
-          leave-to-class="opacity-0 translate-y-2"
-        >
+        <Transition name="motion-pop">
           <section
             v-if="summarizing || aiAnalysis || summarizeError"
             class="absolute inset-x-3 top-3 z-20 max-h-[min(70vh,28rem)] overflow-y-auto rounded-xl border border-line bg-panel-raised/95 p-4 shadow-xl backdrop-blur sm:inset-x-auto sm:right-4 sm:w-[min(30rem,calc(100%-2rem))]"
@@ -948,7 +957,7 @@ function previewMedia(
         </Transition>
         <div
           ref="messageList"
-          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-2 sm:px-6 sm:py-3 lg:px-8"
+          class="chat-wallpaper soft-scrollbar h-full overflow-y-auto px-3 py-2 sm:px-5 sm:py-3 lg:px-6"
           @scroll.passive="handleScroll"
         >
           <div class="w-full">
@@ -967,13 +976,15 @@ function previewMedia(
                   {{ dateLabel(dayGroup.createdAt) }}
                 </span>
               </div>
-              <template
-                v-for="{ message, groupStart, groupEnd, spacingClass } in dayGroup.items"
-                :key="message.id"
+              <TransitionGroup
+                name="message-motion"
+                tag="div"
               >
                 <div
+                v-for="{ message, groupStart, groupEnd, spacingClass } in dayGroup.items"
+                :key="message.id"
                   :id="`message-${message.id}`"
-                  class="message-bubble-wrapper rounded-lg transition-colors duration-500"
+                  class="message-bubble-wrapper motion-slow rounded-lg transition-colors"
                   :class="[
                     spacingClass,
                     highlightedMessageId === message.id ? 'bg-warning/20 ring-4 ring-warning/20' : '',
@@ -990,7 +1001,7 @@ function previewMedia(
                     @retry="emit('retry', $event)"
                   />
                 </div>
-              </template>
+              </TransitionGroup>
             </section>
             <div v-if="!messages.length" class="grid place-items-center py-20 text-center text-ink-muted">
               <div class="grid h-14 w-14 place-items-center rounded-full bg-panel/80 shadow-sm ring-1 ring-line">
@@ -1001,18 +1012,11 @@ function previewMedia(
             </div>
           </div>
         </div>
-        <Transition
-          enter-active-class="transition duration-200 ease-out"
-          enter-from-class="opacity-0 scale-90 translate-y-2"
-          enter-to-class="opacity-100 scale-100 translate-y-0"
-          leave-active-class="transition duration-150 ease-in"
-          leave-from-class="opacity-100 scale-100 translate-y-0"
-          leave-to-class="opacity-0 scale-90 translate-y-2"
-        >
+        <Transition name="motion-pop">
           <button
             v-if="newMessagesBelow > 0"
             type="button"
-            class="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-fluvius-700 px-4 py-2 text-xs font-semibold text-white shadow-lg transition hover:bg-fluvius-800 active:scale-95"
+            class="motion-interactive absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-fluvius-700 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-fluvius-800"
             @click="scrollToBottom('smooth')"
           >
             <ArrowDown class="h-4 w-4" />
@@ -1021,7 +1025,7 @@ function previewMedia(
           <button
             v-else-if="!isNearBottom"
             type="button"
-            class="absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-panel/90 text-ink-secondary shadow-md ring-1 ring-line/50 backdrop-blur-sm transition hover:bg-panel hover:text-ink active:scale-95"
+            class="motion-interactive absolute bottom-4 right-4 z-10 grid h-9 w-9 place-items-center rounded-full bg-panel/90 text-ink-secondary shadow-md ring-1 ring-line/50 backdrop-blur-sm hover:bg-panel hover:text-ink"
             title="Rolar para as mensagens mais recentes"
             @click="scrollToBottom('smooth')"
           >
@@ -1045,21 +1049,25 @@ function previewMedia(
         @send-contact="sendContact"
       />
     </section>
-    <ContactDetailsPanel
-      v-if="contactPanelOpen"
-      :conversation="conversation"
-      :contact="contact"
-      :loading="contactLoading"
-      :error="contactError"
-      @close="contactPanelOpen = false"
-      @refresh="emit('refreshContact')"
-    />
-    <MediaLightbox
-      v-if="mediaPreview"
-      :attachment="mediaPreview.attachment"
-      :message-type="mediaPreview.messageType"
-      @close="mediaPreview = null"
-    />
+    <Transition name="motion-pop">
+      <ContactDetailsPanel
+        v-if="contactPanelOpen"
+        :conversation="conversation"
+        :contact="contact"
+        :loading="contactLoading"
+        :error="contactError"
+        @close="contactPanelOpen = false"
+        @refresh="emit('refreshContact')"
+      />
+    </Transition>
+    <Transition name="motion-fade">
+      <MediaLightbox
+        v-if="mediaPreview"
+        :attachment="mediaPreview.attachment"
+        :message-type="mediaPreview.messageType"
+        @close="mediaPreview = null"
+      />
+    </Transition>
   </div>
   <section v-else class="relative grid flex-1 place-items-center border-b-[5px] border-fluvius-600 bg-chat px-6 text-center">
     <button

@@ -4,7 +4,7 @@ export type ThemePreference = 'system' | 'light' | 'dark'
 export type ResolvedTheme = Exclude<ThemePreference, 'system'>
 
 const STORAGE_KEY = 'fluvius_theme'
-const preference = ref<ThemePreference>('system')
+const preference = ref<ThemePreference>('dark')
 const systemTheme = ref<ResolvedTheme>('light')
 let initialized = false
 
@@ -35,7 +35,7 @@ export function initializeTheme() {
   systemTheme.value = mediaQuery.matches ? 'dark' : 'light'
 
   const storedPreference = localStorage.getItem(STORAGE_KEY)
-  preference.value = isThemePreference(storedPreference) ? storedPreference : 'system'
+  preference.value = isThemePreference(storedPreference) ? storedPreference : 'dark'
 
   mediaQuery.addEventListener('change', handleSystemThemeChange)
   initialized = true

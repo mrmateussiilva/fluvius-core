@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   LockKeyhole,
   Mic,
+  MoreHorizontal,
   Music,
   Paperclip,
   Pause,
@@ -126,6 +127,7 @@ let contactSearchRequest = 0
 const showAttachments = ref(false)
 const showContactSharePicker = ref(false)
 const showEmojis = ref(false)
+const showComposerActions = ref(false)
 const attachmentAccept = ref('')
 const attachmentMode = ref<'media' | 'document' | 'audio' | 'sticker'>('media')
 const preparingSticker = ref(false)
@@ -1083,6 +1085,33 @@ function toggleReplies() {
   void ensureQuickRepliesLoaded()
 }
 
+function toggleComposerActions() {
+  showComposerActions.value = !showComposerActions.value
+  if (showComposerActions.value) {
+    closeQuickReplies()
+    closeMentions()
+    showAttachments.value = false
+    showEmojis.value = false
+    showContactSharePicker.value = false
+  }
+}
+
+function openQuickRepliesFromMenu() {
+  showComposerActions.value = false
+  toggleReplies()
+}
+
+function toggleInternalNoteFromMenu() {
+  isInternalMode.value = !isInternalMode.value
+  showComposerActions.value = false
+  nextTick(() => textarea.value?.focus())
+}
+
+function openStickerFromMenu() {
+  showComposerActions.value = false
+  openStickerPicker()
+}
+
 function toggleEmojis() {
   closeQuickReplies()
   closeMentions()
@@ -1226,11 +1255,17 @@ function handleTextareaKeydown(event: KeyboardEvent) {
       emit('cancelReply')
       return
     }
-    if (showEmojis.value || showAttachments.value || showContactSharePicker.value) {
+    if (
+      showEmojis.value ||
+      showAttachments.value ||
+      showContactSharePicker.value ||
+      showComposerActions.value
+    ) {
       event.preventDefault()
       showEmojis.value = false
       showAttachments.value = false
       showContactSharePicker.value = false
+      showComposerActions.value = false
       return
     }
   }
@@ -1262,32 +1297,37 @@ function handleDrop(event: DragEvent) {
 
 <template>
   <div
-    class="conversation-composer relative shrink-0 border-t border-line bg-panel-muted px-3 py-2 sm:px-5 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+    class="conversation-composer relative shrink-0 border-t border-line bg-panel-muted px-2.5 py-2 sm:px-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     @dragenter.prevent="handleDragEnter"
     @dragover.prevent
     @dragleave.prevent="handleDragLeave"
     @drop.prevent="handleDrop"
   >
-    <div
-      v-if="dragActive"
-      class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded-lg border-2 border-dashed border-fluvius-500 bg-success-soft/95 text-center shadow-lg backdrop-blur-sm"
-    >
-      <div>
-        <UploadCloud class="mx-auto h-8 w-8 text-fluvius-700" />
-        <p class="mt-2 text-sm font-semibold text-success-strong">Solte para anexar</p>
-        <p class="mt-0.5 text-xs text-success-strong">Até 10 arquivos · 25 MB por item</p>
+    <Transition name="motion-fade">
+      <div
+        v-if="dragActive"
+        class="pointer-events-none absolute inset-2 z-30 grid place-items-center rounded-lg border-2 border-dashed border-fluvius-500 bg-success-soft/95 text-center shadow-lg backdrop-blur-sm"
+      >
+        <div>
+          <UploadCloud class="mx-auto h-8 w-8 text-fluvius-700" />
+          <p class="mt-2 text-sm font-semibold text-success-strong">Solte para anexar</p>
+          <p class="mt-0.5 text-xs text-success-strong">Até 10 arquivos · 25 MB por item</p>
+        </div>
       </div>
-    </div>
-    <p v-if="disabledReason" class="mx-auto mb-2.5 max-w-[920px] rounded-lg bg-warning-soft px-3 py-2 text-center text-xs text-warning-strong ring-1 ring-warning/20">
-      {{ disabledReason }}
-    </p>
-    <p v-else-if="sendError || fileError" class="mx-auto mb-2.5 max-w-[920px] rounded-lg bg-danger-soft px-3 py-2 text-center text-xs text-danger-strong ring-1 ring-danger/20">
-      {{ fileError || sendError }}
-    </p>
-    <div
-      v-if="replyTo"
-      class="mx-auto mb-2 flex max-w-[920px] items-center gap-3 rounded-lg border-l-4 border-fluvius-600 bg-panel px-3 py-2 shadow-sm"
-    >
+    </Transition>
+    <Transition name="motion-status">
+      <p v-if="disabledReason" class="mx-auto mb-2.5 max-w-[920px] rounded-lg bg-warning-soft px-3 py-2 text-center text-xs text-warning-strong ring-1 ring-warning/20">
+        {{ disabledReason }}
+      </p>
+      <p v-else-if="sendError || fileError" class="mx-auto mb-2.5 max-w-[920px] rounded-lg bg-danger-soft px-3 py-2 text-center text-xs text-danger-strong ring-1 ring-danger/20">
+        {{ fileError || sendError }}
+      </p>
+    </Transition>
+    <Transition name="motion-reply">
+      <div
+        v-if="replyTo"
+        class="mx-auto mb-2 flex max-w-[920px] items-center gap-3 rounded-lg border-l-4 border-fluvius-600 bg-panel px-3 py-2 shadow-sm"
+      >
       <Reply class="h-4 w-4 shrink-0 text-fluvius-600" />
       <div class="min-w-0 flex-1">
         <p class="text-xs font-semibold text-fluvius-700">
@@ -1312,11 +1352,13 @@ function handleDrop(event: DragEvent) {
       >
         <X class="h-4 w-4" />
       </button>
-    </div>
-    <div
-      v-if="selectedSharedContact"
-      class="mx-auto mb-2 flex h-[68px] max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-line/50"
-    >
+      </div>
+    </Transition>
+    <Transition name="motion-reply">
+      <div
+        v-if="selectedSharedContact"
+        class="mx-auto mb-2 flex h-[68px] max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-line/50"
+      >
       <span class="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-success-soft text-success-strong">
         <UserRound class="h-5 w-5" />
       </span>
@@ -1336,7 +1378,8 @@ function handleDrop(event: DragEvent) {
       >
         <X class="h-4 w-4" />
       </button>
-    </div>
+      </div>
+    </Transition>
     <div
       v-if="isRecording"
       class="mx-auto mb-2 flex h-12 max-w-[920px] items-center gap-3 rounded-lg bg-panel px-3 shadow-sm ring-1 ring-line/50"
@@ -1467,7 +1510,7 @@ function handleDrop(event: DragEvent) {
       :src="selectedAttachments[0].previewUrl || ''"
       :file-name="selectedAttachments[0].file.name || 'Áudio selecionado'"
     />
-    <form class="conversation-composer-form mx-auto flex w-full max-w-[1200px] items-end gap-1.5 sm:gap-2" @submit.prevent="submit">
+    <form class="conversation-composer-form mx-auto flex w-full max-w-[1200px] items-end gap-1 sm:gap-1.5" @submit.prevent="submit">
       <div class="relative">
         <button
           type="button"
@@ -1486,52 +1529,9 @@ function handleDrop(event: DragEvent) {
           aria-hidden="true"
           @click="showEmojis = false"
         />
-        <EmojiPicker v-if="showEmojis" @select="insertEmoji" />
-      </div>
-      <div class="relative">
-        <button
-          type="button"
-          class="hidden h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-fluvius-700 disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
-          :class="{ 'bg-panel-muted text-fluvius-700': showReplies }"
-          :disabled="isDisabled"
-          title="Respostas rápidas"
-          :aria-expanded="showReplies"
-          @click="toggleReplies"
-        >
-          <Zap class="h-5 w-5" />
-        </button>
-        <div
-          v-if="showReplies && quickReplyMode === 'button'"
-          class="fixed inset-0 z-20"
-          aria-hidden="true"
-          @click="closeQuickReplies"
-        />
-        <QuickReplyPicker
-          v-if="showReplies"
-          :active-index="quickReplyActiveIndex"
-          :error="quickRepliesError"
-          :loading="quickRepliesLoading"
-          :query="quickReplyQuery"
-          :replies="filteredQuickReplies"
-          @hover="quickReplyActiveIndex = $event"
-          @select="useReply"
-        />
-      </div>
-      <div class="relative">
-        <button
-          type="button"
-          class="hidden h-10 w-10 place-items-center rounded-full transition disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
-          :class="
-            isInternalMode
-              ? 'bg-warning-soft text-warning-strong ring-1 ring-warning/40'
-              : 'text-ink-secondary hover:bg-panel-muted hover:text-fluvius-700'
-          "
-          :disabled="isDisabled"
-          :title="isInternalMode ? 'Alternar para mensagem normal' : 'Alternar para nota interna 🔒'"
-          @click="isInternalMode = !isInternalMode"
-        >
-          <LockKeyhole class="h-5 w-5" />
-        </button>
+        <Transition name="motion-pop">
+          <EmojiPicker v-if="showEmojis" @select="insertEmoji" />
+        </Transition>
       </div>
       <div class="relative">
         <input
@@ -1561,10 +1561,11 @@ function handleDrop(event: DragEvent) {
           aria-hidden="true"
           @click="showAttachments = false"
         />
-        <div
-          v-if="showAttachments"
-          class="absolute bottom-14 left-0 z-30 w-64 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-panel py-2 text-ink shadow-2xl ring-1 ring-line/50"
-        >
+        <Transition name="motion-pop">
+          <div
+            v-if="showAttachments"
+            class="absolute bottom-14 left-0 z-30 w-64 max-w-[calc(100vw-2rem)] origin-bottom-left overflow-hidden rounded-xl border border-line bg-panel py-2 text-ink shadow-2xl ring-1 ring-line/50"
+          >
           <p class="px-4 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
             Enviar anexo
           </p>
@@ -1643,32 +1644,102 @@ function handleDrop(event: DragEvent) {
               <span class="block text-[10px] text-ink-faint">AAC, MP3, OGG, WAV e outros</span>
             </span>
           </button>
-        </div>
+          </div>
+        </Transition>
         <div
           v-if="showContactSharePicker"
           class="fixed inset-0 z-20"
           aria-hidden="true"
           @click="showContactSharePicker = false"
         />
-        <ContactSharePicker
-          v-if="showContactSharePicker"
-          @select="selectSharedContact"
-        />
+        <Transition name="motion-pop">
+          <ContactSharePicker
+            v-if="showContactSharePicker"
+            @select="selectSharedContact"
+          />
+        </Transition>
       </div>
-      <button
-        v-if="!isInternalMode"
-        type="button"
-        class="hidden h-10 w-10 shrink-0 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-success disabled:opacity-40 sm:grid sm:h-11 sm:w-11"
-        :disabled="isDisabled || sending || preparingSticker"
-        :title="preparingSticker ? 'Preparando figurinha...' : 'Enviar figurinha'"
-        @click="openStickerPicker"
-      >
-        <span
-          v-if="preparingSticker"
-          class="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-ink-secondary"
+      <div class="relative">
+        <button
+          type="button"
+          class="grid h-10 w-10 place-items-center rounded-full text-ink-secondary transition hover:bg-panel-muted hover:text-ink disabled:opacity-40 sm:h-11 sm:w-11"
+          :class="{ 'bg-panel-muted text-ink': showComposerActions }"
+          :disabled="isDisabled || sending"
+          title="Mais ferramentas de mensagem"
+          aria-label="Mais ferramentas de mensagem"
+          :aria-expanded="showComposerActions"
+          @click="toggleComposerActions"
+        >
+          <MoreHorizontal class="h-5 w-5" />
+        </button>
+        <div
+          v-if="showComposerActions"
+          class="fixed inset-0 z-20"
+          aria-hidden="true"
+          @click="showComposerActions = false"
         />
-        <Sticker v-else class="h-5 w-5" />
-      </button>
+        <Transition name="motion-pop">
+          <div
+            v-if="showComposerActions"
+            class="absolute bottom-14 left-0 z-30 w-60 origin-bottom-left overflow-hidden rounded-xl border border-line bg-panel py-1 text-ink shadow-xl"
+            role="menu"
+          >
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm text-ink-secondary hover:bg-panel-muted hover:text-ink disabled:opacity-40"
+              :disabled="isDisabled"
+              role="menuitem"
+              @click="openQuickRepliesFromMenu"
+            >
+              <Zap class="h-4 w-4" />
+              Respostas rápidas
+            </button>
+            <button
+              type="button"
+              class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm hover:bg-panel-muted disabled:opacity-40"
+              :class="isInternalMode ? 'text-warning-strong' : 'text-ink-secondary hover:text-ink'"
+              :disabled="isDisabled"
+              role="menuitemcheckbox"
+              :aria-checked="isInternalMode"
+              @click="toggleInternalNoteFromMenu"
+            >
+              <LockKeyhole class="h-4 w-4" />
+              {{ isInternalMode ? 'Voltar à mensagem normal' : 'Nota interna' }}
+            </button>
+            <button
+              v-if="!isInternalMode"
+              type="button"
+              class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm text-ink-secondary hover:bg-panel-muted hover:text-ink disabled:opacity-40"
+              :disabled="isDisabled || sending || preparingSticker"
+              role="menuitem"
+              @click="openStickerFromMenu"
+            >
+              <Sticker class="h-4 w-4" />
+              Enviar figurinha
+            </button>
+          </div>
+        </Transition>
+      </div>
+      <div class="relative">
+        <div
+          v-if="showReplies && quickReplyMode === 'button'"
+          class="fixed inset-0 z-20"
+          aria-hidden="true"
+          @click="closeQuickReplies"
+        />
+        <Transition name="motion-pop">
+          <QuickReplyPicker
+            v-if="showReplies"
+            :active-index="quickReplyActiveIndex"
+            :error="quickRepliesError"
+            :loading="quickRepliesLoading"
+            :query="quickReplyQuery"
+            :replies="filteredQuickReplies"
+            @hover="quickReplyActiveIndex = $event"
+            @select="useReply"
+          />
+        </Transition>
+      </div>
       <div class="relative min-w-0 flex-1">
         <button
           type="button"
@@ -1704,7 +1775,7 @@ function handleDrop(event: DragEvent) {
           ref="textarea"
           v-model="text"
           rows="1"
-          class="conversation-composer-input soft-scrollbar min-h-10 w-full resize-none rounded-2xl border-0 py-2.5 pl-11 pr-4 text-[14px] leading-5 text-ink shadow-sm outline-none transition disabled:bg-panel-muted sm:min-h-11 sm:rounded-[22px] sm:px-4 sm:py-3"
+          class="conversation-composer-input soft-scrollbar min-h-10 w-full resize-none rounded-2xl border-0 py-2.5 pl-11 pr-4 text-[14px] leading-5 text-ink outline-none disabled:bg-panel-muted sm:min-h-11 sm:rounded-[22px] sm:px-4 sm:py-3"
           :class="
             isInternalMode
               ? 'composer-internal-input bg-warning-soft ring-1 ring-warning/40 text-warning-strong placeholder:text-warning-strong focus:ring-warning'
@@ -1738,7 +1809,9 @@ function handleDrop(event: DragEvent) {
           preparingSticker
             ? 'Preparando figurinha...'
             : sending
-              ? 'Salvando...'
+              ? isInternalMode
+                ? 'Salvando...'
+                : 'Enviando...'
               : isInternalMode
                 ? 'Salvar nota interna 🔒'
                 : hasSendContent
@@ -1747,13 +1820,16 @@ function handleDrop(event: DragEvent) {
         "
         @click="!hasSendContent && !isInternalMode && startRecording()"
       >
-        <span
-          v-if="sending || preparingSticker"
-          class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
-        />
-        <LockKeyhole v-else-if="isInternalMode" class="h-5 w-5" />
-        <Send v-else-if="hasSendContent" class="h-5 w-5" />
-        <Mic v-else class="h-5 w-5" />
+        <Transition name="motion-icon" mode="out-in">
+          <span
+            v-if="sending || preparingSticker"
+            key="loading"
+            class="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white"
+          />
+          <LockKeyhole v-else-if="isInternalMode" key="internal" class="h-5 w-5" />
+          <Send v-else-if="hasSendContent" key="send" class="h-5 w-5" />
+          <Mic v-else key="microphone" class="h-5 w-5" />
+        </Transition>
       </button>
     </form>
   </div>

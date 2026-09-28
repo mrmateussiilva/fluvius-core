@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  PanelLeftClose,
   RefreshCw,
   Settings,
   UserRoundCog,
@@ -45,6 +46,8 @@ const tenantMenuOpen = ref(false)
 const tenantSwitching = ref(false)
 const tenantError = ref('')
 const mobileMenuOpen = ref(false)
+const navigationExpanded = ref(false)
+const NAVIGATION_EXPANDED_KEY = 'fluvius_navigation_expanded'
 
 const navSections = computed(() =>
   [
@@ -176,7 +179,25 @@ function ensureRealtimeConnection() {
   realtime.ensureConnected()
 }
 
+function toggleNavigation() {
+  navigationExpanded.value = !navigationExpanded.value
+  try {
+    localStorage.setItem(
+      NAVIGATION_EXPANDED_KEY,
+      String(navigationExpanded.value),
+    )
+  } catch {
+    // The navigation remains usable when local storage is unavailable.
+  }
+}
+
 onMounted(async () => {
+  try {
+    navigationExpanded.value =
+      localStorage.getItem(NAVIGATION_EXPANDED_KEY) === 'true'
+  } catch {
+    navigationExpanded.value = false
+  }
   try {
     await auth.restore()
     if (auth.user?.role === 'admin') operations.startPolling()
@@ -243,21 +264,49 @@ function navItemClass(path: string) {
   <div class="flex h-screen h-[100dvh] overflow-hidden bg-canvas text-ink">
     <!-- Desktop Sidebar (Hidden on Mobile) -->
     <nav
-      class="conversation-rail relative hidden w-16 shrink-0 flex-col items-center border-r border-line bg-panel md:flex"
-      :class="{ 'is-inbox-rail': isConversationRoute }"
+      class="conversation-rail motion-sidebar relative hidden shrink-0 flex-col border-r border-line bg-panel md:flex"
+      :class="[
+        navigationExpanded ? 'w-[232px] items-stretch' : 'w-16 items-center',
+        { 'is-inbox-rail': isConversationRoute },
+      ]"
       aria-label="Navegação principal"
     >
-      <div class="grid w-full place-items-center border-b border-line px-3 py-3">
+      <div
+        class="flex h-[68px] w-full items-center border-b border-line px-2"
+        :class="navigationExpanded ? 'justify-start gap-3 px-3' : 'justify-center'"
+      >
         <div
           class="conversation-brand-mark grid h-11 w-11 place-items-center rounded-xl bg-fluvius-50 font-bold text-fluvius-700 shadow-sm"
           :title="`${APP_NAME} v${APP_VERSION} · ${auth.user?.tenant_name || 'Empresa'}`"
         >
           F
         </div>
+        <div v-if="navigationExpanded" class="navigation-expanded-content min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-ink">{{ APP_NAME }}</p>
+          <p class="truncate text-[11px] text-ink-muted">{{ auth.user?.tenant_name }}</p>
+        </div>
       </div>
       <button
-        class="mt-3 grid h-11 w-11 place-items-center rounded-xl text-ink-muted transition hover:bg-canvas hover:text-ink disabled:cursor-default disabled:opacity-70"
-        :class="{ 'cursor-default': availableTenants.length < 2 }"
+        type="button"
+        class="motion-interactive mt-3 flex h-10 items-center rounded-lg text-ink-muted hover:bg-canvas hover:text-ink"
+        :class="navigationExpanded ? 'mx-2 justify-start gap-3 px-3' : 'w-11 justify-center'"
+        :title="navigationExpanded ? 'Recolher navegação' : 'Expandir navegação'"
+        :aria-label="navigationExpanded ? 'Recolher navegação' : 'Expandir navegação'"
+        :aria-expanded="navigationExpanded"
+        @click="toggleNavigation"
+      >
+        <PanelLeftClose
+          class="motion-toggle-icon h-5 w-5 shrink-0"
+          :class="{ 'rotate-180': !navigationExpanded }"
+        />
+        <span v-if="navigationExpanded" class="navigation-expanded-content text-sm font-medium">Recolher menu</span>
+      </button>
+      <button
+        class="motion-interactive mt-1 flex h-11 items-center rounded-lg text-ink-muted hover:bg-canvas hover:text-ink disabled:cursor-default disabled:opacity-70"
+        :class="[
+          navigationExpanded ? 'mx-2 justify-start gap-3 px-3' : 'w-11 justify-center',
+          { 'cursor-default': availableTenants.length < 2 },
+        ]"
         :disabled="availableTenants.length < 2 || tenantSwitching"
         :title="
           availableTenants.length > 1
@@ -266,14 +315,20 @@ function navItemClass(path: string) {
         "
         @click="tenantMenuOpen = !tenantMenuOpen"
       >
-        <Building2 class="h-5 w-5" />
+        <Building2 class="h-5 w-5 shrink-0" />
+        <span v-if="navigationExpanded" class="navigation-expanded-content min-w-0 text-left">
+          <span class="block truncate text-sm font-medium text-ink">{{ auth.user?.tenant_name }}</span>
+          <span class="block text-[11px] text-ink-muted">Empresa atual</span>
+        </span>
       </button>
 
       <!-- Tenant Switcher Dropdown (Desktop) -->
-      <div
-        v-if="tenantMenuOpen"
-        class="absolute left-[64px] top-16 z-50 w-72 overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-scrim/20"
-      >
+      <Transition name="motion-pop">
+        <div
+          v-if="tenantMenuOpen"
+          class="absolute top-16 z-50 w-72 origin-top-left overflow-hidden rounded-lg border border-line bg-panel-raised text-ink-secondary shadow-2xl shadow-scrim/20"
+          :class="navigationExpanded ? 'left-[232px]' : 'left-16'"
+        >
         <div class="border-b border-line px-4 py-3">
           <p class="text-xs font-semibold uppercase tracking-wider text-ink-faint">
             Trocar empresa
@@ -303,22 +358,35 @@ function navItemClass(path: string) {
             class="h-4 w-4 shrink-0 text-fluvius-700"
           />
         </button>
-      </div>
+        </div>
+      </Transition>
 
       <div class="soft-scrollbar min-h-0 flex-1 overflow-y-auto px-2 py-3">
         <section v-for="section in navSections" :key="section.label" class="mb-4 last:mb-0">
-          <div class="mx-auto mb-2 h-px w-8 bg-line" :title="section.label" />
+          <p
+            v-if="navigationExpanded"
+            class="navigation-expanded-content mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-faint"
+          >
+            {{ section.label }}
+          </p>
+          <div v-else class="mx-auto mb-2 h-px w-8 bg-line" :title="section.label" />
           <div class="space-y-1.5">
             <RouterLink
               v-for="item in section.items"
               :key="item.to"
               :to="item.to"
-              class="relative grid h-11 w-11 place-items-center rounded-xl transition"
-              :class="navItemClass(item.to)"
+              class="motion-interactive relative flex h-11 items-center rounded-lg"
+              :class="[
+                navigationExpanded ? 'w-full justify-start gap-3 px-3' : 'w-11 justify-center',
+                navItemClass(item.to),
+              ]"
               :title="`${item.label} · ${item.description}`"
             >
               <component :is="item.icon" class="h-5 w-5 shrink-0" />
-              <span class="sr-only">{{ item.label }}</span>
+              <span v-if="navigationExpanded" class="navigation-expanded-content min-w-0 truncate text-sm font-medium">
+                {{ item.label }}
+              </span>
+              <span v-else class="sr-only">{{ item.label }}</span>
               <span
                 v-if="'alert' in item && item.alert && operationalAlert"
                 class="absolute right-2 top-2 h-2 w-2 rounded-full"
@@ -332,24 +400,36 @@ function navItemClass(path: string) {
           </div>
         </section>
       </div>
-      <div class="grid w-full place-items-center gap-2 border-t border-line px-2 py-3">
+      <div
+        class="grid w-full gap-1 border-t border-line px-2 py-3"
+        :class="{ 'place-items-center': !navigationExpanded }"
+      >
         <RouterLink
-          class="grid h-11 w-11 place-items-center rounded-xl text-ink-secondary transition hover:bg-canvas hover:text-ink"
-          :class="navItemClass('/app/account')"
+          class="motion-interactive flex h-11 items-center rounded-lg text-ink-secondary hover:bg-canvas hover:text-ink"
+          :class="[
+            navigationExpanded ? 'w-full justify-start gap-3 px-2' : 'w-11 justify-center',
+            navItemClass('/app/account'),
+          ]"
           to="/app/account"
           :title="`Minha conta · ${auth.user?.name || 'Usuário'}`"
         >
           <span class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-fluvius-700 text-xs font-semibold text-white">
             {{ userInitial }}
           </span>
+          <span v-if="navigationExpanded" class="navigation-expanded-content min-w-0">
+            <span class="block truncate text-sm font-medium">{{ auth.user?.name }}</span>
+            <span class="block text-[11px] text-ink-muted">Minha conta</span>
+          </span>
         </RouterLink>
-        <ThemeMenu placement="top" />
+        <ThemeMenu placement="top" :show-label="navigationExpanded" />
         <button
-          class="grid h-11 w-11 place-items-center rounded-xl text-ink-muted transition hover:bg-canvas hover:text-ink"
+          class="motion-interactive flex h-11 items-center rounded-lg text-ink-muted hover:bg-canvas hover:text-ink"
+          :class="navigationExpanded ? 'w-full justify-start gap-3 px-3' : 'w-11 justify-center'"
           title="Sair"
           @click="logout"
         >
-          <LogOut class="h-5 w-5" />
+          <LogOut class="h-5 w-5 shrink-0" />
+          <span v-if="navigationExpanded" class="navigation-expanded-content text-sm font-medium">Sair</span>
         </button>
       </div>
     </nav>
@@ -357,14 +437,7 @@ function navItemClass(path: string) {
     <!-- Main Content Area -->
     <main class="relative flex min-w-0 flex-1 flex-col overflow-hidden">
       <!-- Realtime Reconnecting Pill -->
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 -translate-y-2"
-        enter-to-class="opacity-100 translate-y-0"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 translate-y-0"
-        leave-to-class="opacity-0 -translate-y-2"
-      >
+      <Transition name="motion-status">
         <div
           v-if="!realtime.connected && auth.user && !realtime.manualDisconnect"
           class="pointer-events-none relative z-50 mx-auto mt-2 flex w-fit items-center gap-1.5 rounded-full border border-warning/20 bg-warning-soft px-3.5 py-1 text-[11px] font-medium text-warning-strong shadow-lg backdrop-blur-sm md:fixed md:left-1/2 md:top-2 md:mt-0 md:-translate-x-1/2"
@@ -375,16 +448,18 @@ function navItemClass(path: string) {
       </Transition>
 
       <!-- Top Operational Alert Banner (if any) -->
-      <RouterLink
-        v-if="auth.user?.role === 'admin' && operationalAlert"
-        class="flex shrink-0 items-center gap-2 border-b px-4 py-2 text-xs font-medium"
-        :class="operationalAlertClass"
-        to="/app/settings/operations"
-      >
-        <AlertTriangle class="h-4 w-4 shrink-0" />
-        <span class="truncate">{{ operationalAlert }}</span>
-        <span class="ml-auto shrink-0 font-semibold">Ver saúde</span>
-      </RouterLink>
+      <Transition name="motion-status">
+        <RouterLink
+          v-if="auth.user?.role === 'admin' && operationalAlert"
+          class="flex shrink-0 items-center gap-2 border-b px-4 py-2 text-xs font-medium"
+          :class="operationalAlertClass"
+          to="/app/settings/operations"
+        >
+          <AlertTriangle class="h-4 w-4 shrink-0" />
+          <span class="truncate">{{ operationalAlert }}</span>
+          <span class="ml-auto shrink-0 font-semibold">Ver saúde</span>
+        </RouterLink>
+      </Transition>
 
       <!-- Router View Container -->
       <div
@@ -676,7 +751,7 @@ function navItemClass(path: string) {
           <div class="border-t border-line pt-3 mt-3">
             <div class="flex items-center justify-between px-3 py-2">
               <span class="text-sm text-ink-secondary">Tema da Interface</span>
-              <ThemeMenu />
+              <ThemeMenu placement="top" />
             </div>
 
             <button

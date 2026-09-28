@@ -23,8 +23,11 @@ const sidebarPreferenceKey = computed(() =>
 )
 
 const conversationListClass = computed(() => {
-  if (store.selectedId) return sidebarCollapsed.value ? 'hidden md:hidden' : 'hidden md:flex'
-  return sidebarCollapsed.value ? 'flex md:hidden' : 'flex'
+  const desktopState = sidebarCollapsed.value
+    ? 'md:flex md:!w-0 md:pointer-events-none md:border-r-0 md:opacity-0'
+    : 'md:flex md:opacity-100'
+  if (store.selectedId) return `hidden ${desktopState}`
+  return `flex ${desktopState}`
 })
 
 function toggleSidebar() {

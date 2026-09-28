@@ -485,7 +485,7 @@ onBeforeUnmount(() => {
                   </div>
                   <div
                     v-if="itemBreakdown(run).length"
-                class="mt-2 flex flex-wrap gap-1.5"
+                    class="mt-2 flex flex-wrap gap-1.5"
                   >
                     <span
                       v-for="item in itemBreakdown(run)"
@@ -502,7 +502,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="mt-3 h-2 overflow-hidden rounded-full bg-panel-muted">
                 <div
-                  class="h-full rounded-full transition-all duration-500"
+                  class="motion-slow h-full rounded-full transition-[width]"
                   :class="
                     run.status === 'failed'
                       ? 'bg-danger'

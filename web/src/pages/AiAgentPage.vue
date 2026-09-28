@@ -260,7 +260,7 @@ async function handleSimulateSend() {
                   type="checkbox"
                   class="peer sr-only"
                 />
-                <div class="peer h-6 w-11 rounded-full bg-line-strong transition peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-primary/20 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full" />
+                <div class="peer h-6 w-11 rounded-full bg-line-strong transition-colors duration-150 ease-out peer-checked:bg-primary peer-focus:ring-2 peer-focus:ring-primary/20 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform after:duration-150 after:ease-out after:content-[''] peer-checked:after:translate-x-full" />
               </label>
             </div>
 

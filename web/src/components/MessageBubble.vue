@@ -63,6 +63,20 @@ const isNativeSticker = computed(
     props.message.message_type === 'sticker' &&
     props.message.attachments.length > 0,
 )
+const hasVisualMedia = computed(
+  () =>
+    props.message.attachments.length > 0 &&
+    (props.message.message_type === 'image' ||
+      props.message.message_type === 'video'),
+)
+const isMediaOnly = computed(
+  () =>
+    hasVisualMedia.value &&
+    !props.message.body?.trim() &&
+    !props.message.reply_to &&
+    !props.message.shared_contacts.length &&
+    !props.message.is_internal,
+)
 const timeLabel = computed(() => timeFormatter.format(sentAt.value))
 const fullDateLabel = computed(() => fullDateFormatter.format(sentAt.value))
 const statusLabel = computed(
@@ -89,6 +103,9 @@ const bubbleClass = computed(() => {
     outgoing ? 'bg-message-out' : 'bg-message-in',
     outgoing && props.groupStart ? 'rounded-tr-none' : '',
     !outgoing && props.groupStart ? 'rounded-tl-none' : '',
+    hasVisualMedia.value ? 'message-bubble-media' : '',
+    props.message.status === 'pending' ? 'message-bubble-pending' : '',
+    props.message.status === 'failed' ? 'message-bubble-failed' : '',
   ]
 })
 
@@ -157,7 +174,7 @@ function showDetails() {
     :class="message.direction === 'outgoing' ? 'justify-end' : 'justify-start'"
   >
     <div
-      class="message-bubble relative max-w-[92%] rounded-[7.5px] px-2.5 py-1.5 text-ink sm:max-w-[72%] 2xl:max-w-[64%]"
+      class="message-bubble relative rounded-[7.5px] px-2.5 py-1.5 text-ink"
       :class="[bubbleClass, { 'message-bubble-sticker': isNativeSticker }]"
     >
       <!-- SVG Tail Outgoing -->
@@ -234,10 +251,11 @@ function showDetails() {
         aria-hidden="true"
         @click="closeMenu"
       />
-      <div
-        v-if="menuOpen"
-        class="absolute right-1 top-7 z-30 w-48 overflow-hidden rounded-lg bg-panel py-1 text-[13px] text-ink shadow-2xl ring-1 ring-line/50"
-      >
+      <Transition name="motion-pop">
+        <div
+          v-if="menuOpen"
+          class="absolute right-1 top-7 z-30 w-48 origin-top-right overflow-hidden rounded-lg bg-panel py-1 text-[13px] text-ink shadow-2xl ring-1 ring-line/50"
+        >
         <button
           v-if="canReply"
           class="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition hover:bg-panel-muted"
@@ -270,7 +288,8 @@ function showDetails() {
           <RotateCcw class="h-4 w-4" :class="{ 'animate-spin': retrying }" />
           {{ retrying ? 'Reenviando…' : 'Tentar novamente' }}
         </button>
-      </div>
+        </div>
+      </Transition>
 
       <div
         v-if="
@@ -304,12 +323,13 @@ function showDetails() {
         <span>{{ message.participant_name || message.sender_name }}</span>
       </div>
 
-      <button
-        v-if="message.reply_to"
-        class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-panel-muted/70 px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-panel-muted dark:bg-panel-raised sm:min-w-48"
-        :class="message.reply_to.direction === 'incoming' ? 'border-line-strong' : 'border-success'"
-        @click="emit('jumpTo', message.reply_to.id)"
-      >
+      <Transition name="motion-reply">
+        <button
+          v-if="message.reply_to"
+          class="mb-1.5 block w-full min-w-44 rounded-md border-l-[4px] bg-panel-muted/70 px-2 py-1.5 pr-8 text-left text-xs transition hover:bg-panel-muted dark:bg-panel-raised sm:min-w-48"
+          :class="message.reply_to.direction === 'incoming' ? 'border-line-strong' : 'border-success'"
+          @click="emit('jumpTo', message.reply_to.id)"
+        >
         <span
           class="block font-semibold text-[12px]"
           :class="message.reply_to.direction === 'incoming' ? 'text-ink-secondary' : 'text-success-strong'"
@@ -325,7 +345,8 @@ function showDetails() {
         <span class="mt-0.5 block max-w-72 truncate text-[12px] text-ink-secondary">
           {{ message.reply_to.body || `[${message.reply_to.message_type}]` }}
         </span>
-      </button>
+        </button>
+      </Transition>
 
       <div
         v-if="message.attachments.length"
@@ -336,14 +357,14 @@ function showDetails() {
           <button
             v-if="message.message_type === 'image'"
             type="button"
-            class="group/media relative block overflow-hidden rounded-md bg-panel-muted"
+            class="message-media-frame group/media relative block"
             title="Visualizar imagem"
             @click="emit('preview', attachment, message.message_type)"
           >
             <img
               :src="attachment.public_url"
               :alt="attachment.file_name"
-              class="max-h-96 w-full min-w-48 object-cover sm:min-w-56"
+              class="message-media-preview"
               loading="lazy"
             />
             <span class="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-scrim/45 text-white opacity-0 backdrop-blur-sm transition group-hover/media:opacity-100">
@@ -368,10 +389,10 @@ function showDetails() {
 
           <div
             v-else-if="message.message_type === 'video'"
-            class="group/media relative min-w-56 overflow-hidden rounded-md bg-scrim sm:min-w-64"
+            class="message-media-frame group/media relative bg-scrim"
           >
             <video
-              class="max-h-96 w-full"
+              class="message-media-preview"
               controls
               preload="metadata"
               :src="attachment.public_url"
@@ -421,6 +442,7 @@ function showDetails() {
       <p
         v-if="message.body"
         class="whitespace-pre-wrap break-words px-0.5 pr-5 text-[14px] leading-[19px]"
+        :class="{ 'px-2 pb-1 pt-1.5': hasVisualMedia }"
       >
         {{ message.body }}
       </p>
@@ -456,10 +478,13 @@ function showDetails() {
 
       <div
         class="mt-0.5 flex items-center justify-end gap-1 px-0.5 text-[11px] leading-3 text-ink-muted"
-        :class="{
-          'absolute bottom-1 right-1 rounded-full bg-scrim/55 px-1.5 py-0.5 text-white shadow-sm':
-            isNativeSticker,
-        }"
+        :class="[
+          {
+            'absolute bottom-1 right-1 rounded-full bg-scrim/55 px-1.5 py-0.5 text-white shadow-sm':
+              isNativeSticker,
+          },
+          isMediaOnly ? 'message-media-time' : '',
+        ]"
         :title="`${fullDateLabel} · ${statusLabel}`"
       >
         <span v-if="copied" class="mr-1 font-medium text-fluvius-700">Copiada</span>
